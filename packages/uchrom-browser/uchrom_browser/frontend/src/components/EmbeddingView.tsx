@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { recordable, useCaptureEpoch } from '../vectorcapture'
 import { fetchEmbedding, registerGroup } from '../api'
 import { cmapGradient, COLORMAPS, type ColormapName } from '../colormaps'
-import { cellRgb, rgbCss } from '../colors'
+import { cellRgb, rgbCss, skewedField } from '../colors'
 import {
   autoFieldRange,
   categoryDotColors,
@@ -29,7 +29,7 @@ import { loadFieldValues } from '../useOmicsLoader'
 import { useTheme } from '../useTheme'
 import { useGroupInfo, usePaneScope, useScopeCells } from '../useGroups'
 import { IDENTITY_VIEW, applyView, fitPlotEqual, gridSpacing, isIdentity, nearestPoint, panBy, project, zoomAt, type View2D } from '../render/embedding'
-import { activeView, defaultCategoryField, fieldKey, useStore } from '../store'
+import { activeView, defaultCategoryField, defaultFieldOf, fieldKey, useStore } from '../store'
 import type { CellField, CellValue, Embedding, EmbeddingInfo } from '../types'
 import { defaultEmbeddingKey, pinnedCell, updatePane, type Pane } from '../workspace'
 import { FieldPicker, groupTitle } from './FieldPicker'
@@ -139,14 +139,17 @@ const CATEGORY_GROUP = '\u0000category'
 export function usePaneColoring(pane: Pane) {
   const dsId = useStore((s) => s.activeDatasetId)
   const fields = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId)?.cell_fields)
-  const st = useMemo(() => resolveEmbStyle(pane.embStyle), [pane.embStyle])
-  const field: CellField | null = st.colorBy === 'field' ? (fields?.find((f) => f.name === st.field) ?? null) : null
-  const mode: EmbStyle['colorBy'] = st.colorBy === 'field' && !field ? 'overview' : st.colorBy
+  const style = useMemo(() => resolveEmbStyle(pane.embStyle), [pane.embStyle])
+  const field: CellField | null = style.colorBy === 'field' ? (fields?.find((f) => f.name === style.field) ?? null) : null
+  const mode: EmbStyle['colorBy'] = style.colorBy === 'field' && !field ? 'overview' : style.colorBy
   useEffect(() => {
     if (dsId && field) loadFieldValues(dsId, field.name)
   }, [dsId, field])
   const values = useStore((s) => (dsId && field ? (s.cellValues[fieldKey(dsId, field.name)] ?? null) : null))
   const numeric = !!field && field.kind !== 'category'
+  // log1p unless the pane says otherwise: on for skewed counts (skewedField)
+  const autoLog = useMemo(() => numeric && !!values && skewedField(values.values()), [numeric, values])
+  const st = useMemo(() => ({ ...style, log: style.log ?? autoLog }), [style, autoLog])
   const sorted = useMemo(() => (numeric && values ? sortedFinite(values.values()) : null), [numeric, values])
   const range = useMemo<[number, number] | null>(
     () => (sorted ? fieldScaleRange(sorted, { range: st.range, lo: st.lo, hi: st.hi, field: st.field }) : null),
@@ -215,7 +218,7 @@ export function EmbeddingStyleControls({ pane }: { pane: Pane }) {
     if (!fs.length) return
     const keep = fs.find((f) => f.name === st.field)
     const cat = g === CATEGORY_GROUP ? fs.find((f) => f.name === defaultCategoryField(ds)?.name) : undefined
-    set({ colorBy: 'field', field: (keep ?? cat ?? fs[0]).name })
+    set({ colorBy: 'field', field: (keep ?? cat ?? defaultFieldOf(fs)!).name })
   }
   const auto = sorted ? autoFieldRange(sorted, (st.range ?? defaultRangeMode(st.field)) === 'quantile' ? 'quantile' : 'auto') : null
   const rangeMode: EmbRangeMode = st.range ?? defaultRangeMode(st.field)
@@ -284,7 +287,7 @@ export function EmbeddingStyleControls({ pane }: { pane: Pane }) {
                 <input type="checkbox" checked={st.reverse} onChange={(e) => set({ reverse: e.target.checked })} /> reverse
               </label>
               <label className="check small" title="log1p of the offset from the range start">
-                <input type="checkbox" checked={st.log} onChange={(e) => set({ log: e.target.checked })} /> log1p
+                <input type="checkbox" checked={!!st.log} onChange={(e) => set({ log: e.target.checked })} /> log1p
               </label>
               <label className="check small" title="Draw high values last so expressing cells are not hidden (missing values always underneath)">
                 <input type="checkbox" checked={st.highOnTop} onChange={(e) => set({ highOnTop: e.target.checked })} /> high on top

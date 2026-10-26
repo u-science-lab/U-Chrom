@@ -92,10 +92,33 @@ export function fieldRange(values: Iterable<CellValue | undefined>): [number, nu
   return hi > lo ? [lo, hi] : [lo, lo + 1]
 }
 
-/** viridis over `range`, grey for missing values. */
-export function fieldColor(value: CellValue | undefined, range: [number, number]): RGB {
+/**
+ * Whether a numeric field reads better on a log scale: non-negative values (counts) skewed to the right
+ * (skewness > 1) that log1p of the offset from the minimum makes more symmetric.
+ */
+export function skewedField(values: Iterable<CellValue | undefined>): boolean {
+  const v: number[] = []
+  for (const x of values) if (typeof x === 'number' && Number.isFinite(x)) v.push(x)
+  if (v.length < 3) return false
+  let lo = Infinity
+  for (const x of v) lo = Math.min(lo, x)
+  if (lo < 0) return false
+  const skew = (xs: number[]) => {
+    const m = xs.reduce((a, b) => a + b, 0) / xs.length
+    let s2 = 0
+    let s3 = 0
+    for (const x of xs) (s2 += (x - m) ** 2, s3 += (x - m) ** 3)
+    s2 /= xs.length
+    return s2 > 0 ? s3 / xs.length / s2 ** 1.5 : 0
+  }
+  const s = skew(v)
+  return s > 1 && Math.abs(skew(v.map((x) => Math.log1p(x - lo)))) < s
+}
+
+/** viridis over `range` (log1p of the offset from its start when `log`), grey for missing values. */
+export function fieldColor(value: CellValue | undefined, range: [number, number], log = false): RGB {
   if (typeof value !== 'number' || !Number.isFinite(value)) return MISSING_RGB
-  return viridis((value - range[0]) / (range[1] - range[0]))
+  return viridis(log ? Math.log1p(Math.max(0, value - range[0])) / Math.log1p(range[1] - range[0]) : (value - range[0]) / (range[1] - range[0]))
 }
 
 /** Colour of a hidden category (legend toggled off): darker than missing. */
@@ -122,13 +145,13 @@ export function categoryIndex(field: CellField, hidden: readonly string[] = [], 
 }
 
 /** Colour of one cell value: categorical when `categories` is given, else viridis. */
-export function cellValueColor(value: CellValue | undefined, opts: Pick<ColorOptions, 'categories' | 'fieldRange' | 'cellValues'>): RGB {
+export function cellValueColor(value: CellValue | undefined, opts: Pick<ColorOptions, 'categories' | 'fieldRange' | 'fieldLog' | 'cellValues'>): RGB {
   if (opts.categories) {
     if (value === null || value === undefined) return MISSING_RGB
     const i = opts.categories.get(String(value))
     return i === undefined ? MISSING_RGB : i < 0 ? HIDDEN_RGB : categoryColor(i, String(value))
   }
-  return fieldColor(value, opts.fieldRange ?? fieldRange(opts.cellValues?.values() ?? []))
+  return fieldColor(value, opts.fieldRange ?? fieldRange(opts.cellValues?.values() ?? []), opts.fieldLog ?? false)
 }
 
 /** Stable colour per categorical label (e.g. gene): hashed golden-angle hue. */
@@ -220,6 +243,8 @@ export interface ColorOptions {
   /** per-cell values + colour range for 'field' mode */
   cellValues?: ReadonlyMap<string, CellValue>
   fieldRange?: [number, number]
+  /** numeric field on a log scale (see skewedField) */
+  fieldLog?: boolean
   /** categorical field: category → legend index (−1 hidden); see categoryIndex */
   categories?: ReadonlyMap<string, number>
 }
@@ -260,7 +285,7 @@ export function vertexColors(geom: Geometry, mode: ColorMode, custom: string, op
   }
   if (mode === 'field') {
     const vals = opts.cellValues ?? new Map<string, CellValue>()
-    const o = { ...opts, fieldRange: opts.fieldRange ?? fieldRange(vals.values()) }
+    const o = { ...opts, fieldRange: opts.fieldRange ?? fieldRange(vals.values()), fieldLog: opts.fieldLog ?? skewedField(vals.values()) }
     const memo = new Map<string, RGB>()
     header.segments.forEach((seg, s) => {
       if (seg.cell_id === null) return fill(offsets[s], offsets[s + 1], MISSING_RGB)

@@ -2,7 +2,7 @@ import { describeFilter } from '../filters'
 import { AUTO_BOND_FACTOR, splitForView } from '../render/bonds'
 import { MAX_EXPLODE } from '../render/explode'
 import { autoTubeRadius, tubeAllowed } from '../render/segments'
-import { activeView, hasCoords, useStore } from '../store'
+import { activeView, defaultFieldOf, hasCoords, useStore } from '../store'
 import { CategoryLegend } from './CategoryLegend'
 import { ColorBar } from './ColorBar'
 import { colourableFields, fieldLabel } from './format'
@@ -42,8 +42,8 @@ export function OverviewColour() {
   const pickGroup = (g: string) => {
     const fs = groups.get(g) ?? []
     if (!fs.length) return
-    // keep the current field if it is in this group, else the first one
-    setCellField(fs.some((f) => f.name === view.cellField) ? view.cellField! : fs[0].name)
+    // keep the current field if it is in this group, else the first that is not a position
+    setCellField(fs.some((f) => f.name === view.cellField) ? view.cellField! : defaultFieldOf(fs)!.name)
   }
   // chromosome / trace / custom colour the 3-D chromatin itself
   const extra: [ColorMode, string][] = coords

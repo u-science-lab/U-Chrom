@@ -541,6 +541,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         cellIndex,
         cellValues: key.values?.cellValues,
         fieldRange: key.values?.fieldRange,
+        fieldLog: key.values?.fieldLog,
         categories: key.values?.categories,
       }
       // Multi-cell data: the overview (and the faint context around a

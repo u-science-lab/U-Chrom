@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { categoryIndex, fieldRange } from './colors'
+import { categoryIndex, fieldRange, skewedField } from './colors'
 import { activeFieldValues, activeView, useStore } from './store'
 import type { CellField, CellValue } from './types'
 
@@ -9,6 +9,8 @@ export interface FieldColors {
   cellValues?: ReadonlyMap<string, CellValue>
   /** numeric fields: colour range */
   fieldRange?: [number, number]
+  /** numeric fields: log scale (skewed counts) */
+  fieldLog?: boolean
   /** categorical fields: category → legend index (−1 = hidden) */
   categories?: ReadonlyMap<string, number>
 }
@@ -34,6 +36,7 @@ export function useFieldColors(): FieldColors {
     if (!field) return { field: null }
     const cellValues = values ?? undefined
     if (field.kind === 'category') return { field, cellValues, categories: categoryIndex(field, hidden, values?.values()) }
-    return { field, cellValues, fieldRange: values ? fieldRange(values.values()) : undefined }
+    return { field, cellValues, fieldRange: values ? fieldRange(values.values()) : undefined,
+      fieldLog: values ? skewedField(values.values()) : undefined }
   }, [field, values, hidden])
 }

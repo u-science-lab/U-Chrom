@@ -36,6 +36,7 @@ export interface DatasetSummary {
   contact_maps?: ContactMapInfo[]
   /** interval tables in cd.results (TADs, loops, peaks) */
   intervals?: IntervalInfo[]
+  clusters?: ClusterTableInfo[]
   /** cell-position sets (cd.cell_positions) with their regions and images */
   spatial?: SpatialInfo[]
 }
@@ -117,6 +118,38 @@ export interface TrackData {
   bin_ends: number[]
   n_spots: number[]
   values: Record<string, (number | null)[]>
+}
+
+/** A multi-way contact table (cd.clusters: SPRITE, SpaceA, Pore-C, ChIA-Drop). */
+export interface ClusterTableInfo {
+  key: string
+  n_clusters: number
+  n_fragments: number
+  per_cell: boolean
+  assay?: string | null
+  /** a filtered table: the key of the table it was made from */
+  filtered_from?: string | null
+}
+
+/** One cluster of a window (GET clusters/{key}): its size over all chromosomes, on this one, its span here and
+ *  the fragments in the window. */
+export interface ClusterInWindow {
+  id: number
+  cell: string | null
+  size: number
+  chrom_size: number
+  span: [number, number]
+  fragments: [number, number][]
+}
+
+/** GET clusters/{key}: the clusters with fragments in a window (n_clusters: all of them; at most a limit sent). */
+export interface ClusterWindow {
+  key: string
+  chrom: string
+  start: number
+  end: number
+  n_clusters: number
+  clusters: ClusterInWindow[]
 }
 
 /** GET intervals/{key}. */

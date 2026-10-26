@@ -473,6 +473,7 @@ class Dataset:
             "tracks": self.track_names(),
             "contact_maps": self.contact_maps(),
             "intervals": self.interval_tables(),
+            "clusters": self.cluster_tables(),
             "cell_fields": self.cell_fields(),
             "embeddings": self.embeddings(),
             "point_sets": self.point_sets(),
@@ -1114,6 +1115,59 @@ class Dataset:
                 out.append({"key": str(key), "n": int(len(val)), "kind": kind})
                 seen.add(key)
         return out
+
+    def cluster_tables(self) -> List[Dict[str, Any]]:
+        """The multi-way contact tables (``cd.clusters``): key, counts, per cell or bulk, assay, the table a
+        filtered one was made from."""
+        out = []
+        for key, t in (getattr(self.cd, "clusters", None) or {}).items():
+            attrs = t.attrs or {}
+            out.append({"key": str(key), "n_clusters": int(t.n_clusters), "n_fragments": int(t.n_members),
+                        "per_cell": t.cells is not None, "assay": attrs.get("assay"),
+                        "filtered_from": attrs.get("filtered_from")})
+        return out
+
+    def clusters(self, key: str, chrom: str, start: int, end: int, cell_id: Optional[str] = None,
+                 group: Optional[str] = None, min_size: int = 2, max_size: Optional[int] = None,
+                 limit: int = 400) -> Dict[str, Any]:
+        """The clusters with fragments in ``chrom:start-end`` (of one cell, a group's cells or all), as a cluster
+        track draws them: per cluster its size (all chromosomes), fragments on this chromosome, their span and
+        the fragments in the window.  Beyond ``limit`` clusters, those with the most fragments in the window are
+        kept (``n_clusters`` counts them all); the rows go by span start."""
+        tables = getattr(self.cd, "clusters", None) or {}
+        if key not in tables:
+            raise KeyError(key)
+        if str(chrom) == GENOME:
+            raise ValueError("clusters are drawn in a window of one chromosome")
+        t = tables[key]
+        cells = None
+        if t.cells is not None:
+            if cell_id is not None:
+                cells = [cell_id]
+            elif group is not None and group != ALL_CELLS:
+                cells = self.group_cells(group)
+        f = t.region(str(chrom), int(start), int(end), min_size=min_size, max_size=max_size, cells=cells)
+        if not len(f):
+            return {"key": key, "chrom": str(chrom), "start": int(start), "end": int(end), "n_clusters": 0,
+                    "clusters": []}
+        g = f.groupby("cluster", sort=False)
+        per = g.agg(n=("start", "size"), size=("size", "first"), chrom_size=("chrom_size", "first"),
+                    span_start=("span_start", "first"), span_end=("span_end", "first"))
+        if "cell_id" in f:
+            per["cell"] = g["cell_id"].first().astype(str)
+        n_all = len(per)
+        if n_all > limit:
+            per = per.sort_values(["n", "span_start"], ascending=[False, True], kind="stable").head(limit)
+        per = per.sort_values(["span_start", "span_end"], kind="stable")
+        frags = {c: list(zip(s.tolist(), e.tolist())) for c, (s, e) in
+                 ((c, (d["start"], d["end"])) for c, d in f[f["cluster"].isin(per.index)].groupby("cluster"))}
+        return {
+            "key": key, "chrom": str(chrom), "start": int(start), "end": int(end), "n_clusters": int(n_all),
+            "clusters": [{"id": int(c), "cell": r.get("cell"), "size": int(r["size"]),
+                          "chrom_size": int(r["chrom_size"]), "span": [int(r["span_start"]), int(r["span_end"])],
+                          "fragments": [[int(a), int(b)] for a, b in frags[c]]}
+                         for c, r in per.iterrows()],
+        }
 
     def store_tree(self) -> Dict[str, Any]:
         """The store's on-disk structure (``.chromdata.zarr`` / ``.cdz``, local or at a URL; see

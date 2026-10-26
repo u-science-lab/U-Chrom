@@ -13,7 +13,7 @@ import { parseColorScale, type ColorScaleSetting } from './colormaps'
 import { parseScopeSpec, type RowScopeSpec } from './groups'
 import type { DistanceStat, TrackAgg } from './workspace'
 
-export type GenomeRowKind = 'matrix' | 'track' | 'intervals'
+export type GenomeRowKind = 'matrix' | 'track' | 'intervals' | 'clusters'
 
 /**
  * How a matrix row draws its map: `triangle` — the upper triangle of the window
@@ -47,8 +47,11 @@ export interface GenomeRow {
   smooth?: number | null
   /** track: track name */
   track?: string | null
-  /** intervals: results key */
+  /** intervals: results key; clusters: the cluster table */
   key?: string | null
+  /** clusters: bounds on a cluster's fragments (all chromosomes; absent: 2 – no limit) */
+  minSize?: number | null
+  maxSize?: number | null
   /** track / distance / per-cell matrix: which cells (absent = same as the view);
    *  stack e.g. Bergmann above Granule */
   scope?: RowScopeSpec
@@ -58,7 +61,7 @@ export interface GenomeRow {
   color?: ColorScaleSetting
 }
 
-export const ROW_HEIGHT: Record<GenomeRowKind, number> = { matrix: 200, track: 44, intervals: 22 }
+export const ROW_HEIGHT: Record<GenomeRowKind, number> = { matrix: 200, track: 44, intervals: 22, clusters: 240 }
 export const MIN_ROW_H = 16
 export const MAX_ROW_H = 900
 
@@ -119,7 +122,7 @@ export function resizeRow(rows: GenomeRow[], id: string, height: number): Genome
 }
 
 /** Settings of a row edited in the inspector. */
-export type RowSetting = 'source' | 'resolution' | 'balance' | 'stat' | 'threshold' | 'maxDist' | 'flip' | 'shape' | 'track' | 'key' | 'height' | 'agg' | 'ratioTo'
+export type RowSetting = 'source' | 'resolution' | 'balance' | 'stat' | 'threshold' | 'maxDist' | 'flip' | 'shape' | 'track' | 'key' | 'height' | 'agg' | 'ratioTo' | 'minSize' | 'maxSize'
 
 /**
  * Row patch for one edited setting (text inputs arrive as strings, check
@@ -152,6 +155,12 @@ export function rowPatch(setting: RowSetting, value: string | boolean): Partial<
       const v = num(Number(text))
       return Number.isNaN(v) ? null : { [setting]: v }
     }
+    case 'minSize':
+    case 'maxSize': {
+      if (!text) return { [setting]: null }
+      const v = Number(text)
+      return Number.isInteger(v) && v >= 1 ? { [setting]: v } : null
+    }
     case 'height': {
       if (!text) return { height: null }
       const v = num(Number(text))
@@ -177,12 +186,12 @@ export function applyRowSetting(rows: GenomeRow[], id: string, setting: RowSetti
   return patch ? updateRow(rows, id, patch) : rows
 }
 
-type DsLike = Pick<DatasetSummary, 'has_coords' | 'n_spots' | 'contact_maps' | 'tracks' | 'intervals'>
+type DsLike = Pick<DatasetSummary, 'has_coords' | 'n_spots' | 'contact_maps' | 'tracks' | 'intervals'> & Partial<Pick<DatasetSummary, 'clusters'>>
 
 /**
  * Default rows for a dataset: the first per-cell contact map (follows the
  * focused cell / group), the first bulk map, the 3-D distance triangle when there are
- * coordinates, then interval tables and up to six marks as tracks
+ * coordinates, then interval tables, the clusters (a filtered table first) and up to six marks as tracks
  * (`tracks`: an earlier track selection, e.g. from an old Tracks pane).
  */
 export function defaultRows(ds: DsLike | undefined, tracks?: string[] | null): GenomeRow[] {
@@ -196,6 +205,8 @@ export function defaultRows(ds: DsLike | undefined, tracks?: string[] | null): G
   if (bulk) rows = addRow(rows, { kind: 'matrix', source: bulk.key })
   if (ds.has_coords !== false && ds.n_spots > 0) rows = addRow(rows, { kind: 'matrix', source: 'distance' })
   for (const iv of ds.intervals ?? []) rows = addRow(rows, { kind: 'intervals', key: iv.key })
+  const cl = (ds.clusters ?? []).find((c) => c.filtered_from) ?? ds.clusters?.[0]
+  if (cl) rows = addRow(rows, { kind: 'clusters', key: cl.key })
   const names = (ds.tracks ?? []).map((t) => t.name)
   const have = new Set(names)
   const picked = (tracks ?? []).filter((t) => have.has(t))
@@ -210,7 +221,7 @@ export function parseRows(raw: unknown): GenomeRow[] | null {
   for (const r of raw) {
     if (!r || typeof r !== 'object') return null
     const x = r as Partial<GenomeRow>
-    if (typeof x.id !== 'string' || !(x.kind === 'matrix' || x.kind === 'track' || x.kind === 'intervals')) return null
+    if (typeof x.id !== 'string' || !(x.kind === 'matrix' || x.kind === 'track' || x.kind === 'intervals' || x.kind === 'clusters')) return null
     const row: GenomeRow = { id: x.id, kind: x.kind }
     if (typeof x.height === 'number' && x.height >= MIN_ROW_H && x.height <= MAX_ROW_H) row.height = x.height
     if (typeof x.source === 'string') row.source = x.source
@@ -225,6 +236,8 @@ export function parseRows(raw: unknown): GenomeRow[] | null {
     if (typeof x.smooth === 'number' && x.smooth >= 1 && x.smooth % 2 === 1) row.smooth = x.smooth
     if (typeof x.track === 'string') row.track = x.track
     if (typeof x.key === 'string') row.key = x.key
+    if (typeof x.minSize === 'number' && Number.isInteger(x.minSize) && x.minSize >= 1) row.minSize = x.minSize
+    if (typeof x.maxSize === 'number' && Number.isInteger(x.maxSize) && x.maxSize >= 1) row.maxSize = x.maxSize
     const scope = parseScopeSpec(x.scope, true)
     if (scope && scope.kind !== 'view') row.scope = scope
     if (x.agg === 'mean' || x.agg === 'median' || x.agg === 'max') row.agg = x.agg

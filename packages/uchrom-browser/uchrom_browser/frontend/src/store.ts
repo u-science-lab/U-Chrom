@@ -79,10 +79,29 @@ export function defaultCategoryField(ds: Pick<DatasetSummary, 'cell_fields'> | u
   return cats.find((f) => f.name === 'cell_type') ?? cats.find((f) => /type|cluster/i.test(f.name)) ?? null
 }
 
-/** Initial view of a dataset: coloured by its cell type when it has one. */
+/** A cell field that only repeats where the cell is (centroids, x / y / z): not worth colouring by. */
+export const isPositionField = (name: string) => /centroid/i.test(name) || /^(spatial_)?[xyz](_(um|nm|mm|px|pixel|global|local))?$/i.test(name)
+
+/** The field a group of cell fields is coloured by when it is picked: the first that is not a position. */
+export function defaultFieldOf<F extends Pick<CellField, 'name'>>(fields: readonly F[]): F | undefined {
+  return fields.find((f) => !isPositionField(f.name)) ?? fields[0]
+}
+
+/** Many cells without 3-D chromatin: a colour per cell only paints the dots, a property says more. */
+const MANY_CELLS = 200
+
+/**
+ * Initial view of a dataset: coloured by its cell type when it has one; else, for many cells without 3-D
+ * chromatin (spatial spots, scHi-C), by their first numeric property.
+ */
 export function initialView(ds: DatasetSummary): DatasetView {
   const f = defaultCategoryField(ds)
-  return f ? { ...DEFAULT_VIEW, overviewColor: 'field', cellField: f.name } : DEFAULT_VIEW
+  if (f) return { ...DEFAULT_VIEW, overviewColor: 'field', cellField: f.name }
+  if (!hasCoords(ds) && ds.n_cells > MANY_CELLS) {
+    const p = defaultFieldOf((ds.cell_fields ?? []).filter((x) => x.kind === 'numeric' && x.group === 'cell'))
+    if (p) return { ...DEFAULT_VIEW, overviewColor: 'field', cellField: p.name }
+  }
+  return DEFAULT_VIEW
 }
 
 /** Key of a cached cell-field vector. */

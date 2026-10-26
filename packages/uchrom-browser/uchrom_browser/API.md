@@ -368,9 +368,12 @@ The dataset summary gains:
   ],
   "genome": [{"name": "chr1", "offset": 0, "length": 195471971},     // the whole-genome layout (chrom=*)
              {"name": "chr2", "offset": 195471971, "length": 182113224}],
-  "intervals": [{"key": "tads.arcfish", "n": 120, "kind": "domain"}]
+  "intervals": [{"key": "tads.arcfish", "n": 120, "kind": "domain"}],
       // cd.intervals tables (kind: domain | segment | peak) first, then other
       // cd.results DataFrames with chrom/start/end (kind: null)
+  "clusters": [{"key": "spacea_filtered", "n_clusters": 206251, "n_fragments": 1435723,
+                "per_cell": true, "assay": "SpaceA (spatial SPRITE)", "filtered_from": "spacea"}]
+      // cd.clusters (multi-way contacts); filtered_from: the table a filtered one was made from
 }
 ```
 
@@ -456,6 +459,17 @@ Rows of an interval table (TADs, loops, peaks; `cd.intervals[key]`, else
 loops `chrom2, start2, end2`) plus any score columns.  In the Genome view a
 `label` (else `name`) column is drawn as each interval's name (gene tracks);
 only `domain` tables (TADs) draw their boundaries across the map rows.
+
+### `GET /api/datasets/{id}/clusters/{key}?chrom=chr2&start=&end=&cell=&group=&min_size=2&max_size=&limit=400`
+
+The multi-way contacts (`cd.clusters[key]`) with fragments in a window of one chromosome (`chrom=*` → `422`), of
+one `cell`, a `group`'s cells or all, sized `min_size`–`max_size` fragments over all chromosomes:
+`{"key", "chrom", "start", "end", "n_clusters", "clusters": [{"id", "cell", "size", "chrom_size", "span": [s, e],
+"fragments": [[s, e], …]}, …]}` — per cluster its fragments over all chromosomes (`size`) and on this one
+(`chrom_size`), its span on this chromosome and its fragments in the window, by span start.  Beyond `limit`
+(at most 2,000) the clusters with the most fragments in the window are sent; `n_clusters` counts them all.
+One range read of the table's locus index (`ClusterTable.region`), also over HTTP.  The Genome view's
+*Clusters* row draws one lane per cluster (the request's `limit` = the lanes its height holds).
 
 ### `GET /api/datasets/{id}/contacts/{key}?chrom=chr21&start=&end=&resolution=&balance=false&cell=&group=&ratio_to=&smooth=`
 

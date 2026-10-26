@@ -29,7 +29,8 @@ export interface EmbStyle {
   range: EmbRangeMode | null
   lo: number | null
   hi: number | null
-  log: boolean
+  /** log1p of the offset from the range start; null → automatic (on for skewed counts, colors.skewedField) */
+  log: boolean | null
   /** numeric: high values drawn last (on top) */
   highOnTop: boolean
   /** dot radius in px; null = automatic (by cell count and pane size) */
@@ -55,7 +56,7 @@ export const DEFAULT_EMB_STYLE: EmbStyle = {
   range: null,
   lo: null,
   hi: null,
-  log: false,
+  log: null,
   highOnTop: true,
   size: null,
   opacity: 0.95,
@@ -205,7 +206,7 @@ export function numericDotColors(ids: readonly string[], values: ReadonlyMap<str
       key[i] = -Infinity
       continue
     }
-    const t = scalePos(v, range, st.log)
+    const t = scalePos(v, range, st.log ?? false)
     css[i] = lut[Math.round((Number.isFinite(t) ? t : 0) * 255)]
     key[i] = st.highOnTop ? v : 0
   }

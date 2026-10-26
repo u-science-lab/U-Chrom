@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { decodePointSet } from './api'
-import { MISSING_RGB, fieldColor, fieldRange, labelColor, vertexColors, viridis } from './colors'
+import { MISSING_RGB, fieldColor, fieldRange, labelColor, skewedField, vertexColors, viridis } from './colors'
 import { decodeGeometry } from './api'
 import { splitCellFields } from './components/CellInfoPanel'
 import { fieldLabel, fmtNum } from './components/format'
@@ -24,6 +24,15 @@ describe('field colour scale', () => {
     expect(fieldRange(vals)).toEqual([0, 99])
     expect(fieldRange([5, 5, null])).toEqual([5, 6]) // degenerate
     expect(fieldRange([])).toEqual([0, 1])
+  })
+  it('skewed counts go on a log1p scale', () => {
+    const counts = Array.from({ length: 1000 }, (_, i) => Math.round(Math.exp((i / 1000) * 9))) // log-uniform 1 … 8000
+    expect(skewedField(counts)).toBe(true)
+    expect(skewedField(Array.from({ length: 100 }, (_, i) => i))).toBe(false) // uniform
+    expect(skewedField([...counts.map((c) => -c), 5])).toBe(false) // negative values
+    expect(skewedField([1, 2])).toBe(false)
+    expect(fieldColor(1000, [0, 1000], true)).toEqual(viridis(1))
+    expect(fieldColor(Math.expm1(Math.log1p(1000) / 2), [0, 1000], true)[0]).toBeCloseTo(viridis(0.5)[0])
   })
   it('missing values are grey; above range saturates', () => {
     expect(fieldColor(null, [0, 10])).toEqual(MISSING_RGB)

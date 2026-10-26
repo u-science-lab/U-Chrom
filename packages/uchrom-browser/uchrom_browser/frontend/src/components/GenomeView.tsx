@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCaptureEpoch } from '../vectorcapture'
-import { fetchContacts, fetchDistance, fetchIntervals, fetchTracks } from '../api'
+import { fetchClusters, fetchContacts, fetchDistance, fetchIntervals, fetchTracks } from '../api'
 import { fmtBp } from '../filters'
 import { fmtPos, fmtSpan, genomeToChrom, isGenome, niceTicks, panLocus, queryRegion, regionKey, zoomLocus, GENOME, type Locus } from '../genome'
-import type { GenomeChrom } from '../types'
+import type { ClusterWindow, GenomeChrom } from '../types'
 import {
   addRow,
   applyRowSetting,
@@ -128,11 +128,11 @@ function newRow(kind: GenomeRowKind, rows: GenomeRow[], ds: DatasetSummary): Omi
     return { kind, track: names.find((n) => !used.has(n)) ?? names[0] ?? null }
   }
   const used = new Set(rows.map((r) => r.key))
-  const keys = (ds.intervals ?? []).map((i) => i.key)
+  const keys = (kind === 'clusters' ? (ds.clusters ?? []) : (ds.intervals ?? [])).map((i) => i.key)
   return { kind, key: keys.find((k) => !used.has(k)) ?? keys[0] ?? null }
 }
 
-const KIND_LABEL: Record<GenomeRowKind, string> = { matrix: 'Matrix', track: 'Track', intervals: 'Intervals' }
+const KIND_LABEL: Record<GenomeRowKind, string> = { matrix: 'Matrix', track: 'Track', intervals: 'Intervals', clusters: 'Clusters' }
 
 /** Short name of a row for the inspector list. */
 function rowLabel(r: GenomeRow, ds: DatasetSummary): string {
@@ -157,6 +157,7 @@ export function GenomeInspector({ pane }: { pane: Pane }) {
     matrix: (ds.contact_maps?.length ?? 0) > 0 || hasCoords(ds),
     track: (ds.tracks?.length ?? 0) > 0,
     intervals: (ds.intervals?.length ?? 0) > 0,
+    clusters: (ds.clusters?.length ?? 0) > 0,
   }
   const set = (id: string) => (setting: RowSetting, value: string | boolean) => setRows((r) => applyRowSetting(r, id, setting, value))
   return (
@@ -170,7 +171,7 @@ export function GenomeInspector({ pane }: { pane: Pane }) {
         )}
       </h2>
       <div className="seg insp-add">
-        {(['matrix', 'track', 'intervals'] as GenomeRowKind[]).map((k) => (
+        {(['matrix', 'track', 'intervals', ...(can.clusters ? ['clusters'] : [])] as GenomeRowKind[]).map((k) => (
           <button key={k} disabled={!can[k]} onClick={() => setRows((r) => addRow(r, newRow(k, r, ds)))} title={can[k] ? `Add a ${KIND_LABEL[k].toLowerCase()} row` : 'Not available in this dataset'}>
             + {KIND_LABEL[k]}
           </button>
@@ -208,7 +209,10 @@ export function GenomeInspector({ pane }: { pane: Pane }) {
           </li>
         ))}
       </ol>
-      <div className="muted small">Drag a row’s bottom edge in the view to resize it; wheel zooms, drag pans.</div>
+      <div className="muted small">
+        Drag a row’s bottom edge in the view to resize it; wheel zooms, drag pans. Rows taller than the view: the wheel scrolls them, ctrl / ⌘ + wheel
+        (or a pinch) zooms, the wheel over the ruler too.
+      </div>
     </section>
   )
 }
@@ -219,9 +223,11 @@ export function rowMatrixKind(row: GenomeRow): MatrixKind {
   return row.stat === 'contact' ? 'frequency' : 'distance'
 }
 
-/** Whether a row has a cells setting: tracks, the 3-D distance and per-cell contact maps (not bulk maps / intervals). */
+/** Whether a row has a cells setting: tracks, the 3-D distance, per-cell contact maps and clusters of cells (not
+ *  bulk maps / intervals). */
 export function rowTakesGroup(row: GenomeRow, ds: DatasetSummary): boolean {
   if (row.kind === 'track') return true
+  if (row.kind === 'clusters') return !!(ds.clusters ?? []).find((c) => c.key === row.key)?.per_cell
   if (row.kind !== 'matrix') return false
   if (row.source === 'distance') return hasCoords(ds)
   return !!(ds.contact_maps ?? []).find((m) => m.key === row.source)?.per_cell
@@ -284,6 +290,19 @@ function RowSettings({
           ))}
         </Select>
       )}
+      {row.kind === 'clusters' && (
+        <>
+          <Select value={row.key ?? ''} onChange={(e) => set('key', e.target.value)} title="Cluster table">
+            {(ds.clusters ?? []).map((t) => (
+              <option key={t.key} value={t.key}>
+                {t.key} · {t.n_clusters.toLocaleString('en-US')} clusters
+              </option>
+            ))}
+          </Select>
+          <TextSetting label="min size" value={row.minSize ? String(row.minSize) : ''} placeholder="2" onCommit={(v) => set('minSize', v)} title="Clusters of at least this many fragments (all chromosomes; empty = 2)" />
+          <TextSetting label="max size" value={row.maxSize ? String(row.maxSize) : ''} placeholder="no limit" onCommit={(v) => set('maxSize', v)} title="Clusters of at most this many fragments (empty = no limit)" />
+        </>
+      )}
       <TextSetting label="height" value={row.height ? String(row.height) : ''} placeholder={row.kind === 'matrix' ? 'auto' : String(ROW_HEIGHT[row.kind])} onCommit={(v) => set('height', v)} title="Row height in px (empty = default)" />
     </div>
   )
@@ -336,7 +355,8 @@ type Describe = (x: number, y: number) => string | null
 /**
  * Combined genome view: matrix triangles (Hi-C / 3-D distance), tracks and
  * intervals stacked on one genomic axis = the shared locus.  Drag pans,
- * wheel zooms, every row moves together; a crosshair follows the mouse.
+ * wheel zooms (scrolls rows taller than the pane; ctrl / ⌘ + wheel zooms them), every row moves together; a
+ * crosshair follows the mouse.
  */
 export function GenomeView({ pane }: { pane: Pane }) {
   const { ds, rows, setRows } = useGenomeRows(pane)
@@ -421,6 +441,35 @@ export function GenomeView({ pane }: { pane: Pane }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ds?.id, ivKey, regionKey(locus)])
+  // cluster rows: one request per (table, cells, size bounds, lanes the row holds); none in the whole-genome view
+  const clusterReq = (r: GenomeRow, sc: Scope, h: number) => `${r.key}|${scopeKey(sc)}|${r.minSize ?? 2}|${r.maxSize ?? ''}|${clusterLanes(h)}`
+  const clusterReqs = useMemo(() => {
+    const m = new Map<string, { key: string; scope: Scope; minSize: number | null; maxSize: number | null; limit: number }>()
+    rows.forEach((r, i) => {
+      if (r.kind === 'clusters' && r.key)
+        m.set(clusterReq(r, rowScopes[i], heights[i]), { key: r.key, scope: rowScopes[i], minSize: r.minSize ?? null, maxSize: r.maxSize ?? null, limit: clusterLanes(heights[i]) })
+    })
+    return m
+  }, [rows, rowScopes, heights])
+  const clusterSig = [...clusterReqs.keys()].join(',')
+  const [clusterData, setClusterData] = useState<Record<string, ClusterWindow | string>>({})
+  useEffect(() => {
+    if (!ds || !locus || !clusterReqs.size || isGenome(locus)) return
+    let live = true
+    const t = setTimeout(() => {
+      for (const [k, e] of clusterReqs) {
+        const p = scopeParams(e.scope)
+        fetchClusters(ds.id, e.key, queryRegion(locus), { cell: p.cellId, group: p.group, minSize: e.minSize, maxSize: e.maxSize, limit: e.limit })
+          .then((d) => live && setClusterData((m) => ({ ...m, [k]: d })))
+          .catch((err: Error) => live && setClusterData((m) => ({ ...m, [k]: err.message })))
+      }
+    }, 180)
+    return () => {
+      live = false
+      clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ds?.id, clusterSig, regionKey(locus)])
   const guides = useMemo(() => {
     if (!locus) return []
     // whole genome: the chromosome boundaries
@@ -445,7 +494,9 @@ export function GenomeView({ pane }: { pane: Pane }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intervals, ivKey, locus, layout])
 
-  // wheel zoom (non-passive so the page doesn't scroll); not over row tools
+  // wheel zoom (non-passive so the page doesn't scroll); not over row tools.  When the rows overflow the pane,
+  // the wheel over them scrolls the stack and zooms with ctrl / ⌘ (a trackpad pinch sends ctrl); over the ruler
+  // it always zooms
   const currentLocus = useRef<Locus | null>(null)
   currentLocus.current = locus
   const extRef = useRef(ext)
@@ -457,6 +508,8 @@ export function GenomeView({ pane }: { pane: Pane }) {
       const l = currentLocus.current
       const rowsEl = rowsRef.current
       if (!l || !rowsEl || (e.target as HTMLElement).closest('.gv-tools')) return
+      const overflow = rowsEl.scrollHeight > rowsEl.clientHeight + 1
+      if (overflow && rowsEl.contains(e.target as Node) && !e.ctrlKey && !e.metaKey) return // scroll the rows
       e.preventDefault()
       const rect = rowsEl.getBoundingClientRect()
       const center = l.start + ((e.clientX - rect.left) / rowsEl.clientWidth) * (l.end - l.start)
@@ -557,6 +610,19 @@ export function GenomeView({ pane }: { pane: Pane }) {
               )}
               {r.kind === 'intervals' && (
                 <IntervalRow row={r} height={heights[i]} width={W} locus={locus} layout={layout} table={r.key ? intervals[r.key] : undefined} register={register} />
+              )}
+              {r.kind === 'clusters' && (
+                <ClusterRow
+                  row={r}
+                  height={heights[i]}
+                  width={W}
+                  locus={locus}
+                  genome={!!layout}
+                  data={clusterData[clusterReq(r, rowScopes[i], heights[i])]}
+                  label={scopeText(rowScopes[i], rowScopes[i].kind === 'group' ? byRef.get((rowScopes[i] as { group: string }).group) : null, nAll)}
+                  color={rowScopes[i].kind === 'group' ? (byRef.get((rowScopes[i] as { group: string }).group)?.color ?? null) : null}
+                  register={register}
+                />
               )}
             </RowFrame>
           ))}
@@ -1206,6 +1272,111 @@ function IntervalRow({
     const bp = locus.start + (x / width) * (locus.end - locus.start)
     const hit = items.find((it) => it.s2 === null && bp >= it.s && bp < it.e)
     return hit ? `${row.key} · ${hit.name ? `${hit.name} · ` : ''}${fmtSpan(locus.chrom, hit.s, hit.e, layout)}` : null
+  })
+  return <canvas ref={ref} style={style} />
+}
+
+/** Header of a cluster row (px) and the clusters it shows: one lane of at least 3 px each. */
+const CLUSTER_HEAD = 16
+const clusterLanes = (height: number) => Math.max(5, Math.floor((height - CLUSTER_HEAD - 2) / 3))
+
+/**
+ * Multi-way contacts in the window (ChIA-Drop style): one lane per cluster, ordered by where it starts on the
+ * chromosome; a line over its span here (an arrow where it goes on beyond the window), a box per fragment in the
+ * window; a cluster with fragments on other chromosomes ends in a dot.
+ */
+function ClusterRow({
+  row,
+  height,
+  width,
+  locus,
+  genome,
+  data,
+  label,
+  color,
+  register,
+}: {
+  row: GenomeRow
+  height: number
+  width: number
+  locus: Locus
+  genome: boolean
+  data: ClusterWindow | string | undefined
+  label: string
+  color: string | null
+  register(id: string, f: Describe | null): void
+}) {
+  const { ref, style } = useRowCanvas(width, height)
+  const pal = useTheme()
+  const epoch = useCaptureEpoch((s) => s.epoch)
+  const win = typeof data === 'object' && data.chrom === locus.chrom ? data : null
+  const n = win?.clusters.length ?? 0
+  const HEAD = CLUSTER_HEAD
+  const lane = n ? Math.max(1, Math.min(10, (height - HEAD - 2) / n)) : 0
+  useEffect(() => {
+    const cv = ref.current
+    if (!cv) return
+    const g = prepareCanvas(cv, width, height)
+    if (!g) return
+    const X = (bp: number) => ((bp - locus.start) / (locus.end - locus.start)) * width
+    const ink = color ?? pal.accent
+    if (win) {
+      g.lineWidth = 1
+      win.clusters.forEach((c, i) => {
+        const y = HEAD + i * lane + lane / 2
+        const a = Math.max(0, X(c.span[0]))
+        const b = Math.min(width, X(c.span[1]))
+        if (lane >= 2) {
+          g.strokeStyle = CHART.muted
+          g.beginPath()
+          g.moveTo(a, y)
+          g.lineTo(b, y)
+          g.stroke()
+          g.fillStyle = CHART.muted
+          const arrow = (x: number, dir: number) => {
+            g.beginPath()
+            g.moveTo(x, y)
+            g.lineTo(x - dir * Math.min(4, lane), y - Math.min(3, lane / 2))
+            g.lineTo(x - dir * Math.min(4, lane), y + Math.min(3, lane / 2))
+            g.fill()
+          }
+          if (c.span[0] < locus.start) arrow(1, -1)
+          if (c.span[1] > locus.end) arrow(width - 1, 1)
+          if (c.size > c.chrom_size) {
+            g.beginPath()
+            g.arc(Math.min(width - 3, b + 3), y, Math.min(2, lane / 2), 0, 2 * Math.PI)
+            g.fill()
+          }
+        }
+        g.fillStyle = ink
+        const h = Math.max(1, lane >= 3 ? lane - 1 : lane)
+        for (const [s, e] of c.fragments) {
+          const x0 = X(s)
+          g.fillRect(x0, y - h / 2, Math.max(2, X(e) - x0), h)
+        }
+      })
+    }
+    g.font = CHART.font
+    g.fillStyle = CHART.muted
+    g.textAlign = 'left'
+    g.textBaseline = 'top'
+    const size = `${row.minSize ?? 2}–${row.maxSize ?? '∞'} fragments`
+    const head = genome
+      ? `${row.key} · pick a chromosome to see its clusters`
+      : typeof data === 'string'
+        ? `${row.key} · ${data}`
+        : !win
+          ? `${row.key} · …`
+          : `${row.key} · ${label} · ${size} · ${n < win.n_clusters ? `${n.toLocaleString('en-US')} of ${win.n_clusters.toLocaleString('en-US')} clusters (most fragments here)` : `${n.toLocaleString('en-US')} clusters`}`
+    g.fillText(head, 6, 2)
+  }, [win, data, width, height, locus, row.key, row.minSize, row.maxSize, label, color, genome, lane, pal, epoch]) // eslint-disable-line react-hooks/exhaustive-deps
+  useRegister(register, row.id, (_x, y) => {
+    if (!win || !lane || y < HEAD) return null
+    const c = win.clusters[Math.floor((y - HEAD) / lane)]
+    if (!c) return null
+    const cell = c.cell ? ` · cell ${c.cell}` : ''
+    const other = c.size > c.chrom_size ? `, ${c.size - c.chrom_size} on other chromosomes` : ''
+    return `cluster ${c.id}${cell} · ${c.size} fragments (${c.chrom_size} on ${win.chrom}${other}) · ${c.fragments.length} here · spans ${fmtSpan(win.chrom, c.span[0], c.span[1])}`
   })
   return <canvas ref={ref} style={style} />
 }

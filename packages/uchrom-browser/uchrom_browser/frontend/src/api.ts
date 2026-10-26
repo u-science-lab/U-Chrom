@@ -1,6 +1,6 @@
 import { WAKE_HINT, useActivity } from './activity'
 import { decodeMatrix, type MatrixData } from './matrix'
-import type { AtlasResponse, FileListing, FilePlace, IntervalTable, RgStats, ScalingStats, TrackData, CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, SpatialPoints, StoreNode, TracePage } from './types'
+import type { AtlasResponse, CellDetails, CellPage, CellValues, ClusterWindow, DatasetSummary, Embedding, FileListing, FilePlace, Geometry, GeometryHeader, IntervalTable, LayerFilter, PointSet, PointSetPayload, RgStats, ScalingStats, SpatialPoints, StoreNode, TracePage, TrackData } from './types'
 
 async function fetchChecked(url: string, init?: RequestInit): Promise<Response> {
   const act = useActivity.getState()
@@ -287,6 +287,17 @@ export async function fetchTracks(
 
 export async function fetchIntervals(id: string, key: string, r: RegionQuery): Promise<IntervalTable> {
   return (await request(`${ds(id)}/intervals/${encodeURIComponent(key)}${query({ chrom: r.chrom, start: r.start, end: r.end })}`)).json()
+}
+
+/** The clusters with fragments in a window: of one cell, a group's cells or all; size bounds on all fragments. */
+export async function fetchClusters(
+  id: string,
+  key: string,
+  r: RegionQuery,
+  opts: { cell?: string | null; group?: string | null; minSize?: number | null; maxSize?: number | null; limit?: number | null } = {},
+): Promise<ClusterWindow> {
+  const q = query({ chrom: r.chrom, start: r.start, end: r.end, cell: opts.cell, group: opts.group, min_size: opts.minSize, max_size: opts.maxSize, limit: opts.limit })
+  return (await request(`${ds(id)}/clusters/${encodeURIComponent(key)}${q}`)).json()
 }
 
 export async function fetchContacts(

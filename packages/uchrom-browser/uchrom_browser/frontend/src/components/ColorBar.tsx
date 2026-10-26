@@ -1,4 +1,4 @@
-import { fieldRange, rgbCss, viridis } from '../colors'
+import { fieldRange, rgbCss, skewedField, viridis } from '../colors'
 import { activeFieldValues, activeView, useStore } from '../store'
 import { useCategoryRows } from './CategoryLegend'
 import { fieldLabel, fmtNum } from './format'
@@ -30,14 +30,16 @@ export function ColorBar({ inline = false }: { inline?: boolean }) {
     )
   }
   const [lo, hi] = values ? fieldRange(values.values()) : [0, 1]
+  const log = values ? skewedField(values.values()) : false
   const stops = Array.from({ length: 9 }, (_, i) => `${rgbCss(viridis(i / 8))} ${(i / 8) * 100}%`).join(', ')
   if (inline) {
     return (
-      <div className="colorbar inline" title="99th-percentile cap · grey = missing">
+      <div className="colorbar inline" title={`99th-percentile cap${log ? ' · log1p scale' : ''} · grey = missing`}>
         <span className="colorbar-title">{fieldLabel(view.cellField)}</span>
         <span className="colorbar-tick">{values ? fmtNum(lo) : '…'}</span>
         <span className="colorbar-ramp" style={{ background: `linear-gradient(to right, ${stops})` }} />
         <span className="colorbar-tick">{values ? `≥${fmtNum(hi)}` : ''}</span>
+        {log && <span className="colorbar-tick muted">log1p</span>}
       </div>
     )
   }
@@ -49,7 +51,7 @@ export function ColorBar({ inline = false }: { inline?: boolean }) {
         <span>{values ? fmtNum(lo) : '…'}</span>
         <span>{values ? `≥${fmtNum(hi)}` : ''}</span>
       </div>
-      <div className="muted small">99th pct cap · grey = missing</div>
+      <div className="muted small">{log ? 'log1p scale · ' : ''}99th pct cap · grey = missing</div>
     </div>
   )
 }
