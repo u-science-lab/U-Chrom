@@ -469,9 +469,9 @@ datasets (`stevens2017`, `su2020_chr21`, `rao2014_imr90_chr21`) and the atlas (`
   `_l5l6` (E12.5 L5 + L6; CRR2725635-37, 373 GB), `_c1c4` (E13.5 C1 + C4; CRR2725638-43, 958 GB), `_f5f6` (E14.5
   F5 + F6; CRR2725647-48, 452 GB).  A library of two sections tells them apart by the DPM tag (the authors'
   `split_dpm_from_full_BC_fq.py`); which tag is which section (`samples.tsv`: L1 dpm1, L2 dpm2, L5 dpm2, L6 dpm4,
-  C1 dpm3, C4 dpm4, F5 dpm3, F6 dpm4) is inferred from the order in the config names and checked on the
-  fragments-per-spot grids.  GSA closes transfers after a few minutes: `slurm/fetch.sbatch` resumes them (`wget -c`,
-  up to 200 attempts; an array over `runs.tsv`) and checks the md5s.
+  C1 dpm4, C4 dpm3, F5 dpm3, F6 dpm4) is the comment on the tag's line in the library's config.  GSA stalls and
+  closes transfers: `slurm/fetch.sbatch` (an array over `runs.tsv`) resumes them (aria2c with 4 connections, else
+  `wget -c`), requeues itself before its time limit and checks the md5s.
 - **Recipe** (`apps/atlas/recipes/spacea_ma2026/slurm/`, Slurm jobs; settings in `common.sh` — `SPACEA_ROOT`,
   `SPACEA_REF` —): `setup_env.sbatch` (conda environment, the two repositories at their commits, STAR index of mm10
   + UCSC refGene, sjdbOverhang 149) → `fetch.sbatch` → `process.sbatch <run>` (the authors' Snakefile step by step

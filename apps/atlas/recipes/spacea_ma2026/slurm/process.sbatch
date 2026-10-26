@@ -33,6 +33,9 @@ stat after_cutadapt "$(grep -m1 'Pairs written' cutadapt.qc.txt | awk '{gsub(","
 echo "[$(date)] split"
 [ -d parts ] || seqkit split2 -1 clean_R1.fq.gz -2 clean_R2.fq.gz --by-part "$P" -j "$N" -O parts -e .gz 2> split.log
 mkdir -p bc
+# the two-section configs name the section after a DPM tag's line (`… 1 #E12.5L5`), which BarcodeIdentification
+# reads as the mismatch count: comments after a value are dropped
+sed -E 's/[[:space:]]+#.*$//' "$CFG" > bc/config.txt; CFG="$W/bc/config.txt"
 echo "[$(date)] barcodes"
 ls parts/clean_R1.part_*.fq.gz | sed 's/.*part_\([0-9]*\).fq.gz/\1/' | \
   xargs -P "$((N / 2))" -I{} bash -c '[ -s bc/p{}_R1.barcoded_full.fastq.gz ] && exit 0
