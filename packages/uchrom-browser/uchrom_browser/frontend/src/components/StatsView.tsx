@@ -8,7 +8,7 @@ import { logTicks, niceTicks } from '../genome'
 import { nearestPoint } from '../render/embedding'
 import { scopeLabel, type GroupInfo } from '../groups'
 import { activeView, fieldKey, useStore } from '../store'
-import { extent, fmtAxis, histogram, linear, logScale, statsChrom } from '../stats'
+import { extent, fmtAxis, histogram, integerBins, linear, logScale, statsChrom } from '../stats'
 import type { CellField, CellValue, RgStats, ScalingStats } from '../types'
 import { useLocus } from '../useLocus'
 import { useTheme } from '../useTheme'
@@ -401,9 +401,10 @@ export function StatsView({ pane }: { pane: Pane }) {
         .filter((o): o is { info: GroupInfo | null; vals: CellValue[] } => !!o.vals)
       const nums = (v: readonly (CellValue | undefined)[]) => v.filter((x): x is number => typeof x === 'number' && Number.isFinite(x))
       const all = nums([...baseVals, ...overlays.flatMap((o) => o.vals)])
-      const range: [number, number] | undefined = all.length ? [Math.min(...all), Math.max(...all)] : undefined
-      // few cells → few bins (about 2√n, 8–40)
-      const nbins = Math.max(8, Math.min(40, Math.round(2 * Math.sqrt(all.length))))
+      // few cells → few bins (about 2√n, 8–40); integer fields in bins of whole width
+      const ints = integerBins(all, Math.max(8, Math.min(40, Math.round(2 * Math.sqrt(all.length)))))
+      const range: [number, number] | undefined = ints ? ints.range : all.length ? [Math.min(...all), Math.max(...all)] : undefined
+      const nbins = ints ? ints.nbins : Math.max(8, Math.min(40, Math.round(2 * Math.sqrt(all.length))))
       const hist = histogram(baseVals, nbins, range)
       const frac = overlays.length > 0
       const norm = (c: number[]) => {
