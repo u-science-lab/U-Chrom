@@ -9,7 +9,7 @@
 # an array over runs.tsv without arguments (task i = data row i + 1): sbatch --array=0-16%4 fetch.sbatch
 set -euo pipefail
 source "$SLURM_SUBMIT_DIR/common.sh"
-module load aria2 2> /dev/null || true
+module load system aria2 2> /dev/null || true   # where a module provides it
 RUNS=("$@")
 [ ${#RUNS[@]} -gt 0 ] || RUNS=("$(awk -F'\t' -v i="$((SLURM_ARRAY_TASK_ID + 2))" 'NR==i {print $1}' "$HERE/runs.tsv")")
 for RUN in "${RUNS[@]}"; do

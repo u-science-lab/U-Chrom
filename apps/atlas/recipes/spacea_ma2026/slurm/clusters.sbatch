@@ -18,7 +18,7 @@ PYS="$SRC/sprite-pipeline/scripts/python"; N=$SLURM_CPUS_PER_TASK
 RUNS=(${RUNS:-$(lib_runs "$LIB")})
 for RUN in "${RUNS[@]}"; do [ -e "$WORK/$RUN/OK" ] || { echo "$RUN: not aligned yet"; exit 2; }; done
 OUT="${SPACEA_OUT:-$DEST/$SAMPLE}"
-W="$WORK/$SAMPLE"; mkdir -p "$W"; cd "$W"
+W="$WORK/clusters_$(basename "$OUT")"; mkdir -p "$W"; cd "$W"   # a test (SPACEA_OUT) works apart
 stat() { echo -e "$1\t$2" | tee -a stats.tsv; }
 : > stats.tsv; stat sample "$SAMPLE"; stat library "$LIB"; stat dpm "$DPM"; stat runs "${RUNS[*]}"
 echo "[$(date)] reads of [$DPM], runs merged"
