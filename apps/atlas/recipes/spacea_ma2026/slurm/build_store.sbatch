@@ -6,7 +6,8 @@
 #SBATCH --output=%x-%j.out
 # The clusters of a run (process.sbatch) as a .chromdata.zarr store with ChromData.clusters per spot, copied to
 # $DEST/<run>/.  The fragments-per-spot grid (the tissue must show) is build_store.py --figure, where matplotlib is
-# installed.  PY is a Python with chromdata >= format 2.4 (ChromData.clusters).  Usage: sbatch build_store.sbatch <run>
+# installed.  PY is a Python with chromdata >= format 2.4 (ChromData.clusters) and uchrom (derive.py: the filtered
+# clusters, their maps, the spot embedding).  Usage: sbatch build_store.sbatch <run>
 set -euo pipefail
 source "$SLURM_SUBMIT_DIR/common.sh"
 PY="${PY:?set PY: a Python with chromdata (format 2.4)}"
@@ -15,5 +16,7 @@ RUN=$1; SAMPLE=$(col "$RUN" sample)
 OUT="$WORK/$RUN/spacea_${SAMPLE}_${RUN}.chromdata.zarr"
 "$PY" -u "$HERE/build_store.py" "$DEST/$RUN/clusters_$RUN.gz" "$OUT" --run "$RUN" --sample "$SAMPLE" \
     | tee "$DEST/$RUN/build_store.log"
+"$PY" -u "$HERE/derive.py" "$OUT" --threads "${SLURM_CPUS_PER_TASK:-4}" | tee -a "$DEST/$RUN/build_store.log"
 du -sh "$OUT"
 rm -rf "$DEST/$RUN/$(basename "$OUT")" && cp -r "$OUT" "$DEST/$RUN/"      # kept next to the clusters
+cp "${OUT%.chromdata.zarr}"_1mb.scool "${OUT%.chromdata.zarr}"_pooled.mcool "$DEST/$RUN/"

@@ -138,7 +138,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `tan2021_cortex/`: Tan 2021 Dip-C adult cortex, 510 cells | 13 GB | fetch `tan2021_cortex` | an unpublished benchmark (brain Dip-C baseline) |
 | `tan2018_gm12878/`: Tan 2018 Dip-C GM12878, 17 cells | ~0.7 GB | fetch `tan2018_gm12878` | diploid EMber / NucDynamics validation |
 | `quinodoz2018_sprite/`: Quinodoz 2018 SPRITE mouse ES cells, the authors' clusters | 6.2 GB | fetch `quinodoz2018_sprite` (**cluster**) | multi-way contacts of the store (`ChromData.clusters`, format 2.4): uchrom-reproducibility `extended_data_fig1/g_clusters_sprite.py` |
-| `spacea_ma2026/`: Ma 2026 SpaceA, spatial SPRITE of an E13.5 mouse embryo section (run CRR2725644) | 11.5 GB fastq; clusters 87 MB, store 192 MB | fetch `ma2026_spacea_c6` (GSA, academic use); recipe `spacea_ma2026/slurm/` (a compute cluster) | per-spot check of `ChromData.clusters` (U-Chrom PR #153); not in the atlas |
+| `spacea_ma2026/`: Ma 2026 SpaceA, spatial SPRITE of an E13.5 mouse embryo section (run CRR2725644) | 11.5 GB fastq; clusters 87 MB, store 550 MB with the derived maps | fetch `ma2026_spacea_c6` (GSA, academic use); recipe `spacea_ma2026/slurm/` (a compute cluster) | per-spot check of `ChromData.clusters` (U-Chrom PR #153); the browser's cluster track; not in the atlas |
 | `wu2025_scmicroc/`: Wu 2025 scMicro-C GM12878, 12 deepest cells | 3.1 GB (102 GB streamed) | fetch `wu2025_scmicroc` | EMber deep development and test (PREREG §11); Fig. 3a / S8 |
 | `rao2014_imr90/4DNFIR1JDZH7.mcool`: Rao 2014 IMR90, 4DN GRCh38 | 4.6 GB | fetch `rao2014_imr90_4dn` (**cluster only**; laptops read it over HTTP) | an unpublished benchmark; an unpublished benchmark (range reads) |
 | `bonev2017_mesc/4DNFIC21MG3U.mcool`: Bonev 2017 mESC Hi-C, 4DN mm10 | 12.6 GB | fetch `bonev2017_mesc_4dn` (**cluster only**) | an unpublished benchmark; an unpublished benchmark (range reads); tutorial `sc_structures` and uchrom-reproducibility `supp_table3/sc_structures/` (bulk mESC loops and insulation) |
@@ -473,10 +473,21 @@ datasets (`stevens2017`, `su2020_chr21`, `rao2014_imr90_chr21`) and the atlas (`
   STAR index of mm10 + UCSC refGene, sjdbOverhang 149) → `fetch.sbatch <run>` → `process.sbatch <run>` (the
   authors' Snakefile step by step: cutadapt, BarcodeIdentification + full barcodes, STAR, Picard duplicates,
   MAPQ 255, `get_clusters -n 6`; `stats.tsv`; clusters and logs to `$SPACEA_ROOT/out/<run>/`) →
-  `build_store.sbatch <run>` (`build_store.py`: the clusters as `ChromData.clusters["spacea"]`, one cell per spot).
+  `build_store.sbatch <run>` (`build_store.py`: the clusters as `ChromData.clusters["spacea"]`, one cell per spot;
+  then `derive.py`, below).
+- **Derived** (`derive.py`, ~5 min on 8 cores): `clusters["spacea_filtered"]` = the authors' cluster filter
+  (`uchrom.fea.filter_clusters`; equal to their `filter_sprite.py` on 40,000 clusters checked one by one: 206,251
+  clusters, 1,435,723 fragments kept); maps of its fragment pairs, embedded in the store: per spot at 1 Mb
+  (`per_spot`, median 1,395 pairs, 701 cis) and pooled (`pooled`, 100 kb – 2 Mb, ICE-balanced; 54 % cis); a
+  scHiCluster embedding of the per-spot maps (`cellm["hic_umap"]`) and its Leiden clusters (`hic_leiden`).  The
+  pooled map has the authors' P(s) shape (log–log r 0.91–0.98 with their C6 curves) but a shallower slope (−0.13 vs
+  −0.21 to −0.31): the counts are unweighted fragment pairs (the embedded copies store integers), the authors weight
+  a cluster's pairs by 2/n.  Spots are sparse for single-spot embeddings: the Leiden clusters are only weakly
+  spatial (neighbouring spots share a label at 0.44, 0.28 shuffled) and follow depth; the authors embedded with
+  FastHigashi.
 - **Spots**: read 2 is ODD|EVEN|ODD|Y|LIGTAG|DPM; a spot is the pair of the two orthogonal channel sets
   (LIGTAG, 50 tags `oddTop1-50`; Y, 100 tags `evenTop1-100`), cell id `oddTopN.evenTopM`, position = the channel
-  pair (`cells` columns `lig` / `y`, unit `channel`).  Inferred from the configs and the authors' file naming (their
+  pair (`cells` columns `centroid_x` = LIGTAG / `centroid_y` = Y, unit `channel`).  Inferred from the configs and the authors' file naming (their
   split script and spot list are not public); confirmed by the fragments-per-spot grid, which shows the embryo.
 - **CRR2725644**: 52.8 M pairs after cutadapt, 18.5 M with a full barcode, 8.0 M uniquely mapped, 7.16 M after
   duplicates → 1,407,822 clusters; store 192 MB, 4,974 spots (median 994 fragments, 2,475 spots with ≥ 1,000).

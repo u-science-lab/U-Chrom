@@ -6,8 +6,9 @@ A clusters line of get_clusters.py is ``<barcode>\\t<read>\\t<read>...``, the ba
 (pysam's 0-based start and end).  LIGTAG (50 tags, ``oddTop1-50``) and Y (100 tags, ``evenTop1-100``) are the two
 orthogonal sets of microfluidic channels: the spot is the pair (LIGTAG, Y), the authors' spot files are named
 ``LIGTAG.Y...`` (their reformat_clusters reverses the barcode); the three split-pool rounds ODD.EVEN.ODD tell the
-clusters of a spot apart.  The spot's position is its channel pair (``cells`` columns ``lig`` / ``y``, positions in
-channel units; the channel pitch and the grid's orientation on the slide are not in the public data).
+clusters of a spot apart.  The spot's position is its channel pair (``cells`` columns ``centroid_x`` = LIGTAG,
+``centroid_y`` = Y, in channel units; the channel pitch and the grid's orientation on the slide are not in the public
+data).
 
 The table keeps every cluster as written (get_clusters drops duplicate positions within a cluster); the authors'
 filters (cluster size 2-1000, chromosome share > 0.15, cis share >= 0.2, spot QC) are analysis choices, recorded in
@@ -89,13 +90,15 @@ def main():
                           "fragments": spots["fragments"].to_numpy(), "sample": args.sample, "run": args.run},
                          index=pd.Index(spots.index, name="cell_id"))
     cells = cells.sort_values(["lig", "y"])
+    xy = cells[["lig", "y"]].to_numpy(float)
+    cells = cells.drop(columns=["lig", "y"])                   # the position goes to centroid_x / centroid_y
     empty = pd.DataFrame({"chrom": pd.Series([], dtype=str), "start": pd.Series([], dtype=np.int64),
                           "end": pd.Series([], dtype=np.int64), "trace_id": pd.Series([], dtype=str)})
     cd = ChromData(np.zeros((0, 3)), empty, cells=cells, uns={
         "genome_assembly": "mm10", "source": "SpaceA, Ma et al. 2026 Dev Cell (doi:10.1016/j.devcel.2026.09.004); "
         f"GSA CRA038845 run {args.run}, sample {args.sample}; reprocessed with the authors' pipeline "
         "(U-Chrom apps/atlas/recipes/spacea_ma2026)"})
-    cd.set_cell_positions(cells[["lig", "y"]].to_numpy(float), cell_ids=list(cells.index), unit="channel",
+    cd.set_cell_positions(xy, cell_ids=list(cells.index), unit="channel",
                           frame="tissue", status="measured",
                           source="SpaceA barcode grid: LIGTAG channel (x) x Y channel (y); pitch and slide "
                                  "orientation not in the public data")
@@ -115,8 +118,9 @@ def main():
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        grid = np.zeros((cells["y"].max(), cells["lig"].max()))
-        grid[cells["y"] - 1, cells["lig"] - 1] = np.log10(cells["fragments"])
+        gx, gy = xy[:, 0].astype(int), xy[:, 1].astype(int)
+        grid = np.zeros((gy.max(), gx.max()))
+        grid[gy - 1, gx - 1] = np.log10(cells["fragments"])
         fig, ax = plt.subplots(figsize=(5, 8))
         im = ax.imshow(grid, cmap="viridis", aspect="equal", interpolation="nearest")
         ax.set_xlabel("LIGTAG channel"); ax.set_ylabel("Y channel")
