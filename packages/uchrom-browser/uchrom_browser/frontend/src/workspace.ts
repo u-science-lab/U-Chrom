@@ -95,6 +95,9 @@ export interface WorkspaceState {
   gridRows?: number[]
   /** pane shown alone (all others kept mounted but hidden), or null */
   maximized: string | null
+  /** the views of the default layout this one started from (paneSignature): while its views are those, it gives
+   *  way to a newer default (followsNewDefault) — only a layout whose views were added or removed is kept */
+  basis?: string
 }
 
 export const LAYOUTS: WsLayout[] = ['tabs', 'grid']
@@ -162,7 +165,14 @@ export function defaultWorkspace(kind: boolean | DataKind): WorkspaceState {
     ws.gridCols = firstLarger(cols, MAIN_3D.col)
     ws.gridRows = firstLarger(rows, MAIN_3D.row)
   }
+  ws.basis = paneSignature(ws)
   return ws
+}
+
+/** A saved layout that still has the views of the default it came from, when the default is now another: the new
+ *  default replaces it (its pane settings were not a choice of views).  Layouts saved before `basis` are kept. */
+export function followsNewDefault(saved: WorkspaceState, fresh: WorkspaceState): boolean {
+  return saved.basis !== undefined && paneSignature(saved) === saved.basis && saved.basis !== fresh.basis
 }
 
 /** Panes of `types` in a grid (or `layout`). */
@@ -533,6 +543,7 @@ export function parseWorkspace(raw: unknown): WorkspaceState | null {
     maximized,
     ...(gc ? { gridCols: gc.v } : {}),
     ...(gr ? { gridRows: gr.v } : {}),
+    ...(typeof w.basis === 'string' ? { basis: w.basis } : {}),
   }
 }
 

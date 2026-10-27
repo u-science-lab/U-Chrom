@@ -820,13 +820,16 @@ const hasManyCells = (store: ReturnType<typeof useStore.getState>) =>
 /**
  * Click behaviour: anything belonging to another cell (context, or the
  * overview of a multi-cell dataset) focuses that cell; a trace or point of
- * the focused cell — or of data without cells — shows its details.
+ * the focused cell — or of data without cells — shows its details; empty
+ * space clears the pick and, with a cell focused, goes back to all cells.
  */
 function pickAt(t: Three, e: PointerEvent, paneId: string, focus: string | null) {
   const store = useStore.getState()
   const hit = hitAt(t, e.clientX, e.clientY)
   if (!hit) {
     store.setPick(null)
+    // empty space: back to all cells (as Esc / the All cells button)
+    if (focus !== null && hasManyCells(store)) store.focusCell(null)
     return
   }
   if (hasManyCells(store) && hit.cell !== null && hit.cell !== focus) {

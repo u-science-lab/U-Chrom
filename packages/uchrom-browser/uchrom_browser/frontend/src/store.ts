@@ -7,7 +7,7 @@ import { loadSidebars, saveSidebars, type Side, type Sidebars } from './sidebars
 import { applyTheme, loadThemeChoice, resolveTheme, saveThemeChoice, systemPrefersDark, type Palette, type ThemeChoice } from './theme'
 import { isPointPick } from './types'
 import type { Locus } from './genome'
-import { addPinnedPane, addTracePane, defaultWorkspace, dropGroupScope, paneSignature, parseWorkspaces, type DataKind, type WorkspaceState } from './workspace'
+import { addPinnedPane, addTracePane, defaultWorkspace, dropGroupScope, followsNewDefault, paneSignature, parseWorkspaces, type DataKind, type WorkspaceState } from './workspace'
 import type { CellField, CellInfo, CellValue, ColorMode, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo, PointSet } from './types'
 
 let nextId = 1
@@ -206,6 +206,8 @@ export interface AppState {
   workspaceTouched: boolean
   /** show dataset `owner`'s layout: its saved one, else the default for its data */
   ensureDefaultWorkspace(kind: boolean | DataKind, owner?: string | null): void
+  /** back to the default views of the dataset (its saved layout forgotten) */
+  resetWorkspace(kind: boolean | DataKind): void
   /** replace the workspace (used by the pane actions); saves it for its dataset */
   setWorkspace(update: (ws: WorkspaceState) => WorkspaceState): void
   /** open `cell` in a new view pinned to it (3-D, or Genome without coordinates) */
@@ -465,13 +467,22 @@ export const useStore = create<AppState>((set, get) => {
   ensureDefaultWorkspace(kind, owner = get().workspaceOwner) {
     const s = get()
     if (owner !== s.workspaceOwner) {
+      const fresh = defaultWorkspace(kind)
       const saved = owner ? s.savedWorkspaces[owner] : undefined
-      set({ workspaceOwner: owner, workspace: saved ?? defaultWorkspace(kind), workspaceTouched: !!saved })
+      const keep = saved && !followsNewDefault(saved, fresh) ? saved : undefined
+      set({ workspaceOwner: owner, workspace: keep ?? fresh, workspaceTouched: !!keep })
       return
     }
     if (s.workspaceTouched) return
     const ws = defaultWorkspace(kind)
     if (paneSignature(ws) !== paneSignature(s.workspace)) set({ workspace: ws })
+  },
+  resetWorkspace(kind) {
+    const s = get()
+    const savedWorkspaces = { ...s.savedWorkspaces }
+    if (s.workspaceOwner) delete savedWorkspaces[s.workspaceOwner]
+    saveWorkspaces(savedWorkspaces)
+    set({ workspace: defaultWorkspace(kind), workspaceTouched: false, savedWorkspaces })
   },
   setWorkspace(update) {
     const s = get()

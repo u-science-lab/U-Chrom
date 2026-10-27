@@ -195,7 +195,7 @@ function LayoutIcon({ layout }: { layout: WsLayout }) {
 }
 
 /** The layout switch: the current layout as a button (like + View), the layouts in a menu. */
-function LayoutMenu({ layout, onPick }: { layout: WsLayout; onPick(l: WsLayout): void }) {
+function LayoutMenu({ layout, onPick, onReset }: { layout: WsLayout; onPick(l: WsLayout): void; onReset(): void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLButtonElement>(null)
   const close = useCallback(() => setOpen(false), [])
@@ -233,6 +233,22 @@ function LayoutMenu({ layout, onPick }: { layout: WsLayout; onPick(l: WsLayout):
               </span>
             </li>
           ))}
+          <li
+            role="menuitem"
+            onClick={() => {
+              onReset()
+              setOpen(false)
+            }}
+          >
+            <span className="vm-icon" aria-hidden>
+              ↺
+            </span>
+            <span className="vm-text">
+              <span className="vm-name">Default views</span>
+              <span className="vm-hint">the views this dataset opens with</span>
+            </span>
+            <span className="vm-check" aria-hidden />
+          </li>
         </ul>
       </Popover>
     </div>
@@ -253,7 +269,9 @@ export function Workspace() {
   const ensureDefault = useStore((s) => s.ensureDefaultWorkspace)
   const datasetId = useStore((s) => s.activeDatasetId)
   const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
-  const { hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, spatialIn3d, manyCells } = useDataKind()
+  const kind = useDataKind()
+  const { hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, spatialIn3d, manyCells } = kind
+  const resetWorkspace = useStore((s) => s.resetWorkspace)
   const [resetKeys, setResetKeys] = useState<Record<string, number>>({})
   const [menu, setMenu] = useState(false)
   const addRef = useRef<HTMLButtonElement>(null)
@@ -358,7 +376,7 @@ export function Workspace() {
             <ViewMenu onPick={add} />
           </Popover>
         </div>
-        <LayoutMenu layout={ws.layout} onPick={(l) => setWorkspace((w) => setLayout(w, l))} />
+        <LayoutMenu layout={ws.layout} onPick={(l) => setWorkspace((w) => setLayout(w, l))} onReset={() => resetWorkspace(kind)} />
       </div>
       {ws.layout === 'tabs' && !ws.maximized && (
         <div className="ws-tabs">
