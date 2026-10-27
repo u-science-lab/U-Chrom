@@ -74,10 +74,10 @@ describe('default grid', () => {
 
 describe('saved layouts and a newer default', () => {
   it('a layout with its default views gives way to a new default; one with views added stays', () => {
-    const before = defaultWorkspace({ hasCoords: true, hasEmbeddings: true, hasTracks: false, hasSpatial: true })
-    const after = defaultWorkspace({ hasCoords: true, hasEmbeddings: true, hasTracks: false, hasSpatial: true, spatialIn3d: true })
-    expect(before.panes.map((p) => p.type)).toContain('spatial')
-    expect(after.panes.map((p) => p.type)).not.toContain('spatial')
+    const before = defaultWorkspace({ hasCoords: true, hasEmbeddings: false, hasTracks: false })
+    const after = defaultWorkspace({ hasCoords: true, hasEmbeddings: true, hasTracks: false })
+    expect(after.panes.map((p) => p.type)).toContain('embedding')
+    expect(before.panes.map((p) => p.type)).not.toContain('embedding')
     const touched = { ...before, activePane: before.panes[1].id }            // a pane picked: views unchanged
     expect(followsNewDefault(touched, after)).toBe(true)
     expect(followsNewDefault(addPane(before, 'genome'), after)).toBe(false) // views of the user's own
