@@ -46,6 +46,7 @@ from .maps import (
     observed_over_expected,
     open_map,
     rebin_map,
+    rebin_scool,
     thin_map,
 )
 from .band import (
@@ -115,6 +116,7 @@ __all__ = [
     "observed_over_expected",
     "open_map",
     "rebin_map",
+    "rebin_scool",
     "Band",
     "band_observed_over_expected",
     "expected_cis",
