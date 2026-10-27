@@ -71,10 +71,19 @@ def _locus_columns_ok(df: pd.DataFrame) -> bool:
     c = _cols(df)
     if not {"chrom", "chrom_start", "chrom_end", "x", "y", "z"} <= set(c):
         return False
-    chrom = df[c["chrom"]].dropna().astype(str).str.strip()
+    chrom = df[c["chrom"]].dropna().astype(str).str.strip().str.replace(r"\.0$", "", regex=True)
     chrom = chrom[chrom != ""]
-    return (len(chrom) > 0 and not pd.to_numeric(chrom, errors="coerce").notna().any()
-            and pd.api.types.is_numeric_dtype(df[c["chrom_start"]]) and pd.api.types.is_numeric_dtype(df[c["chrom_end"]]))
+    if not len(chrom) or not (pd.api.types.is_numeric_dtype(df[c["chrom_start"]])
+                              and pd.api.types.is_numeric_dtype(df[c["chrom_end"]])):
+        return False
+    # chromosome names: "chr3R", "3R", "X", or a number of one or two digits ("19": Liu et al. 2020), and loci that
+    # are integer intervals — not coordinates or ids moved into the wrong columns
+    named = chrom.str.fullmatch(r"(chr)?[0-9]{1,2}[A-Za-z]{0,2}|(chr)?[A-Za-z][0-9A-Za-z_]{0,7}")
+    rows = df[c["chrom"]].notna()
+    start, end = df.loc[rows, c["chrom_start"]].astype(float), df.loc[rows, c["chrom_end"]].astype(float)
+    integer = ((start == start.round()) & (end == end.round())).mean()
+    ordered = (end > start).mean()          # most loci: some deposits have a few with end <= start (Huang 2021: 2.4 %)
+    return bool(named.mean() > 0.99 and integer > 0.99 and ordered > 0.9)
 
 
 def _fix_columns(df: pd.DataFrame, path, name: str, fixes: list) -> pd.DataFrame:
@@ -103,6 +112,11 @@ def _fix_columns(df: pd.DataFrame, path, name: str, fixes: list) -> pd.DataFrame
                     good.append((f"inserted {miss}", cand))
     else:
         raise ValueError(f"{name}: the locus columns of {Path(path).name} do not parse (columns {list(df.columns)})")
+    if len(good) > 1:                    # an id column can pass for a numbered chromosome: prefer named ones
+        def worded(cand):
+            ch = cand[_cols(cand)["chrom"]].dropna().astype(str)
+            return pd.to_numeric(ch, errors="coerce").isna().mean() > 0.5
+        good = [g for g in good if worded(g[1])] or good
     if len(good) != 1:
         raise ValueError(f"{name}: {Path(path).name} declares {names} over {len(df.columns)} columns; "
                          f"{len(good)} relabellings make the loci parse")
@@ -186,6 +200,10 @@ def _split_reused_traces(df: pd.DataFrame, c: dict):
     return df, out
 
 
+def _as_list(v) -> list:
+    return [] if not v else list(v) if isinstance(v, (list, tuple)) else [v]
+
+
 def _tidy(df: pd.DataFrame, category: bool = False) -> pd.DataFrame:
     """Text columns of tables concatenated over experiments as text: one experiment's ``Tissue_ID`` can be numbers
     and another's ``"A1"`` (Mateo et al. 2019), which a Parquet column cannot hold; repeated text values (condition,
@@ -205,8 +223,10 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
     Parameters
     ----------
     experiments : iterable of mappings
-        One per experiment: ``name`` (prefix of its ids), ``core`` (the core table) and optionally
-        ``spot_quality``, ``trace_data``, ``cell_data`` (companion tables), ``meta`` (a mapping of values given
+        One per experiment: ``name`` (prefix of its ids), ``core`` (the core table, or a list of them — their
+        trace ids prefixed ``c<k>-``, ``traces["core_file"]`` naming the table) and optionally ``spot_quality`` /
+        ``spot_bio`` (one or several tables keyed by ``Spot_ID``), ``trace_data``, ``cell_data`` (companion
+        tables), ``meta`` (a mapping of values given
         to each of its cells, e.g. the experiment set, condition and biosample) and ``locus_shifts`` (``(chrom,
         start_from, start_to, offset)``: loci whose start lies in the range moved by ``offset`` bp — a correction
         the caller knows from the authors, recorded in ``uns["fofct_locus_shifts"]``).
@@ -227,7 +247,7 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
         ``fofct_unit_fixes``, ``fofct_dropped_spots`` (also exact duplicate rows), ``fofct_trace_splits`` (ids reused
         for several traces: :func:`_split_reused_traces`), ``fofct_column_fixes`` (core tables whose declared columns
         were one too many or one too few: :func:`_fix_columns`), ``fofct_chrom_renames`` (chromosome names
-        given the ``chr`` prefix the other experiments use).
+        given the UCSC ``chr`` prefix: ``3R`` -> ``chr3R``, ``19`` -> ``chr19``).
     """
     from chromdata import ChromData, read_fofct_table
 
@@ -235,27 +255,46 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
     headers, fixes, assemblies, dropped, column_fixes, trace_splits, shifts = {}, [], set(), {}, [], {}, {}
     for exp in experiments:
         name = str(exp["name"])
-        df, header = read_fofct_table(exp["core"])
-        headers[name] = header
-        df = _fix_columns(df, exp["core"], name, column_fixes)
-        c = _cols(df)
-        need = ["spot_id", "trace_id", "x", "y", "z", "chrom", "chrom_start", "chrom_end"]
-        missing = [k for k in need if k not in c]
-        if missing:
-            raise ValueError(f"{name}: core table without {missing} (columns {list(df.columns)})")
-        hdr = {k.lower(): v for k, v in header.items()}
-        if "genome_assembly" in hdr:
-            assemblies.add(hdr["genome_assembly"].strip())
-        scale = _scale(header, _median_step(df, c), name, fixes)
-        placed = df[c["chrom"]].notna() & (df[c["chrom"]].astype(str).str.strip() != "")
-        ok = df[[c["x"], c["y"], c["z"]]].notna().all(axis=1) & placed
-        dropped[name] = {"no_coordinates": int((~df[[c["x"], c["y"], c["z"]]].notna().all(axis=1)).sum()),
-                         "no_locus": int((~placed).sum())}
-        df = df[ok].reset_index(drop=True)
-        df, split = _split_reused_traces(df, c)
-        dropped[name]["duplicate_rows"] = split.pop("duplicate_rows")
-        if split["split_traces"]:
-            trace_splits[name] = split
+        cores = list(exp["core"]) if isinstance(exp["core"], (list, tuple)) else [exp["core"]]
+        parts = []
+        dropped[name] = {"no_coordinates": 0, "no_locus": 0, "duplicate_rows": 0}
+        for k, core in enumerate(cores):          # an experiment may have several core tables (Takei 2021: 1 Mb, 25 kb)
+            label = name if len(cores) == 1 else f"{name}:{Path(core).stem}"
+            df, header = read_fofct_table(core)
+            headers.setdefault(name, header)
+            df = _fix_columns(df, core, label, column_fixes)
+            c = _cols(df)
+            need = ["spot_id", "trace_id", "x", "y", "z", "chrom", "chrom_start", "chrom_end"]
+            missing = [x for x in need if x not in c]
+            if missing:
+                raise ValueError(f"{label}: core table without {missing} (columns {list(df.columns)})")
+            hdr = {x.lower(): v for x, v in header.items()}
+            if "genome_assembly" in hdr:
+                assemblies.add(hdr["genome_assembly"].strip())
+            scale = _scale(header, _median_step(df, c), label, fixes)
+            placed = df[c["chrom"]].notna() & (df[c["chrom"]].astype(str).str.strip() != "")
+            has_xyz = df[[c["x"], c["y"], c["z"]]].notna().all(axis=1)
+            dropped[name]["no_coordinates"] += int((~has_xyz).sum())
+            dropped[name]["no_locus"] += int((~placed).sum())
+            df = df[has_xyz & placed].reset_index(drop=True)
+            df, split = _split_reused_traces(df, c)
+            dropped[name]["duplicate_rows"] += split.pop("duplicate_rows")
+            if split["split_traces"]:
+                trace_splits[label] = split
+            std = pd.DataFrame({"spot_id": df[c["spot_id"]].astype(str).str.replace(r"\.0$", "", regex=True),
+                                "trace_id": df[c["trace_id"]].astype(str).to_numpy(dtype=object),
+                                "x": df[c["x"]].to_numpy(float) * scale, "y": df[c["y"]].to_numpy(float) * scale,
+                                "z": df[c["z"]].to_numpy(float) * scale,
+                                "chrom": df[c["chrom"]].to_numpy(), "chrom_start": df[c["chrom_start"]].to_numpy(),
+                                "chrom_end": df[c["chrom_end"]].to_numpy()})
+            if "cell_id" in c:
+                std["cell_id"] = df[c["cell_id"]].to_numpy()
+            if len(cores) > 1:                    # trace ids are the core's own: c<k>- keeps two cores' traces apart
+                std["trace_id"] = f"c{k + 1}-" + std["trace_id"].astype(str)
+                std["core_file"] = Path(core).stem
+            parts.append(std)
+        df = pd.concat(parts, ignore_index=True)
+        c = {x: x for x in df.columns}
 
         trace = df[c["trace_id"]].astype(str).to_numpy(dtype=object)
         tr = pd.DataFrame(index=pd.Index(pd.unique(trace), name="Trace_ID"))
@@ -291,7 +330,7 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
         trace_id = np.char.add(f"{name}_", trace.astype(str)).astype(object)
         cell_id = np.char.add(f"{name}_", cell.astype(str)).astype(object)
 
-        coords.append(df[[c["x"], c["y"], c["z"]]].to_numpy(float) * scale)
+        coords.append(df[["x", "y", "z"]].to_numpy(float))
         loci = pd.DataFrame({"chrom": df[c["chrom"]].astype(str).to_numpy(dtype=object),
                              "start": df[c["chrom_start"]].to_numpy(np.int64),
                              "end": df[c["chrom_end"]].to_numpy(np.int64),
@@ -304,14 +343,22 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
                                                     "offset": int(offset), "spots": int(m.sum())})
         spots.append(loci)
         st = pd.DataFrame(index=pd.RangeIndex(len(df)))
-        if exp.get("spot_quality"):
-            q = _companion(exp["spot_quality"], "Spot_ID", name)
-            q.index = q.index.astype(str)
-            q = q.reindex(df[c["spot_id"]].astype(str).to_numpy())
+        spot_files = [f for k in ("spot_quality", "spot_bio") for f in _as_list(exp.get(k))]
+        if spot_files:                            # spot quality / spot biological data, keyed by Spot_ID
+            q = pd.concat([_companion(f, "Spot_ID", name).drop(columns=["Trace_ID", "Cell_ID"], errors="ignore")
+                           for f in spot_files])
+            q.index = pd.Index(q.index.astype(str)).str.replace(r"\.0$", "", regex=True)
+            if q.index.duplicated().any():
+                raise ValueError(f"{name}: a Spot_ID is in several spot tables")
+            q = q.reindex(df["spot_id"].to_numpy())
             for col in q.columns:
-                st[col] = pd.to_numeric(q[col], errors="coerce").to_numpy(float)
+                num = pd.to_numeric(q[col], errors="coerce")
+                st[col] = (num.to_numpy(float) if num.notna().sum() >= q[col].notna().sum()
+                           else q[col].astype(object).to_numpy())
         spot_tracks.append(st)
 
+        if "core_file" in df.columns:
+            tr["core_file"] = df.drop_duplicates("trace_id").set_index("trace_id")["core_file"].reindex(tr.index).to_numpy()
         tr.index = np.char.add(f"{name}_", tr.index.to_numpy().astype(str)).astype(object)
         tr.index.name = "trace_id"
         tr.insert(0, "experiment", name)
@@ -344,13 +391,11 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
         genome_assembly = next(iter(assemblies), "unknown")
     cells_df, traces_df = _tidy(pd.concat(cells), category=True), _tidy(pd.concat(traces))
     spots_df = pd.concat(spots, ignore_index=True)
-    # one experiment writes "3R", another "chr3R" (Mateo et al. 2019): the UCSC names where any experiment uses them
-    chrom = spots_df["chrom"].astype(str)
+    # UCSC chromosome names: one experiment writes "3R", another "chr3R" (Mateo et al. 2019); Liu et al. 2020 "19"
+    chrom = spots_df["chrom"].astype(str).str.replace(r"\.0$", "", regex=True)
     bare = ~chrom.str.startswith("chr")
-    renamed = {}
-    if bare.any() and (~bare).any():
-        renamed = {c: f"chr{c}" for c in sorted(chrom[bare].unique())}
-        spots_df["chrom"] = chrom.where(~bare, "chr" + chrom)
+    renamed = {c: f"chr{c}" for c in sorted(chrom[bare].unique())}
+    spots_df["chrom"] = chrom.where(~bare, "chr" + chrom)
     return ChromData(coords=np.concatenate(coords), spots=spots_df,
                      spot_tracks=pd.concat(spot_tracks, ignore_index=True), traces=traces_df, cells=cells_df,
                      uns={"genome_assembly": genome_assembly, "xyz_unit": "micron", "fofct_headers": headers,

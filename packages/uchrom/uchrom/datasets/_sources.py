@@ -543,6 +543,15 @@ DATASETS = {
     "hafner2023_orca": _fourdn_tracing("hafner2023_orca", "Hafner 2023 ORCA of mESC chr3 / chr6, CTCF / RAD21 "
                                        "degrons, 40 sets (4DN FOF-CT)"),
     "murphy2024_orca": _fourdn_tracing("murphy2024_orca", "Murphy & Boettiger 2024 ORCA of HoxA, 5 sets (4DN FOF-CT)"),
+    # More 4DN FOF-CT tracing: Takei et al. 2021 (Science 374:586; mouse cortex DNA seqFISH+, 1 Mb + 25 kb loci, RNA
+    # spots and cell types), Liu et al. 2020 (Nat Commun 11:2907; MINA of fetal mouse liver: chr19 tracing with RNA
+    # MERFISH and nucleoli in the same cells), Hung et al. 2024 (Nat Genet 56:306; ORCA of Pitx1 in mouse limb buds) and Huang et al.
+    # 2021 (Nat Genet 53:1064; Sox2 locus in mESC, with RNA FISH of the same cells).
+    "takei2021_brain_4dn": _fourdn_tracing("takei2021_brain_4dn", "Takei 2021 mouse cortex DNA seqFISH+, 3 experiments "
+                                           "(4DN FOF-CT)"),
+    "liu2020_mina": _fourdn_tracing("liu2020_mina", "Liu 2020 MINA of fetal mouse liver, 4 experiments (4DN FOF-CT)"),
+    "hung2024_orca": _fourdn_tracing("hung2024_orca", "Hung 2024 ORCA of Pitx1 in mouse limb buds (4DN FOF-CT)"),
+    "huang2021_4dn": _fourdn_tracing("huang2021_4dn", "Huang 2021 Sox2 locus tracing in mESC, 5 sets (4DN FOF-CT)"),
     # Rao et al. 2014 IMR90 in situ Hi-C reprocessed by 4DN on GRCh38 (set 4DNES1ZEJNRU): the
     # whole-genome input of the bulk deconvolution benchmark (20 kb built from the 10 kb level).
     "rao2014_imr90_4dn": {

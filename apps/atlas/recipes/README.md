@@ -47,6 +47,8 @@ rebuilt when the loader's version changes; each checked to give what the tutoria
 | `su2020_chr2` | `su2020_chr2/su2020_chr2.chromdata.zarr` + `.cool` | `su2020_chr2` | Su 2020 IMR90 chromosome 2 tracing: 3,029 copies × 935 loci of 50 kb (hg38); the authors' Rao 2014 Hi-C in the same loci, linked (`rao2014`) | — |
 | `su2020_chr21_cell_cycle` | `su2020_chr21_cell_cycle/su2020_chr21_cell_cycle.chromdata.zarr` | `su2020_chr21_cell_cycle` | Su 2020 IMR90 chr21 tracing, 4,558 copies × 651 loci, `traces["cell_cycle"]` | — |
 | `su2020_genome`, `su2020_genome_amanitin`, `su2020_genome_transcription` | `<name>/<name>.chromdata.zarr` | the same names | Su 2020 IMR90 genome-scale DNA-MERFISH, 1,041 loci (hg38), one trace per cell, chromosome and homolog: untreated (1,787 cells), after α-amanitin (4,102), with nascent transcription and distances to lamina / nucleoli / speckles (3,668; `spot_tracks`) | — |
+| `tan2021_cortex` | `tan2021_cortex/tan2021_cortex.chromdata.zarr` + `tan2021_cortex_5kb.scool` (2.0 GB + 663 MB) | `tan2021_cortex` | Tan 2021 Dip-C adult mouse cortex: 510 cells (P56 / P309 / P347) with the authors' cell types, 5 kb maps per cell (`per_cell`) and the first of the authors' five 20 kb structures of each cell (124 M particles, a trace per homolog; mm10) | — |
+| `takei2021_brain_4dn`, `liu2020_mina`, `hung2024_orca`, `huang2021_4dn` | `<name>/<name>.chromdata.zarr` | the same names (4DN FOF-CT) | Takei 2021 mouse cortex DNA seqFISH+ (2,762 cells, 1 Mb and 25 kb loci as traces `c1-` / `c2-`, cell types), Liu 2020 MINA of fetal liver (13,306 cells, chr19 with lamina / nucleolus distances, RNA per cell), Hung 2024 ORCA of Pitx1 in limb buds (103,820 traces), Huang 2021 Sox2 in mESC (8,364 traces, allele and transcription per trace) — see *4DN chromatin-tracing studies* | — |
 | `bintu2018_4dn`, `mateo2019_orca`, `hafner2023_orca`, `murphy2024_orca` | `<name>/<name>.chromdata.zarr` | the same names (4DN FOF-CT) | every experiment of a 4DN chromatin-tracing study in one object (`uchrom.io.read_4dn_tracing`; `cells`: `set`, `condition` = the set's 4DN description, `biosample`; the companion tables as `spot_tracks` / `traces` / `cells` columns) — see *4DN chromatin-tracing studies* | — |
 | `huang2021_sox2` | `huang2021_sox2/huang2021_sox2.chromdata.zarr` | `huang2021_sox2` | Huang 2021 mESC Sox2 tracing (SnapFISH-IMPUTE tables, `uchrom.io.read_snapfish`): 1,416 cells × 2 alleles × 41 loci of 5 kb, undetected loci as NaN | tutorial `fish_imputation` |
 | `rao2014_imr90_chr21` | `rao2014_imr90/rao2014_imr90_chr21.chromdata.zarr` | `rao2014_imr90_chr21` (built from GEO) | Rao 2014 IMR90 Hi-C chr21 at 5 kb (hg19, raw counts), the map linked as `bulk` | tutorials `bulk_reconstruction`, `gem_fish_reconstruction`, `hic_structures` |
@@ -1655,7 +1657,7 @@ copies of older runs were 27 MB – 0.83 GB).  Ignored by git.  They are labelle
 they are reported.  Used by the Fig. 6c browser benchmarks (uchrom-reproducibility `supp_fig6/browser/bench_server.py`,
 `bench_frontend.py`, `run_all.sh`).
 
-## 4DN chromatin-tracing studies (fetch / load `bintu2018_4dn`, `mateo2019_orca`, `hafner2023_orca`, `murphy2024_orca`)
+## 4DN chromatin-tracing studies (fetch / load `bintu2018_4dn`, `mateo2019_orca`, `hafner2023_orca`, `murphy2024_orca`, `takei2021_brain_4dn`, `liu2020_mina`, `hung2024_orca`, `huang2021_4dn`)
 
 Chromatin tracing the labs deposited in the 4DN Data Portal as FISH-Omics Format tables (FOF-CT; the portal's
 [chromatin tracing collection](https://data.4dnucleome.org/resources/data-collections/chromatin-tracing-datasets)).
@@ -1681,6 +1683,18 @@ Each experiment of a set is a *core* table (spots) with optional companions keye
     per cell; 40 sets (32 of DNA).
   - Murphy SE & Boettiger AN *Nat Genet* 56:493 (2024), doi:10.1038/s41588-024-01661-6 — ORCA of HoxA (GRCm38,
     5 kb): TC1 mESC with EED / RING1B degrons, neural progenitors, E10.5 brain; 5 sets.
+  - Takei Y *et al.* *Science* 374:586 (2021), doi:10.1126/science.abj1966 — DNA seqFISH+ of the mouse cortex (mm10):
+    3 experiments, each with a 1-Mb and a 25-kb core table (their traces kept apart, `c1-` / `c2-`), the cells' cell
+    types (the table's `cluster label`, named from its header: 1 Pvalb ... 9 Exc) and RNA counts; 675 MB.  The
+    RNA spot tables are fetched but not read.
+  - Liu M *et al.* *Nat Commun* 11:2907 (2020), doi:10.1038/s41467-020-16732-5 — MINA of fetal mouse liver: chr19
+    traced at 50 loci with each spot's distance to the lamina and nucleolus and the RNA counts of 137 genes per
+    cell; 4 experiments, 181 MB.  Chromosomes deposited as `19` (named `chr19`).
+  - Hung TC *et al.* *Nat Genet* 56:306 (2024), doi:10.1038/s41588-023-01641-2 — ORCA of the Pitx1 locus in mouse
+    limb buds; 5 experiments, 1.28 GB.
+  - Huang H *et al.* *Nat Genet* 53:1064 (2021), doi:10.1038/s41588-021-00863-6 — the Sox2 locus in F123 mESC
+    (129 x CAST), allele and Sox2 / GFP / mCherry transcription per trace; 5 sets, 29 MB (the SnapFISH copy is
+    `huang2021_sox2`).  One trace table writes `#columns=` (one `#`); some loci end before they start (2.4 %).
 - **Terms**: the portal asks to cite the 4DN White Paper (doi:10.1038/nature23884) and the 4DN Data Portal paper
   (doi:10.1038/s41467-022-29697-4), to acknowledge the lab that made the data, and to contact it before using the
   data in a publication.  In the public atlas since 2026-10-27 (ids `bintu2018_4dn`, `mateo2019_orca`,

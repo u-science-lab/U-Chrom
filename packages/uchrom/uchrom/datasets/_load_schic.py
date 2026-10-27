@@ -214,6 +214,43 @@ def build_tan2018_gm12878(root: Path, out: Path):
     return _tan2018_structures(folder, maps)
 
 
+def build_tan2021_cortex(root: Path, out: Path):
+    """Tan et al. 2021 Dip-C of the adult mouse cortex (Cell 184:741; GEO GSE146397): the 510 cells of P56, P309 and
+    P347 with at least 100,000 contacts (``tan2021_adult_cortex_cells.tsv``: GSM, age, cross, the authors' cell
+    type).  Each cell's contact pairs binned at 5 kb (mm10) into one ``.scool`` linked as ``per_cell``, and its
+    first Dip-C structure (``20k.1.clean.3dg``: 20 kb particles, a trace per chromosome and homolog) as the
+    coordinates.  The authors' four replicate structures of each cell are not read (they would make the store five
+    times larger)."""
+    from chromdata import ChromData
+
+    from . import fetch
+    from ._paths import data_dir
+    from ._load_snaphic import MM10
+    from ..io.dipc_3dg import read_3dg_cells
+    from ..io.pairs_maps import pairs_chromsizes
+
+    fetch("tan2021_cortex", root=root)
+    base = Path(root if root is not None else data_dir()) / "tan2021_cortex" / "cells"
+    table = pd.read_csv(Path(__file__).resolve().parent / "tan2021_adult_cortex_cells.tsv", sep="\t")
+    cells = (table.rename(columns={"name": "cell_id"}).set_index("cell_id")
+             .assign(dataset="Tan 2021 Dip-C"))
+    sources = {c: base / c / f"{c}.contacts.pairs.txt.gz" for c in cells.index}
+    structures = {c: base / c / f"{c}.20k.1.clean.3dg.txt.gz" for c in cells.index}
+    missing = [c for c in cells.index if not (sources[c].exists() and structures[c].exists())]
+    if missing:
+        raise ValueError(f"tan2021_cortex: files missing for {len(missing)} cells, e.g. {missing[:3]}")
+    _check_sizes(pairs_chromsizes(next(iter(sources.values()))), MM10, "tan2021_cortex")
+    uns = {"source": "Tan et al. 2021, Cell 184:741 (Dip-C, adult mouse cortex; GEO GSE146397): the contact pairs "
+                     "of 510 cells binned at 5 kb (both homologs counted) and the authors' first Dip-C structure of "
+                     "each cell (20k.1.clean.3dg, 20 kb particles, homologs as traces)",
+           "haplotypes": "structures: one trace per homolog (mat / pat); per-cell maps: each contact counted once"}
+    maps = _pairs_cells(sources, out, "tan2021_cortex", MM10, "mm10", cells, uns)
+    cd = read_3dg_cells(structures, cells=maps.cells)
+    uns = {**maps.uns, "structures": {**cd.uns["structures"], "run": "the first of the authors' five runs (20k.1)"},
+           "xyz_unit": cd.uns["xyz_unit"]}
+    return ChromData(cd.coords, cd.spots, bins=cd.bins, cells=cd.cells, traces=cd.traces, uns=uns)
+
+
 #: cells with fewer cis contacts than this are flagged (``qc_pass``): Wu 2025 cells 026 / 051 (33 % / 12 %
 #: cis) look like damaged nuclei or doublets
 MIN_FRAC_CIS = 0.5
@@ -257,6 +294,11 @@ HG38 = {"chr1": 248956422, "chr2": 242193529, "chr3": 198295559, "chr4": 1902145
         "chr16": 90338345, "chr17": 83257441, "chr18": 80373285, "chr19": 58617616, "chr20": 64444167,
         "chr21": 46709983, "chr22": 50818468, "chrX": 156040895}
 
+register(Loader(
+    name="tan2021_cortex", build=build_tan2021_cortex,
+    store="tan2021_cortex/tan2021_cortex.chromdata.zarr", sources=("tan2021_cortex",),
+    description="Tan 2021 Dip-C adult mouse cortex: 510 cells with cell types, 5 kb maps per cell (linked .scool) "
+                "and the authors' first 20 kb structure of each cell (a trace per homolog), mm10"))
 register(Loader(
     name="tan2018_gm12878", build=build_tan2018_gm12878,
     store="tan2018_gm12878/tan2018_gm12878.chromdata.zarr", sources=("tan2018_gm12878",), version=2,

@@ -3104,7 +3104,7 @@ def _read_fofct_table(path: Path):
             stripped = raw.rstrip(",").strip()
             if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
                 stripped = stripped[1:-1]
-            if stripped.lower().startswith("##columns="):
+            if stripped.lower().lstrip("#").startswith("columns=") and stripped.startswith("#"):   # also "#columns="
                 cols_str = stripped.split("=", 1)[1].strip()
                 # remove one enclosing pair only: str.strip("()") would also
                 # eat the ")" of a last column such as "n_per_dist(um)"
@@ -3355,7 +3355,7 @@ def _scan_fofct_header(path: Path):
             stripped = raw.rstrip(",").strip()
             if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
                 stripped = stripped[1:-1]
-            if stripped.lower().startswith("##columns="):
+            if stripped.lower().lstrip("#").startswith("columns=") and stripped.startswith("#"):   # also "#columns="
                 cols_str = stripped.split("=", 1)[1].strip()
                 if cols_str.startswith("(") and cols_str.endswith(")"):
                     cols_str = cols_str[1:-1]

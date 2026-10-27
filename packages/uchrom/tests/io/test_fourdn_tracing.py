@@ -158,3 +158,40 @@ def test_locus_shifts():
     assert (moved["start"].to_numpy()[shifted] == plain["start"].to_numpy()[shifted] + 1000).all()
     assert (moved["start"].to_numpy()[~shifted] == plain["start"].to_numpy()[~shifted]).all()
     assert cd.uns["fofct_locus_shifts"]["b"][0]["spots"] == int(shifted.sum())
+
+
+def test_numbered_chromosomes_and_spot_tables_with_trace_ids():
+    # Liu et al. 2020: chromosome "19", a spot table that repeats Trace_ID, a cell table keyed by the core's Cell_ID
+    core, bio = F / "odd_liu2020_mina_core.csv", F / "odd_liu2020_mina_spot_bio.csv"
+    cd = read_4dn_tracing([dict(name="l", core=core, spot_bio=bio, cell_data=F / "odd_liu2020_mina_cell_data.csv")])
+    assert set(cd.bins["chrom"].astype(str)) == {"chr19"} and cd.uns["fofct_chrom_renames"] == {"19": "chr19"}
+    assert cd.uns["fofct_column_fixes"] == []
+    lamina = {r[0]: float(r[2]) for r in _rows(bio)}            # Spot_ID, Trace_ID, Distance_To_Lamina, ...
+    rows = _rows(core)
+    assert np.allclose(cd.spot_tracks["Distance_To_Lamina"], [lamina[r[0]] for r in rows])
+    assert "Trace_ID" not in cd.spot_tracks.columns
+    sizes = {r[0]: float(r[1]) for r in _rows(F / "odd_liu2020_mina_cell_data.csv")}
+    assert {c.split("_", 1)[1]: v for c, v in cd.cells["Cell_Size"].items()} == sizes
+
+
+def test_several_core_tables_of_one_experiment():
+    # Takei et al. 2021 brain: a 1-Mb and a 25-kb core table, spot ids numbered on across them, one quality table each
+    cores = [F / "odd_takei2021_core_1.csv", F / "odd_takei2021_core_2.csv"]
+    quality = [F / "odd_takei2021_quality_4DNFI6KFNKF7.csv", F / "odd_takei2021_quality_4DNFIL9IEKFL.csv"]
+    cd = read_4dn_tracing([dict(name="t", core=cores, spot_quality=quality, cell_data=F / "odd_takei2021_cell_data.csv")])
+    n = [len(_rows(c)) for c in cores]
+    assert len(cd.spots) == sum(n)
+    t = cd.spots["trace_id"].astype(str)
+    assert t.str.startswith("t_c1-").sum() == n[0] and t.str.startswith("t_c2-").sum() == n[1]
+    assert set(cd.traces["core_file"]) == {"odd_takei2021_core_1", "odd_takei2021_core_2"}
+    label = {r[0].removesuffix(".0"): float(r[1]) for q in quality for r in _rows(q)}
+    ids = [r[0] for c in cores for r in _rows(c)]
+    assert np.allclose(cd.spot_tracks["labelID"], [label[i] for i in ids])
+    assert cd.cells.loc["t_0_6", "cluster label"] == 9
+
+
+def test_single_hash_columns_line():
+    from chromdata import read_fofct_table
+
+    table, _ = read_fofct_table(F / "odd_huang2021_trace_data_single_hash.csv")
+    assert list(table.columns) == ["Trace_ID", "Allele", "Sox2_Present", "GFP_Present", "mCherry_Present"]

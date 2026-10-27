@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pandas as pd
+
 from ._loaders import Loader, register
 
 
@@ -136,6 +138,13 @@ _LOCUS_SHIFTS = {"bintu2018_4dn": [("chr21", 18_000_001, 19_950_000, 627_713),
                                    ("chr21", 34_000_001, 36_490_000, 628_095)]}
 
 
+#: the cell-type numbers of a deposit's cell table and their names (from the table's own header): Takei et al. 2021,
+#: "cluster label: Transcriptionally defined cell type cluster numbers (1: Pvalb, 2: Vip, 3: Ndnf, 4: Sst, 5: Astro,
+#: 6: Micro, 7, Endo, 8: OPC/Oligo, 9: Exc)"
+_CELL_LABELS = {"takei2021_brain_4dn": ("cluster label", {1: "Pvalb", 2: "Vip", 3: "Ndnf", 4: "Sst", 5: "Astro",
+                                                          6: "Micro", 7: "Endo", 8: "OPC/Oligo", 9: "Exc"})}
+
+
 def _fourdn(dataset: str, source: str):
     """A loader of a 4DN FOF-CT chromatin-tracing study (fourdn_tracing.tsv): every experiment with a core table,
     its companions joined (:func:`uchrom.io.read_4dn_tracing`); ``cells`` carry the experiment set (``set``), its
@@ -150,19 +159,29 @@ def _fourdn(dataset: str, source: str):
         fetch(dataset, root=root)
         by_exp = {}
         for r in fourdn_tracing_files(dataset):
-            by_exp.setdefault((r["set"], r["experiment"]), {})[r["kind"]] = r
+            by_exp.setdefault((r["set"], r["experiment"]), {}).setdefault(r["kind"], []).append(r)
         experiments = []
         for (set_, exp), files in sorted(by_exp.items()):
             if "core" not in files:
                 continue
-            core = files["core"]
-            experiments.append({
-                "name": exp or set_, "core": _data_path(root, core["path"]),
-                **{k: _data_path(root, files[k]["path"]) for k in ("spot_quality", "trace_data", "cell_data")
-                   if k in files},
-                "meta": {"set": set_, "condition": core["description"], "biosample": core["biosample"]},
-                "locus_shifts": _LOCUS_SHIFTS.get(dataset, ())})
+            cores = sorted(files["core"], key=lambda r: r["file"])
+            one = lambda k: [_data_path(root, r["path"]) for r in sorted(files.get(k, []), key=lambda r: r["file"])]  # noqa: E731
+            entry = {"name": exp or set_, "core": one("core") if len(cores) > 1 else one("core")[0],
+                     "meta": {"set": set_, "condition": cores[0]["description"], "biosample": cores[0]["biosample"]},
+                     "locus_shifts": _LOCUS_SHIFTS.get(dataset, ())}
+            for k in ("spot_quality", "spot_bio"):
+                if k in files:
+                    entry[k] = one(k)
+            for k in ("trace_data", "cell_data"):
+                if k in files:
+                    entry[k] = one(k)[0]
+            experiments.append(entry)
         cd = read_4dn_tracing(experiments)
+        if dataset in _CELL_LABELS:                     # the authors' numbered cell types, named
+            col, names = _CELL_LABELS[dataset]
+            cells = cd.cells.copy()
+            cells["cell_type"] = pd.Categorical(pd.to_numeric(cells[col], errors="coerce").map(names))
+            cd.cells = cells
         cd.uns["source"] = source
         return cd
     build.__doc__ = f"{source}: every experiment of the 4DN deposit in one object (``cells``: set, condition, biosample)."
@@ -210,7 +229,15 @@ for _name, _source, _what in (
         ("hafner2023_orca", "Hafner et al. 2023, Mol Cell 83:1377 (4DN FOF-CT)",
          "Hafner 2023 ORCA of mESC chr3 / chr6 at 150 Mb and 3 Mb, CTCF-AID / RAD21-AID +- auxin (mm10)"),
         ("murphy2024_orca", "Murphy & Boettiger 2024, Nat Genet 56:493 (4DN FOF-CT)",
-         "Murphy 2024 ORCA of HoxA: mESC with Polycomb degrons, neural progenitors, E10.5 brain (mm10)")):
+         "Murphy 2024 ORCA of HoxA: mESC with Polycomb degrons, neural progenitors, E10.5 brain (mm10)"),
+        ("takei2021_brain_4dn", "Takei et al. 2021, Science 374:586 (4DN FOF-CT)",
+         "Takei 2021 mouse cortex DNA seqFISH+: 1 Mb and 25 kb loci (traces c1- / c2-), cell types, RNA per cell (mm10)"),
+        ("liu2020_mina", "Liu et al. 2020, Nat Commun 11:2907 (4DN FOF-CT)",
+         "Liu 2020 MINA of fetal mouse liver: chr19 tracing with RNA MERFISH and nucleoli of the same cells (mm10)"),
+        ("hung2024_orca", "Hung et al. 2024, Nat Genet 56:306 (4DN FOF-CT)",
+         "Hung 2024 ORCA of the Pitx1 locus in mouse limb buds (mm10)"),
+        ("huang2021_4dn", "Huang et al. 2021, Nat Genet 53:1064 (4DN FOF-CT)",
+         "Huang 2021 Sox2 locus tracing in mESC, with RNA FISH of the same cells (mm10)")):
     register(Loader(name=_name, build=_fourdn(_name, _source), store=f"{_name}/{_name}.chromdata.zarr",
                     sources=(_name,), description=_what))
 for _name, _build, _what in (
