@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { buildLayerObject, pointIndexOfHit, type BuiltLayer } from '../render/objects'
 import { splitForView } from '../render/bonds'
-import { explodeGeometry, explodeOffsets } from '../render/explode'
+import { explodeGeometry, explodeOffsets, tileGeometry, tileShifts } from '../render/explode'
 import { displayParts, subsetGeometry, thinGeometry, type FocusSet } from '../render/partition'
 import { buildPointMarkers, splitPoints, type BuiltPoints } from '../render/points'
 import { raycastChunks } from '../render/raypick'
@@ -34,7 +34,7 @@ interface Part {
 
 interface Entry {
   /** inputs the parts were built from; rebuilt when any changes */
-  key: { geometry: Geometry; style: string; focus: FocusSet; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: FieldColors | null; maxBond: 'auto' | number | null; theme: string; trace: string | null; explode: number; root: Geometry | null }
+  key: { geometry: Geometry; style: string; focus: FocusSet; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: FieldColors | null; maxBond: 'auto' | number | null; theme: string; trace: string | null; explode: number; root: Geometry | null; tile: Geometry | null }
   parts: Part[]
   /** the layer's geometry as drawn: long bonds cut, chromosomes separated (all cells and chromosomes) */
   placed: Geometry
@@ -255,6 +255,9 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
   // clicking a trace of another cell focuses it; within a single focused cell it picks
   const focusRef = useRef<string | null>(null)
   focusRef.current = scope.kind === 'cell' ? scope.cell : null
+  // cells that share one frame (DatasetSummary.cells_overlap) are laid side by side while none is in focus
+  const overlap = useStore((s) => !!s.datasets.find((x) => x.id === s.activeDatasetId)?.cells_overlap)
+  const tile = overlap && focus === null
   const noCoords = useStore((s) => {
     const d = s.datasets.find((x) => x.id === s.activeDatasetId)
     return !!d && (d.has_coords === false || d.n_spots === 0)
@@ -498,6 +501,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         explode: paneExplode,
         // separation directions come from the dataset's whole geometry (a subset moves with it)
         root: paneExplode > 0 ? rootGeometry(layers, l) : null,
+        tile: tile ? rootGeometry(layers, l) : null,
       }
       const prev = t.entries.get(l.id)
       if (
@@ -514,7 +518,8 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         prev.key.theme === key.theme &&
         prev.key.trace === key.trace &&
         prev.key.explode === key.explode &&
-        prev.key.root === key.root
+        prev.key.root === key.root &&
+        prev.key.tile === key.tile
       ) {
         for (const p of prev.parts) if (p.built.warning) warnings.push(`${l.name}: ${p.built.warning}`)
         continue
@@ -523,7 +528,8 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
       if (!prev || prev.key.geometry !== key.geometry) newGeometry.push(l.geometry!.header.n_points)
       // cut over-long bonds (unassigned spots, duplicate loci) before drawing
       const cut = splitForView(l.geometry!, view.maxBond).geometry
-      const placed = key.root ? explodeGeometry(cut, explodeOffsets(key.root), paneExplode) : cut
+      const exploded = key.root ? explodeGeometry(cut, explodeOffsets(key.root), paneExplode) : cut
+      const placed = key.tile ? tileGeometry(exploded, tileShifts(key.tile)) : exploded
       const base = paneTrace ? subsetGeometry(placed, (s) => s.trace_id === paneTrace) : placed
       const { main, context } = displayParts(base, hidden, focus)
       // a subset layer (a region / traces) is a highlight: its own style everywhere, and no
@@ -602,7 +608,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     const pick = useStore.getState().pick
     if (pick && !isPointPick(pick) && !keep.has(pick.layerId)) setPick(null)
     t.dirty = true
-  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, fixed, pal, paneStyles, paneTrace, paneHidden, paneExplode])
+  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, fixed, pal, paneStyles, paneTrace, paneHidden, paneExplode, tile])
 
   // Point sets (e.g. RNA spots): focused cell's points full, others faint.
   useEffect(() => {

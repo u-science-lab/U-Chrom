@@ -97,3 +97,80 @@ export function explodeGeometry(geom: Geometry, offsets: ExplodeOffsets, factor:
   const bbox = Number.isFinite(min[0]) ? { min, max } : header.bbox
   return { ...geom, header: { ...header, bbox }, positions: pos }
 }
+
+/** Grid slot shift of each cell (by cell id, else trace id), computed from a dataset's whole geometry. */
+export type TileShifts = Map<string, [number, number, number]>
+
+const tileCache = new WeakMap<Geometry, TileShifts>()
+
+/**
+ * Cells laid side by side: the rigid shift that moves each cell's centroid onto a square grid in the x-y plane
+ * (cells in the order of the geometry, row by row), spaced by the size of the larger cells.  For data whose cells
+ * share one frame — single-cell models centred on the origin, or traces in crops of their own (DatasetSummary.
+ * cells_overlap) — where the cells otherwise sit on top of each other.  From the dataset's whole (root) geometry,
+ * so subset layers move with their cells; cached per geometry.
+ */
+export function tileShifts(root: Geometry): TileShifts {
+  const hit = tileCache.get(root)
+  if (hit) return hit
+  const { header, positions: P, offsets: off } = root
+  const order: string[] = []
+  const sums = new Map<string, number[]>() // x, y, z, n, min x, min y, max x, max y
+  header.segments.forEach((seg, i) => {
+    const cell = seg.cell_id ?? seg.trace_id
+    let s = sums.get(cell)
+    if (!s) {
+      sums.set(cell, (s = [0, 0, 0, 0, Infinity, Infinity, -Infinity, -Infinity]))
+      order.push(cell)
+    }
+    for (let p = off[i]; p < off[i + 1]; p++) {
+      const x = P[3 * p]
+      const y = P[3 * p + 1]
+      const z = P[3 * p + 2]
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue
+      s[0] += x
+      s[1] += y
+      s[2] += z
+      s[3]++
+      s[4] = Math.min(s[4], x)
+      s[5] = Math.min(s[5], y)
+      s[6] = Math.max(s[6], x)
+      s[7] = Math.max(s[7], y)
+    }
+  })
+  const out: TileShifts = new Map()
+  const sizes = order.map((c) => sums.get(c)!).filter((s) => s[3] > 0).map((s) => Math.max(s[6] - s[4], s[7] - s[5]))
+  if (sizes.length >= 2) {
+    sizes.sort((a, b) => a - b)
+    const step = 1.15 * sizes[Math.min(sizes.length - 1, Math.floor(0.9 * sizes.length))] || 1
+    const cols = Math.ceil(Math.sqrt(order.length))
+    order.forEach((c, k) => {
+      const s = sums.get(c)!
+      if (s[3]) out.set(c, [(k % cols) * step - s[0] / s[3], -Math.floor(k / cols) * step - s[1] / s[3], -s[2] / s[3]])
+    })
+  }
+  tileCache.set(root, out)
+  return out
+}
+
+/** `geom` with every segment moved by its cell's grid shift (cells missing from `shifts` stay put). */
+export function tileGeometry(geom: Geometry, shifts: TileShifts): Geometry {
+  if (!shifts.size) return geom
+  const { header, positions: P, offsets: off } = geom
+  const pos = new Float32Array(P.length)
+  const min: [number, number, number] = [Infinity, Infinity, Infinity]
+  const max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
+  header.segments.forEach((seg, i) => {
+    const d = shifts.get(seg.cell_id ?? seg.trace_id) ?? [0, 0, 0]
+    for (let p = off[i]; p < off[i + 1]; p++) {
+      for (let a = 0; a < 3; a++) {
+        const v = (pos[3 * p + a] = P[3 * p + a] + d[a])
+        if (Number.isFinite(v)) {
+          if (v < min[a]) min[a] = v
+          if (v > max[a]) max[a] = v
+        }
+      }
+    }
+  })
+  return { ...geom, header: { ...header, bbox: Number.isFinite(min[0]) ? { min, max } : header.bbox }, positions: pos }
+}
