@@ -834,12 +834,46 @@ class Dataset:
                        for r in sorted(counts.index, key=natural_chrom_key)]
             unit = rec.get("unit")
             y_axis = rec.get("y_axis") or ("down" if unit in ("px", "pixel", "spot") else "up")
+            in_coords = rec.get("in_coords_frame")
+            if not isinstance(in_coords, bool):
+                in_coords = self._positions_in_coords(pos[ok])
             out.append({"key": str(key), "unit": unit, "frame": rec.get("frame"), "y_axis": y_axis,
                         "status": rec.get("status"), "source": rec.get("source"),
-                        "regions": regions, "n_images": sum(1 for r in regions if r["image"])})
+                        "regions": regions, "n_images": sum(1 for r in regions if r["image"]),
+                        "in_coords_frame": bool(in_coords)})
         out.sort(key=lambda d: -d["n_images"])
         self._cache["spatial"] = out
         return out
+
+    def _positions_in_coords(self, pos: pd.DataFrame, n: int = 12) -> bool:
+        """Whether cell positions are the cells' places in the 3-D coordinates (a Spatial view then repeats the 3-D
+        one): for up to ``n`` cells, the position lies within a cell's radius of the centre of its spots (x, y)."""
+        try:
+            if not (self.cd.n_spots and len(pos)):
+                return False
+            has_cells = self.cd._has_cell_id() if self.backed else "cell_id" in self.cd.spots.columns
+            if not has_cells:
+                return False
+            cats = (list(self.cd._categories("cell_id")) if self.backed
+                    else list(self.cd.spots["cell_id"].astype("category").cat.categories))
+            by_name = {str(c): c for c in cats}
+            names = [c for c in pos.index.astype(str) if c in by_name]
+            if not names:
+                return False
+            pick = [names[i] for i in np.unique(np.linspace(0, len(names) - 1, min(n, len(names))).astype(int))]
+            near = []
+            for name in pick:
+                xyz = np.asarray(self.cd.get_cell(by_name[name], columns="coords").coords, dtype=float)
+                xyz = xyz[np.isfinite(xyz).all(1)]
+                if len(xyz) < 3:
+                    continue
+                c = xyz.mean(0)
+                radius = float(np.median(np.linalg.norm(xyz - c, axis=1))) or 1.0
+                p = pos.loc[pos.index.astype(str) == name, ["x", "y"]].to_numpy(float)[0]
+                near.append(float(np.linalg.norm(p - c[:2])) < 2 * radius)
+            return bool(near) and float(np.mean(near)) >= 0.75
+        except Exception:                       # unreadable: treat the positions as their own frame
+            return False
 
     def spatial_points(self, key: str, region: Optional[str] = None) -> Dict[str, Any]:
         info = next((s for s in self.spatial() if s["key"] == key), None)

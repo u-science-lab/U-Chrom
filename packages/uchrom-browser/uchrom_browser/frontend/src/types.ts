@@ -70,6 +70,8 @@ export interface SpatialInfo {
   source: string | null
   regions: SpatialRegion[]
   n_images: number
+  /** the positions are the cells' places in the 3-D coordinates (the 3-D view shows the same layout) */
+  in_coords_frame?: boolean
 }
 
 /** Cell positions of one region, with the region's image (extent [x0, x1, y0, y1] in position units). */

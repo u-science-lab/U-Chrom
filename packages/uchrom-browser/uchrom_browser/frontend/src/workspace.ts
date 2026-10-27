@@ -80,6 +80,8 @@ export interface DataKind {
   hasContactMaps?: boolean
   /** cell positions (cd.cell_positions) */
   hasSpatial?: boolean
+  /** every position set is the cells' places in the 3-D coordinates: a Spatial view repeats the 3-D one */
+  spatialIn3d?: boolean
   /** several cells (cell-level statistics, groups) */
   manyCells?: boolean
 }
@@ -138,14 +140,15 @@ const firstLarger = (n: number, first: number): number[] =>
  * Default views follow the data: every view the dataset can fill
  * (:func:`supportedPaneTypes`), in a grid — a single view fills the space —
  * except Matrix when there is a Genome view, whose matrix rows show the same
- * maps.  Data that fills none gets a Matrix view.  A 3-D view first of several
+ * maps, and Spatial when its positions are the cells' places in the 3-D view
+ * (spatialIn3d).  Data that fills none gets a Matrix view.  A 3-D view first of several
  * gets the larger part of the grid (MAIN_3D: its column and its row); the
  * others share the rest.  A bare boolean means "has embeddings" with 3-D
  * coords (older callers).
  */
 export function defaultWorkspace(kind: boolean | DataKind): WorkspaceState {
   const k: DataKind = typeof kind === 'boolean' ? { hasEmbeddings: kind, hasCoords: true, hasTracks: false } : kind
-  const all = supportedPaneTypes(k)
+  const all = supportedPaneTypes(k).filter((t) => !(t === 'spatial' && k.hasCoords && k.spatialIn3d))
   const types = all.includes('genome') ? all.filter((t) => t !== 'matrix') : all
   const panes = (types.length ? types : (['matrix'] as PaneType[])).map((t, i) => pane(`P${i + 1}`, t))
   const ws: WorkspaceState = {

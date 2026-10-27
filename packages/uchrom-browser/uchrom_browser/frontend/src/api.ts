@@ -1,5 +1,5 @@
 import { WAKE_HINT, useActivity } from './activity'
-import { decodeMatrix, type MatrixData } from './matrix'
+import { decodeMatrix, tileLoci, type MatrixData } from './matrix'
 import type { AtlasResponse, CellDetails, CellPage, CellValues, ClusterWindow, DatasetSummary, Embedding, FileListing, FilePlace, Geometry, GeometryHeader, IntervalTable, LayerFilter, PointSet, PointSetPayload, RgStats, ScalingStats, SpatialPoints, StoreNode, TracePage, TrackData } from './types'
 
 async function fetchChecked(url: string, init?: RequestInit): Promise<Response> {
@@ -319,7 +319,8 @@ export async function fetchDistance(
 ): Promise<MatrixData> {
   const group = await groupParam(id, opts.group)
   const q = query({ chrom: r.chrom, start: r.start, end: r.end, cell_id: opts.cellId, trace_id: opts.traceId, stat: opts.stat, threshold: opts.threshold, group })
-  return decodeMatrix(await (await request(`${ds(id)}/distance${q}`)).arrayBuffer())
+  const m = decodeMatrix(await (await request(`${ds(id)}/distance${q}`)).arrayBuffer())
+  return { ...m, header: { ...m.header, bin_ends: tileLoci(m.header.bin_starts, m.header.bin_ends) } }
 }
 
 export async function fetchRg(id: string, opts: { chrom?: string | null; cellId?: string | null; group?: string | null } = {}): Promise<RgStats> {

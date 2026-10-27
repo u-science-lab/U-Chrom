@@ -198,3 +198,16 @@ def test_cells_overlap_tells_stacked_models_from_placed_cells(tmp_path, backed):
             ds = DatasetStore().add(cd, name="cells")
         assert ds.cells_overlap() is want
         assert ds.summary()["cells_overlap"] is want
+
+
+def test_positions_in_the_3d_frame_are_told_apart():
+    cd = _cells(200.0)                                        # cells placed 200 apart along x
+    centre = pd.DataFrame(np.asarray(cd.coords), columns=list("xyz")).groupby(cd.spots["cell_id"].astype(str).to_numpy()).mean()
+    for shift, want in ((0.0, True), (5000.0, False)):     # positions at the cells' centres, or elsewhere
+        c = cd.copy()
+        cells = pd.DataFrame(index=pd.Index(centre.index, name="cell_id"))
+        cells["px"], cells["py"] = centre["x"].to_numpy() + shift, centre["y"].to_numpy()
+        c.cells = cells
+        c.set_cell_positions(columns=["px", "py"], unit="micron")
+        ds = DatasetStore().add(c, name="placed")
+        assert [s["in_coords_frame"] for s in ds.spatial()] == [want]

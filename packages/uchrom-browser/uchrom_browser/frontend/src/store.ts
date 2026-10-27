@@ -76,7 +76,8 @@ export function hasCoords(ds: Pick<DatasetSummary, 'has_coords' | 'n_spots'> | u
  */
 export function defaultCategoryField(ds: Pick<DatasetSummary, 'cell_fields'> | undefined): CellField | null {
   const cats = (ds?.cell_fields ?? []).filter((f) => f.kind === 'category')
-  return cats.find((f) => f.name === 'cell_type') ?? cats.find((f) => /type|cluster/i.test(f.name)) ?? null
+  return cats.find((f) => f.name === 'cell_type') ?? cats.find((f) => /type|cluster/i.test(f.name))
+    ?? cats.find((f) => /leiden|louvain/i.test(f.name)) ?? null
 }
 
 /** A cell field that only repeats where the cell is (centroids, x / y / z): not worth colouring by. */
