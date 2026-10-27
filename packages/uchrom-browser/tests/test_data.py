@@ -211,3 +211,14 @@ def test_positions_in_the_3d_frame_are_told_apart():
         c.set_cell_positions(columns=["px", "py"], unit="micron")
         ds = DatasetStore().add(c, name="placed")
         assert [s["in_coords_frame"] for s in ds.spatial()] == [want]
+
+
+def test_traces_in_crops_of_their_own_count_as_overlapping():
+    # ORCA-like: x, y local to each trace's crop, z spread over the stack
+    cd = _cells(0.0)
+    xyz = np.asarray(cd.coords).copy()
+    cells = cd.spots["cell_id"].astype(str).to_numpy()
+    for k, c in enumerate(sorted(set(cells))):
+        xyz[cells == c, 2] += 10.0 * k
+    ds = DatasetStore().add(ChromData(xyz, cd.spots), name="crops")
+    assert ds.cells_overlap() is True

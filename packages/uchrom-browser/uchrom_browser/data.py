@@ -483,8 +483,9 @@ class Dataset:
 
     def cells_overlap(self, n: int = 12) -> bool:
         """Whether the cells' 3-D structures share one frame — each model centred on the origin (Dip-C, NucDynamics),
-        so that a view of all cells stacks them: the centres of up to ``n`` cells spread over the list lie closer to
-        each other (median) than half a cell's radius (median distance of its spots to its centre)."""
+        or each trace in an image crop of its own (ORCA) — so that a view of all cells stacks them: the centres of up
+        to ``n`` cells spread over the list lie closer to each other (median) than half a cell's radius (median
+        distance of its spots to its centre), or closer than a radius in x-y."""
         if "cells_overlap" in self._cache:
             return self._cache["cells_overlap"]
         out = False
@@ -505,8 +506,12 @@ class Dataset:
                     radii.append(float(np.median(np.linalg.norm(xyz - c, axis=1))))
                 if len(centres) >= 2:
                     cen = np.asarray(centres)
-                    d = np.linalg.norm(cen[:, None] - cen[None], axis=-1)[np.triu_indices(len(cen), 1)]
-                    out = bool(np.median(d) < 0.5 * np.median(radii))
+                    iu = np.triu_indices(len(cen), 1)
+                    d = np.linalg.norm(cen[:, None] - cen[None], axis=-1)[iu]
+                    dxy = np.linalg.norm(cen[:, None, :2] - cen[None, :, :2], axis=-1)[iu]
+                    # models centred on the origin, or traces in crops of their own (ORCA: x, y local to each
+                    # trace's image crop, z the depth of the stack — Hafner 2023, Hung 2024)
+                    out = bool(np.median(d) < 0.5 * np.median(radii) or np.median(dxy) < np.median(radii))
         except Exception:                       # a store this cannot read: the default view as before
             out = False
         self._cache["cells_overlap"] = out
