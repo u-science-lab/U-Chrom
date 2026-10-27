@@ -114,3 +114,13 @@ def test_cell_table_with_a_malformed_column_line():
     assert list(t.columns) == ["Cell_ID", "Mean_Geminin", "Nuclear_Size"]
     first = _rows(F / "odd_hafner2023_orca_cell_columns_4DNFIP9SXUQC.csv")[0]
     assert t.loc[int(first[0]), "Mean_Geminin"] == pytest.approx(float(first[2]))
+
+
+def test_chromosome_names_made_alike(tmp_path):
+    f = _files("mateo2019_orca_4DNEXJL6E1NS")
+    bare = tmp_path / "core.csv"                                   # the same experiment written with "3R"
+    bare.write_text(open(f["core"]).read().replace(",chr3R,", ",3R,"))
+    cd = read_4dn_tracing([dict(name="a", core=f["core"]), dict(name="b", core=bare)])
+    assert cd.uns["fofct_chrom_renames"] == {"3R": "chr3R"}
+    assert set(cd.bins["chrom"].astype(str)) == {"chr3R"}
+    assert len(cd.bins) == len(read_4dn_tracing([dict(name="a", core=f["core"])]).bins)

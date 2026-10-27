@@ -200,7 +200,8 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
         per-trace cell values; ``cells``: ``experiment``, the ``meta`` values and the cell-data columns.
         ``uns``: ``genome_assembly``, ``xyz_unit`` (``micron``), ``fofct_headers`` (per experiment),
         ``fofct_unit_fixes``, ``fofct_dropped_spots``, ``fofct_column_fixes`` (core tables whose declared columns
-        were one too many: :func:`_fix_columns`).
+        were one too many or one too few: :func:`_fix_columns`), ``fofct_chrom_renames`` (chromosome names
+        given the ``chr`` prefix the other experiments use).
     """
     from chromdata import ChromData, read_fofct_table
 
@@ -305,8 +306,16 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
             raise ValueError(f"the experiments' genome assemblies differ: {sorted(assemblies)}")
         genome_assembly = next(iter(assemblies), "unknown")
     cells_df, traces_df = _tidy(pd.concat(cells), category=True), _tidy(pd.concat(traces))
-    return ChromData(coords=np.concatenate(coords), spots=pd.concat(spots, ignore_index=True),
+    spots_df = pd.concat(spots, ignore_index=True)
+    # one experiment writes "3R", another "chr3R" (Mateo et al. 2019): the UCSC names where any experiment uses them
+    chrom = spots_df["chrom"].astype(str)
+    bare = ~chrom.str.startswith("chr")
+    renamed = {}
+    if bare.any() and (~bare).any():
+        renamed = {c: f"chr{c}" for c in sorted(chrom[bare].unique())}
+        spots_df["chrom"] = chrom.where(~bare, "chr" + chrom)
+    return ChromData(coords=np.concatenate(coords), spots=spots_df,
                      spot_tracks=pd.concat(spot_tracks, ignore_index=True), traces=traces_df, cells=cells_df,
                      uns={"genome_assembly": genome_assembly, "xyz_unit": "micron", "fofct_headers": headers,
                           "fofct_unit_fixes": fixes, "fofct_dropped_spots": dropped,
-                          "fofct_column_fixes": column_fixes})
+                          "fofct_column_fixes": column_fixes, "fofct_chrom_renames": renamed})
