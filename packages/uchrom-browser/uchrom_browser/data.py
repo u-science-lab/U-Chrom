@@ -478,7 +478,39 @@ class Dataset:
             "embeddings": self.embeddings(),
             "point_sets": self.point_sets(),
             "spatial": self.spatial(),
+            "cells_overlap": self.cells_overlap(),
         }
+
+    def cells_overlap(self, n: int = 12) -> bool:
+        """Whether the cells' 3-D structures share one frame — each model centred on the origin (Dip-C, NucDynamics),
+        so that a view of all cells stacks them: the centres of up to ``n`` cells spread over the list lie closer to
+        each other (median) than half a cell's radius (median distance of its spots to its centre)."""
+        if "cells_overlap" in self._cache:
+            return self._cache["cells_overlap"]
+        out = False
+        try:
+            has_cells = self.cd._has_cell_id() if self.backed else "cell_id" in self.cd.spots.columns
+            if self.cd.n_spots and self.cd.n_cells > 1 and has_cells:
+                cats = (list(self.cd._categories("cell_id")) if self.backed
+                        else list(self.cd.spots["cell_id"].astype("category").cat.categories))
+                pick = [cats[i] for i in np.unique(np.linspace(0, len(cats) - 1, min(n, len(cats))).astype(int))]
+                centres, radii = [], []
+                for cell in pick:
+                    xyz = np.asarray(self.cd.get_cell(cell, columns="coords").coords, dtype=float)
+                    xyz = xyz[np.isfinite(xyz).all(1)]
+                    if len(xyz) < 3:
+                        continue
+                    c = xyz.mean(0)
+                    centres.append(c)
+                    radii.append(float(np.median(np.linalg.norm(xyz - c, axis=1))))
+                if len(centres) >= 2:
+                    cen = np.asarray(centres)
+                    d = np.linalg.norm(cen[:, None] - cen[None], axis=-1)[np.triu_indices(len(cen), 1)]
+                    out = bool(np.median(d) < 0.5 * np.median(radii))
+        except Exception:                       # a store this cannot read: the default view as before
+            out = False
+        self._cache["cells_overlap"] = out
+        return out
 
     def traces(self, chrom: Optional[str] = None, offset: int = 0,
                limit: int = 500) -> Dict[str, Any]:

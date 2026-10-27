@@ -91,6 +91,11 @@ describe('default overview colouring', () => {
     expect(initialView(ds([cx, numField], { has_coords: false, n_spots: 0, n_cells: 50 }))).toBe(DEFAULT_VIEW)
     expect(initialView(ds([numField], { n_cells: 5000 }))).toBe(DEFAULT_VIEW) // 3-D chromatin: a colour per cell
   })
+  it('single-cell structures in one frame: the other cells hidden (the first is focused on load)', () => {
+    expect(initialView(ds([typeField], { cells_overlap: true }))).toMatchObject({ contextOpacity: 0, cellField: 'cell_type' })
+    expect(initialView(ds([], { cells_overlap: true })).contextOpacity).toBe(0)
+    expect(initialView(ds([], { cells_overlap: false }))).toBe(DEFAULT_VIEW)
+  })
   it('position fields are skipped when a group is picked', () => {
     expect(['centroid_x', 'tissue_centroid_y', 'x', 'y', 'z_um', 'spatial_x'].every(isPositionField)).toBe(true)
     expect(['area', 'n_contacts', 'xist', 'lig', 'y_chrom_reads'].some(isPositionField)).toBe(false)

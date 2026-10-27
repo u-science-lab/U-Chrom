@@ -355,6 +355,8 @@ The dataset summary gains:
 ```json
 {
   "has_coords": true,                    // false → no 3-D spots (hide/grey 3-D views)
+  "cells_overlap": false,                // true → the cells' structures share one frame (each model centred on the
+      // origin: Dip-C, NucDynamics), judged from up to 12 cells: the client opens on one cell, the others hidden
   "tracks": [{"name": "ATAC", "level": "bin", "grid": "spots"},     // numeric cd.bin_tracks columns (per locus)
              {"name": "H3K27ac", "level": "spot", "grid": "spots"}, // numeric cd.spot_tracks columns (per spot)
              {"name": "ssAB@500kb", "level": "cell_bin", "grid": "ssAB@500kb",

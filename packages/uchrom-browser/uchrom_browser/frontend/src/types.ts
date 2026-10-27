@@ -39,6 +39,8 @@ export interface DatasetSummary {
   clusters?: ClusterTableInfo[]
   /** cell-position sets (cd.cell_positions) with their regions and images */
   spatial?: SpatialInfo[]
+  /** the cells' 3-D structures share one frame (each model centred on the origin): an all-cells view stacks them */
+  cells_overlap?: boolean
 }
 
 export interface TrackInfo {

@@ -95,14 +95,20 @@ const MANY_CELLS = 200
  * chromatin (spatial spots, scHi-C), by their first numeric property.
  */
 export function initialView(ds: DatasetSummary): DatasetView {
+  // single-cell structures in one frame: the other cells hidden around the focused one (setCells focuses the first)
+  const base = ds.cells_overlap ? { ...DEFAULT_VIEW, contextOpacity: 0 } : DEFAULT_VIEW
   const f = defaultCategoryField(ds)
-  if (f) return { ...DEFAULT_VIEW, overviewColor: 'field', cellField: f.name }
+  if (f) return { ...base, overviewColor: 'field', cellField: f.name }
   if (!hasCoords(ds) && ds.n_cells > MANY_CELLS) {
     const p = defaultFieldOf((ds.cell_fields ?? []).filter((x) => x.kind === 'numeric' && x.group === 'cell'))
-    if (p) return { ...DEFAULT_VIEW, overviewColor: 'field', cellField: p.name }
+    if (p) return { ...base, overviewColor: 'field', cellField: p.name }
   }
-  return DEFAULT_VIEW
+  return base
 }
+
+/** Datasets whose first cell was focused on load (DatasetSummary.cells_overlap: stacked structures show nothing,
+ *  so the views open on one cell; the cell list and the embedding pick another).  Once per dataset and session. */
+const autoFocused = new Set<string>()
 
 /** Key of a cached cell-field vector. */
 export const fieldKey = (datasetId: string, field: string) => `${datasetId}\u0000${field}`
@@ -490,6 +496,12 @@ export const useStore = create<AppState>((set, get) => {
   },
   setCells(datasetId, cells) {
     set({ cells: { ...get().cells, [datasetId]: cells } })
+    const ds = get().datasets.find((d) => d.id === datasetId)
+    const view = get().views[datasetId]
+    if (ds?.cells_overlap && cells.length && view && !view.focusCell && !view.focusGroup && !autoFocused.has(datasetId)) {
+      autoFocused.add(datasetId)
+      set({ views: { ...get().views, [datasetId]: { ...view, focusCell: cells[0].cell_id } } })
+    }
   },
   focusCell(cellId) {
     const s = get()
