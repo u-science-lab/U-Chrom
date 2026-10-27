@@ -145,6 +145,48 @@ _CELL_LABELS = {"takei2021_brain_4dn": ("cluster label", {1: "Pvalb", 2: "Vip", 
                                                           6: "Micro", 7: "Endo", 8: "OPC/Oligo", 9: "Exc"})}
 
 
+#: deposits whose 3-D coordinates are local to each trace's image crop but which keep where the trace was in its field
+#: of view, in pixels: (table, x column, y column, trace columns copied to the cells) — Hafner et al. 2023: LocusX /
+#: LocusY per trace; Hung et al. 2024: Raw_X / Raw_Y per spot (spot quality), limb and section per trace
+_FOV_POSITIONS = {"hafner2023_orca": ("traces", "LocusX", "LocusY", ()),
+                  "hung2024_orca": ("spots", "Raw_X", "Raw_Y", ("Limb", "Section_ID"))}
+
+
+def _fov_positions(cd, table: str, xcol: str, ycol: str, copy=()):
+    """Cell positions in their field of view (pixels; ``cd.set_cell_positions`` key ``fov``, region
+    ``<experiment>/FOV <n>``): the mean position of the cell's traces (``table="traces"``) or spots (``"spots"``)."""
+    import numpy as np
+
+    cell_of = cd.spots[["trace_id", "cell_id"]].astype(str).drop_duplicates("trace_id").set_index("trace_id")["cell_id"]
+    if table == "traces":
+        t = cd.traces[[xcol, ycol, "FOV"]].copy()
+        t.index = t.index.astype(str)
+        t["cell_id"] = cell_of.reindex(t.index).to_numpy()
+        per = t.groupby("cell_id")[[xcol, ycol]].mean()
+    else:
+        v = pd.DataFrame({"x": cd.spot_tracks[xcol].to_numpy(float), "y": cd.spot_tracks[ycol].to_numpy(float),
+                          "cell_id": cd.spots["cell_id"].astype(str).to_numpy()})
+        per = v.groupby("cell_id")[["x", "y"]].mean().rename(columns={"x": xcol, "y": ycol})
+    tr = cd.traces.copy()
+    tr.index = tr.index.astype(str)
+    tr["cell_id"] = cell_of.reindex(tr.index).to_numpy()
+    first = tr.drop_duplicates("cell_id").set_index("cell_id")
+    cells = cd.cells.copy()
+    ids = cells.index.astype(str)
+    cells["fov_x"] = per[xcol].reindex(ids).to_numpy()
+    cells["fov_y"] = per[ycol].reindex(ids).to_numpy()
+    fov = pd.to_numeric(first["FOV"].reindex(ids), errors="coerce").to_numpy()
+    cells["fov_region"] = pd.Categorical([f"{e}/FOV {int(f)}" if np.isfinite(f) else None
+                                          for e, f in zip(cells["experiment"].astype(str), fov)])
+    for col in copy:
+        cells[col.lower()] = pd.Categorical(first[col].reindex(ids).astype(object).where(lambda x: x.notna(), None))
+    cd.cells = cells
+    cd.set_cell_positions(key="fov", columns=["fov_x", "fov_y"], unit="px", frame="fov", region_col="fov_region",
+                          in_coords_frame=False, status="measured",
+                          source=f"the deposit's {xcol} / {ycol} ({table}): where each trace lies in its field of view, "
+                                 "in camera pixels; the 3-D coordinates are local to each trace's image crop")
+
+
 def _fourdn(dataset: str, source: str):
     """A loader of a 4DN FOF-CT chromatin-tracing study (fourdn_tracing.tsv): every experiment with a core table,
     its companions joined (:func:`uchrom.io.read_4dn_tracing`); ``cells`` carry the experiment set (``set``), its
@@ -182,6 +224,8 @@ def _fourdn(dataset: str, source: str):
             cells = cd.cells.copy()
             cells["cell_type"] = pd.Categorical(pd.to_numeric(cells[col], errors="coerce").map(names))
             cd.cells = cells
+        if dataset in _FOV_POSITIONS:
+            _fov_positions(cd, *_FOV_POSITIONS[dataset])
         cd.uns["source"] = source
         return cd
     build.__doc__ = f"{source}: every experiment of the 4DN deposit in one object (``cells``: set, condition, biosample)."

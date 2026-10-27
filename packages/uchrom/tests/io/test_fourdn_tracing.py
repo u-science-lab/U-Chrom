@@ -195,3 +195,20 @@ def test_single_hash_columns_line():
 
     table, _ = read_fofct_table(F / "odd_huang2021_trace_data_single_hash.csv")
     assert list(table.columns) == ["Trace_ID", "Allele", "Sox2_Present", "GFP_Present", "mCherry_Present"]
+
+
+def test_field_of_view_positions_of_crop_local_traces():
+    # Hafner 2023 keeps each trace's place in its field of view (LocusX / LocusY, pixels) in the trace table
+    from uchrom.datasets._load_tracing import _fov_positions
+
+    f = _files("hafner2023_orca_4DNEX5IV8FMD")
+    cd = read_4dn_tracing([dict(name="e", **f)])
+    _fov_positions(cd, "traces", "LocusX", "LocusY")
+    pos = cd.cell_positions("fov")
+    rec = cd.uns["cell_spatial"]["fov"]
+    assert rec["unit"] == "px" and rec["frame"] == "fov" and rec["in_coords_frame"] is False
+    rows = {r[0]: (r[1], float(r[2]), float(r[3])) for r in _rows(f["trace_data"])}     # Trace_ID, FOV, LocusX, LocusY
+    one = [t for t, c in zip(cd.spots["trace_id"].astype(str), cd.spots["cell_id"].astype(str)) if c == f"e_t{t[2:]}"]
+    t = one[0][2:]
+    assert pos.loc[f"e_t{t}", "x"] == pytest.approx(rows[t][1]) and pos.loc[f"e_t{t}", "y"] == pytest.approx(rows[t][2])
+    assert cd.cells.loc[f"e_t{t}", "fov_region"] == f"e/FOV {int(float(rows[t][0]))}"
