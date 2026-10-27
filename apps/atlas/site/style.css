@@ -246,3 +246,5 @@ nav a[aria-current="page"] { color: var(--ink); }
   .section-title { font-size: 32px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+.soon a { color: inherit; text-decoration: none; }
+.soon a:hover { text-decoration: underline; }

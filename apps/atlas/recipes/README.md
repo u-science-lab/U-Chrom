@@ -1683,13 +1683,16 @@ Each experiment of a set is a *core* table (spots) with optional companions keye
     5 kb): TC1 mESC with EED / RING1B degrons, neural progenitors, E10.5 brain; 5 sets.
 - **Terms**: the portal asks to cite the 4DN White Paper (doi:10.1038/nature23884) and the 4DN Data Portal paper
   (doi:10.1038/s41467-022-29697-4), to acknowledge the lab that made the data, and to contact it before using the
-  data in a publication.  Not in the public atlas.
+  data in a publication.  In the public atlas since 2026-10-27 (ids `bintu2018_4dn`, `mateo2019_orca`,
+  `hafner2023_orca`, `murphy2024_orca`; with the Su 2020 stores `su2020_chr2`, `su2020_chr21_cell_cycle`,
+  `su2020_genome`, `su2020_genome_amanitin`, `su2020_genome_transcription`; the chr2 store without the linked
+  Hi-C of variable bins, which the embedded copies do not take).
 - **As deposited** (handled by `read_4dn_tracing`, each case recorded in `uns`): Hafner 2023 and Murphy 2024 state
   `XYZ_unit=micron` over nm (the unit is taken from the spacing of successive loci: `fofct_unit_fixes`); some
   Hafner core tables declare a column the rows lack (`X, Y, Z,R,Chrom`) or leave `Chrom` out of `##columns`, one
   repeats the names in a CSV header row with an extra `readout` column, and one cell table has a malformed
   `##columns` line (`fofct_column_fixes`); ids are spelled `Spot_ID` / `spotID` / `spot_ID`, loci `chr` /
-  `chr_start`; Hafner's spots with an empty `Chrom` (unassigned) are left out (`fofct_dropped_spots`).  Hafner's
+  `chr_start`; Hafner's spots with an empty `Chrom` (unassigned) are left out (`fofct_dropped_spots`); Mateo 2019 lists some traces twice (69,676 identical rows dropped) and Murphy 2024 reuses trace ids across fields of view (each later block of rows of an id becomes its own trace, `<id>.b<k>`: `fofct_trace_splits`, 1,293 traces); Bintu 2018's 18.6–20.6 Mb and 34.6–37.1 Mb regions are deposited from 18,000,001 and 34,000,001 and are moved to the authors' hg38 coordinates (`Data/README.md` of their repository: +627,713 and +628,095 bp; `fofct_locus_shifts`).  Hafner's
   `Cell_ID` is numbered per field of view (`0` = no cell), so cells are `(FOV, Cell_ID)`.
 - **Loaders**: `load NAME` builds `<name>/<name>.chromdata.zarr` (every experiment with traces, ids prefixed by the
   experiment accession; coordinates in µm).

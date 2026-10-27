@@ -376,5 +376,123 @@
   "resolution": 100000,
   "fill": 0.39,
   "map": "unic_mouse.map.webp"
+ },
+ "su2020_genome": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "1",
+  "caption": "One IMR90 nucleus, 1,041 loci",
+  "n": 1829,
+  "categories": 23,
+  "grid": false,
+  "space": "su2020_genome.space.webp"
+ },
+ "su2020_genome_amanitin": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "1",
+  "caption": "One IMR90 nucleus after α-amanitin",
+  "n": 1673,
+  "categories": 23,
+  "grid": false,
+  "space": "su2020_genome_amanitin.space.webp"
+ },
+ "su2020_genome_transcription": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "1788",
+  "caption": "One IMR90 nucleus, 1,041 loci",
+  "n": 1660,
+  "categories": 23,
+  "grid": false,
+  "space": "su2020_genome_transcription.space.webp"
+ },
+ "spacea_e135_c6": {
+  "section": null,
+  "color_by": "hic_leiden",
+  "layout": "space",
+  "layout_key": "default",
+  "caption": "Section C6, spots by contact cluster",
+  "n": 4974,
+  "categories": 4,
+  "grid": true,
+  "space": "spacea_e135_c6.space.webp",
+  "map_key": "pooled",
+  "map_label": "All spots (fragment pairs of the filtered clusters)",
+  "chrom": "chr2",
+  "start": 27300000,
+  "end": 67400000,
+  "resolution": 100000,
+  "fill": 0.46,
+  "map": "spacea_e135_c6.map.webp"
+ },
+ "bintu2018_4dn": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "4DNEXE5LVCDO_5157",
+  "caption": "One chr21 copy, 34.6-37.1 Mb, HCT116",
+  "n": 83,
+  "categories": 1,
+  "grid": false,
+  "space": "bintu2018_4dn.space.webp"
+ },
+ "mateo2019_orca": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "4DNEXLSGBFMV_7637",
+  "caption": "One bithorax complex, 10-kb steps",
+  "n": 74,
+  "categories": 1,
+  "grid": false,
+  "space": "mateo2019_orca.space.webp"
+ },
+ "hafner2023_orca": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "4DNEXJ215XWF_12903",
+  "caption": "One 3-Mb locus of chr3, ES cell",
+  "n": 96,
+  "categories": 1,
+  "grid": false,
+  "space": "hafner2023_orca.space.webp"
+ },
+ "murphy2024_orca": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "4DNEXHQ63LR1_1675.b2",
+  "caption": "One HoxA locus, ES cell",
+  "n": 65,
+  "categories": 1,
+  "grid": false,
+  "space": "murphy2024_orca.space.webp"
+ },
+ "su2020_chr2": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "1",
+  "caption": "One chromosome 2 copy",
+  "n": 935,
+  "categories": 1,
+  "grid": false,
+  "space": "su2020_chr2.space.webp"
+ },
+ "su2020_chr21_cell_cycle": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "84",
+  "caption": "One chromosome 21 copy",
+  "n": 651,
+  "categories": 1,
+  "grid": false,
+  "space": "su2020_chr21_cell_cycle.space.webp"
  }
 }
