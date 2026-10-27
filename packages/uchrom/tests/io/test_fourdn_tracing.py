@@ -124,3 +124,37 @@ def test_chromosome_names_made_alike(tmp_path):
     assert cd.uns["fofct_chrom_renames"] == {"3R": "chr3R"}
     assert set(cd.bins["chrom"].astype(str)) == {"chr3R"}
     assert len(cd.bins) == len(read_4dn_tracing([dict(name="a", core=f["core"])]).bins)
+
+
+def test_reused_trace_ids_split_and_duplicate_rows_dropped(tmp_path):
+    f = F / "odd_murphy2024_orca_reused_trace_ids_4DNFIYZDTHMG.csv"
+    rows = _rows(f)                                   # one id in two blocks with another trace between them
+    ids = [r[1] for r in rows]
+    reused = ids[0]
+    cd = read_4dn_tracing([dict(name="m", core=f)])
+    assert cd.uns["fofct_trace_splits"]["m"]["split_traces"] == 1
+    traces = set(cd.spots["trace_id"].astype(str))
+    assert {f"m_{reused}", f"m_{reused}.b2"} <= traces
+    n1 = next(k for k in range(len(ids)) if ids[k] != reused)          # rows of the first block
+    n2 = len(ids) - max(k for k in range(len(ids)) if ids[k] != reused) - 1   # rows of the last block
+    t = cd.spots["trace_id"].astype(str).to_numpy()
+    assert (t == f"m_{reused}").sum() == n1 and (t == f"m_{reused}.b2").sum() == n2
+    # the same rows written twice: the copy dropped
+    twice = tmp_path / "twice.csv"
+    text = open(f).read()
+    data = [l for l in text.splitlines(True) if l.strip() and not l.lstrip('"').startswith("#")]
+    twice.write_text(text + "".join(data[:5]))
+    cd2 = read_4dn_tracing([dict(name="m", core=twice)])
+    assert cd2.uns["fofct_dropped_spots"]["m"]["duplicate_rows"] == 5 and len(cd2.spots) == len(cd.spots)
+
+
+def test_locus_shifts():
+    f = _files("bintu2018_4dn_4DNEXXQVNRK6")
+    plain = read_4dn_tracing([dict(name="b", core=f["core"])]).spots_with_loci()
+    lo = int(plain["start"].min())
+    cd = read_4dn_tracing([dict(name="b", core=f["core"], locus_shifts=[("chr21", lo, lo + 60_000, 1000)])])
+    moved = cd.spots_with_loci()
+    shifted = (plain["start"] <= lo + 60_000).to_numpy()
+    assert (moved["start"].to_numpy()[shifted] == plain["start"].to_numpy()[shifted] + 1000).all()
+    assert (moved["start"].to_numpy()[~shifted] == plain["start"].to_numpy()[~shifted]).all()
+    assert cd.uns["fofct_locus_shifts"]["b"][0]["spots"] == int(shifted.sum())

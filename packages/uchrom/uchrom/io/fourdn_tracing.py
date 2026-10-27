@@ -163,6 +163,29 @@ def _companion(path, key: str, name: str) -> pd.DataFrame:
     return df.drop_duplicates(key).set_index(key)
 
 
+def _split_reused_traces(df: pd.DataFrame, c: dict):
+    """Rows repeated exactly (same trace, locus and position: Mateo et al. 2019 list some traces twice) dropped,
+    and a ``Trace_ID`` that comes back in a later block of rows split into one trace per block — the ids are
+    numbered per field of view in some deposits (Murphy & Boettiger 2024: the blocks of one id lie ~100 µm
+    apart).  Rows of one trace repeating a locus within a block (several fits ~0.1 µm apart) are kept.  A table
+    not grouped by trace (most ids in several blocks) is left as it is.  Returns the rows (``Trace_ID`` of the
+    second and later blocks suffixed ``.b<k>``) and counts."""
+    t = df[c["trace_id"]].astype(str)
+    block = (t != t.shift()).cumsum()
+    key = [c["trace_id"], c["chrom"], c["chrom_start"], c["x"], c["y"], c["z"]]
+    dup = df.duplicated(key)
+    df, t, block = df[~dup].reset_index(drop=True), t[~dup].reset_index(drop=True), block[~dup].reset_index(drop=True)
+    rank = block.groupby(t).rank(method="dense").astype(int)
+    n_ids = t.nunique()
+    reused = int(t[rank > 1].nunique())
+    out = {"duplicate_rows": int(dup.sum()), "split_traces": 0, "traces": n_ids}
+    if reused and reused <= n_ids / 2:
+        new = t.where(rank == 1, t + ".b" + rank.astype(str))
+        df = df.assign(**{c["trace_id"]: new.to_numpy(dtype=object)})
+        out["split_traces"] = reused
+    return df, out
+
+
 def _tidy(df: pd.DataFrame, category: bool = False) -> pd.DataFrame:
     """Text columns of tables concatenated over experiments as text: one experiment's ``Tissue_ID`` can be numbers
     and another's ``"A1"`` (Mateo et al. 2019), which a Parquet column cannot hold; repeated text values (condition,
@@ -183,8 +206,10 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
     ----------
     experiments : iterable of mappings
         One per experiment: ``name`` (prefix of its ids), ``core`` (the core table) and optionally
-        ``spot_quality``, ``trace_data``, ``cell_data`` (companion tables) and ``meta`` (a mapping of values
-        given to each of its cells, e.g. the experiment set, condition and biosample).
+        ``spot_quality``, ``trace_data``, ``cell_data`` (companion tables), ``meta`` (a mapping of values given
+        to each of its cells, e.g. the experiment set, condition and biosample) and ``locus_shifts`` (``(chrom,
+        start_from, start_to, offset)``: loci whose start lies in the range moved by ``offset`` bp — a correction
+        the caller knows from the authors, recorded in ``uns["fofct_locus_shifts"]``).
     genome_assembly : str, optional
         Recorded in ``uns``; default: the ``genome_assembly`` of the core tables' headers (they must agree).
 
@@ -199,14 +224,15 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
         trace); ``spot_tracks``: the spot-quality columns; ``traces``: ``experiment``, the trace-data columns and
         per-trace cell values; ``cells``: ``experiment``, the ``meta`` values and the cell-data columns.
         ``uns``: ``genome_assembly``, ``xyz_unit`` (``micron``), ``fofct_headers`` (per experiment),
-        ``fofct_unit_fixes``, ``fofct_dropped_spots``, ``fofct_column_fixes`` (core tables whose declared columns
+        ``fofct_unit_fixes``, ``fofct_dropped_spots`` (also exact duplicate rows), ``fofct_trace_splits`` (ids reused
+        for several traces: :func:`_split_reused_traces`), ``fofct_column_fixes`` (core tables whose declared columns
         were one too many or one too few: :func:`_fix_columns`), ``fofct_chrom_renames`` (chromosome names
         given the ``chr`` prefix the other experiments use).
     """
     from chromdata import ChromData, read_fofct_table
 
     coords, spots, spot_tracks, traces, cells = [], [], [], [], []
-    headers, fixes, assemblies, dropped, column_fixes = {}, [], set(), {}, []
+    headers, fixes, assemblies, dropped, column_fixes, trace_splits, shifts = {}, [], set(), {}, [], {}, {}
     for exp in experiments:
         name = str(exp["name"])
         df, header = read_fofct_table(exp["core"])
@@ -226,6 +252,10 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
         dropped[name] = {"no_coordinates": int((~df[[c["x"], c["y"], c["z"]]].notna().all(axis=1)).sum()),
                          "no_locus": int((~placed).sum())}
         df = df[ok].reset_index(drop=True)
+        df, split = _split_reused_traces(df, c)
+        dropped[name]["duplicate_rows"] = split.pop("duplicate_rows")
+        if split["split_traces"]:
+            trace_splits[name] = split
 
         trace = df[c["trace_id"]].astype(str).to_numpy(dtype=object)
         tr = pd.DataFrame(index=pd.Index(pd.unique(trace), name="Trace_ID"))
@@ -262,10 +292,17 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
         cell_id = np.char.add(f"{name}_", cell.astype(str)).astype(object)
 
         coords.append(df[[c["x"], c["y"], c["z"]]].to_numpy(float) * scale)
-        spots.append(pd.DataFrame({"chrom": df[c["chrom"]].astype(str).to_numpy(dtype=object),
-                                   "start": df[c["chrom_start"]].to_numpy(np.int64),
-                                   "end": df[c["chrom_end"]].to_numpy(np.int64),
-                                   "trace_id": trace_id, "cell_id": cell_id}))
+        loci = pd.DataFrame({"chrom": df[c["chrom"]].astype(str).to_numpy(dtype=object),
+                             "start": df[c["chrom_start"]].to_numpy(np.int64),
+                             "end": df[c["chrom_end"]].to_numpy(np.int64),
+                             "trace_id": trace_id, "cell_id": cell_id})
+        for chrom_, lo, hi, offset in exp.get("locus_shifts") or ():     # loci the deposit placed wrongly
+            m = ((loci["chrom"] == chrom_) & (loci["start"] >= lo) & (loci["start"] <= hi)).to_numpy()
+            loci.loc[m, ["start", "end"]] += int(offset)
+            if m.any():
+                shifts.setdefault(name, []).append({"chrom": chrom_, "start_from": int(lo), "start_to": int(hi),
+                                                    "offset": int(offset), "spots": int(m.sum())})
+        spots.append(loci)
         st = pd.DataFrame(index=pd.RangeIndex(len(df)))
         if exp.get("spot_quality"):
             q = _companion(exp["spot_quality"], "Spot_ID", name)
@@ -318,4 +355,5 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
                      spot_tracks=pd.concat(spot_tracks, ignore_index=True), traces=traces_df, cells=cells_df,
                      uns={"genome_assembly": genome_assembly, "xyz_unit": "micron", "fofct_headers": headers,
                           "fofct_unit_fixes": fixes, "fofct_dropped_spots": dropped,
-                          "fofct_column_fixes": column_fixes, "fofct_chrom_renames": renamed})
+                          "fofct_column_fixes": column_fixes, "fofct_chrom_renames": renamed,
+                          "fofct_trace_splits": trace_splits, "fofct_locus_shifts": shifts})

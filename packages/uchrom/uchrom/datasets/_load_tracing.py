@@ -127,6 +127,15 @@ build_su2020_genome_transcription = _su2020_genome(
     " with nascent transcription and distances to lamina, nucleoli and speckles")
 
 
+#: loci of a 4DN deposit placed off the authors' coordinates: dataset -> (chrom, start from, start to, offset).  Bintu
+#: et al. 2018's 18.6-20.6 Mb and 34.6-37.1 Mb regions are deposited from 18,000,001 and 34,000,001 in 30-kb steps;
+#: the authors' hg38 coordinates (github.com/BogdanBintu/ChromatinImaging, Data/README.md: first to last probe) are
+#: chr21:18,627,714-20,577,518 and chr21:34,628,096-37,117,534.  (28-30 Mb is deposited from 28,000,001, the
+#: authors' 28,000,071: left as it is.)
+_LOCUS_SHIFTS = {"bintu2018_4dn": [("chr21", 18_000_001, 19_950_000, 627_713),
+                                   ("chr21", 34_000_001, 36_490_000, 628_095)]}
+
+
 def _fourdn(dataset: str, source: str):
     """A loader of a 4DN FOF-CT chromatin-tracing study (fourdn_tracing.tsv): every experiment with a core table,
     its companions joined (:func:`uchrom.io.read_4dn_tracing`); ``cells`` carry the experiment set (``set``), its
@@ -151,7 +160,8 @@ def _fourdn(dataset: str, source: str):
                 "name": exp or set_, "core": _data_path(root, core["path"]),
                 **{k: _data_path(root, files[k]["path"]) for k in ("spot_quality", "trace_data", "cell_data")
                    if k in files},
-                "meta": {"set": set_, "condition": core["description"], "biosample": core["biosample"]}})
+                "meta": {"set": set_, "condition": core["description"], "biosample": core["biosample"]},
+                "locus_shifts": _LOCUS_SHIFTS.get(dataset, ())})
         cd = read_4dn_tracing(experiments)
         cd.uns["source"] = source
         return cd
