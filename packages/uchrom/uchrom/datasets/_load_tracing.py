@@ -67,6 +67,104 @@ def build_su2020_chr21(root: Path, out: Path):
     return cd
 
 
+def _fetched(name: str, file: str, root) -> Path:
+    """A file of a fetched dataset (``fetch`` returns the file itself for a one-file entry, else its folder)."""
+    from . import fetch
+
+    p = Path(fetch(name, root=root))
+    return p if p.is_file() else p / file
+
+
+def build_su2020_chr2(root: Path, out: Path):
+    """Su et al. 2020 sequential chromatin tracing of the whole chromosome 2 in IMR90 cells (hg38), loci of 50 kb,
+    one trace per imaged chromosome copy; the authors' Rao et al. 2014 Hi-C summed into the same loci is linked as
+    a ``.cool`` under the key ``rao2014`` (as :func:`build_su2020_chr21`)."""
+    from uchrom.io import read_su2020_hic, read_su2020_tracing, write_locus_cool
+
+    from . import fetch
+
+    folder = fetch("su2020_chr2", root=root)
+    cd = read_su2020_tracing(folder / "chromosome2.tsv")
+    cd.uns["source"] = "Su et al. 2020, Cell 182:1641: IMR90 chromosome 2; chromosome2.tsv, Zenodo 3928890"
+    loci, counts = read_su2020_hic(folder / "Hi-C_contacts_chromosome2.tsv")
+    imaged = cd.bins[["chrom", "start", "end"]].astype({"chrom": str}).reset_index(drop=True)
+    if not loci.astype({"chrom": str}).equals(imaged):
+        raise ValueError("Su 2020: the Hi-C loci are not the imaged loci")
+    cool = write_locus_cool(loci, counts, out.parent / "su2020_chr2_rao2014.cool", assembly="hg38")
+    cd.link_cool(Path(cool).name, key="rao2014", label="Rao 2014 IMR90 Hi-C summed into the Su 2020 loci",
+                 genome_assembly="hg38")
+    return cd
+
+
+def build_su2020_chr21_cell_cycle(root: Path, out: Path):
+    """Su et al. 2020 chr21 tracing in IMR90 cells with the cell-cycle state of each imaged copy
+    (``traces["cell_cycle"]``)."""
+    from uchrom.io import read_su2020_tracing
+
+    cd = read_su2020_tracing(_fetched("su2020_chr21_cell_cycle", "chromosome21-cell_cycle.tsv", root))
+    cd.uns["source"] = ("Su et al. 2020, Cell 182:1641: IMR90 chr21 with the cell-cycle state of each copy; "
+                        "chromosome21-cell_cycle.tsv, Zenodo 3928890")
+    return cd
+
+
+def _su2020_genome(name: str, file: str, what: str):
+    def build(root: Path, out: Path):
+        from uchrom.io import read_su2020_tracing
+
+        cd = read_su2020_tracing(_fetched(name, file, root))
+        cd.uns["source"] = f"Su et al. 2020, Cell 182:1641: IMR90 genome-scale DNA-MERFISH{what}; {file}, Zenodo 3928890"
+        return cd
+    build.__doc__ = (f"Su et al. 2020 genome-scale DNA-MERFISH of 1,041 loci in IMR90 cells{what} (hg38): one trace "
+                     "per cell, chromosome and homolog, as :func:`uchrom.io.read_su2020_tracing` reads them.")
+    return build
+
+
+build_su2020_genome = _su2020_genome("su2020_genome", "genomic-scale.tsv", "")
+build_su2020_genome_amanitin = _su2020_genome("su2020_genome_amanitin", "genomic-scale-amanitin.tsv",
+                                              " after alpha-amanitin")
+build_su2020_genome_transcription = _su2020_genome(
+    "su2020_genome_transcription", "genomic-scale-with_transcription_and_nuclear_bodies.tsv",
+    " with nascent transcription and distances to lamina, nucleoli and speckles")
+
+
+def _fourdn(dataset: str, source: str):
+    """A loader of a 4DN FOF-CT chromatin-tracing study (fourdn_tracing.tsv): every experiment with a core table,
+    its companions joined (:func:`uchrom.io.read_4dn_tracing`); ``cells`` carry the experiment set (``set``), its
+    4DN description (``condition``) and ``biosample``.  Experiments of RNA counts only (Hafner et al. 2023's RNA
+    FISH sets) have no traces and are left out."""
+    def build(root: Path, out: Path):
+        from uchrom.io import read_4dn_tracing
+
+        from . import fetch
+        from ._sources import fourdn_tracing_files
+
+        fetch(dataset, root=root)
+        by_exp = {}
+        for r in fourdn_tracing_files(dataset):
+            by_exp.setdefault((r["set"], r["experiment"]), {})[r["kind"]] = r
+        experiments = []
+        for (set_, exp), files in sorted(by_exp.items()):
+            if "core" not in files:
+                continue
+            core = files["core"]
+            experiments.append({
+                "name": exp or set_, "core": _data_path(root, core["path"]),
+                **{k: _data_path(root, files[k]["path"]) for k in ("spot_quality", "trace_data", "cell_data")
+                   if k in files},
+                "meta": {"set": set_, "condition": core["description"], "biosample": core["biosample"]}})
+        cd = read_4dn_tracing(experiments)
+        cd.uns["source"] = source
+        return cd
+    build.__doc__ = f"{source}: every experiment of the 4DN deposit in one object (``cells``: set, condition, biosample)."
+    return build
+
+
+def _data_path(root, rel: str) -> Path:
+    from ._paths import data_dir
+
+    return Path(root if root is not None else data_dir()) / rel
+
+
 register(Loader(
     name="takei2021_mesc", build=build_takei2021_mesc, store="takei2021_mesc/takei2021_mesc.chromdata.zarr",
     sources=("takei", "takei_tables"),
@@ -84,3 +182,31 @@ register(Loader(
     sources=("su2020_chr21",),
     description="Su 2020 IMR90 chr21 tracing: 7,591 chromosome copies x 651 loci of 50 kb (hg38), genes per "
                 "locus; Rao 2014 Hi-C in the same loci (linked .cool, key rao2014)"))
+register(Loader(
+    name="su2020_chr2", build=build_su2020_chr2, store="su2020_chr2/su2020_chr2.chromdata.zarr",
+    sources=("su2020_chr2",),
+    description="Su 2020 IMR90 chromosome 2 tracing, loci of 50 kb (hg38); Rao 2014 Hi-C in the same loci (linked "
+                ".cool, key rao2014)"))
+register(Loader(
+    name="su2020_chr21_cell_cycle", build=build_su2020_chr21_cell_cycle,
+    store="su2020_chr21_cell_cycle/su2020_chr21_cell_cycle.chromdata.zarr", sources=("su2020_chr21_cell_cycle",),
+    description="Su 2020 IMR90 chr21 tracing with the cell-cycle state of each copy"))
+for _name, _source, _what in (
+        ("bintu2018_4dn", "Bintu et al. 2018, Science 362:eaau1783 (4DN FOF-CT)",
+         "Bintu 2018 chromatin tracing, 10 sets: chr21 28-30 Mb in IMR90 / K562 / A549 / HCT116 RAD21-AID +- auxin "
+         "(and the IMR90 cell cycle), 34.6-37.1 Mb in HCT116, 18.6-20.6 Mb in IMR90 (hg38)"),
+        ("mateo2019_orca", "Mateo et al. 2019, Nature 568:49 (4DN FOF-CT)",
+         "Mateo 2019 ORCA of the Drosophila bithorax complex, 7 sets (dm6), RNAs of the same cells"),
+        ("hafner2023_orca", "Hafner et al. 2023, Mol Cell 83:1377 (4DN FOF-CT)",
+         "Hafner 2023 ORCA of mESC chr3 / chr6 at 150 Mb and 3 Mb, CTCF-AID / RAD21-AID +- auxin (mm10)"),
+        ("murphy2024_orca", "Murphy & Boettiger 2024, Nat Genet 56:493 (4DN FOF-CT)",
+         "Murphy 2024 ORCA of HoxA: mESC with Polycomb degrons, neural progenitors, E10.5 brain (mm10)")):
+    register(Loader(name=_name, build=_fourdn(_name, _source), store=f"{_name}/{_name}.chromdata.zarr",
+                    sources=(_name,), description=_what))
+for _name, _build, _what in (
+        ("su2020_genome", build_su2020_genome, ""),
+        ("su2020_genome_amanitin", build_su2020_genome_amanitin, " after alpha-amanitin"),
+        ("su2020_genome_transcription", build_su2020_genome_transcription,
+         " with nascent transcription and distances to nuclear bodies")):
+    register(Loader(name=_name, build=_build, store=f"{_name}/{_name}.chromdata.zarr", sources=(_name,),
+                    description=f"Su 2020 IMR90 genome-scale DNA-MERFISH, 1,041 loci (hg38){_what}"))

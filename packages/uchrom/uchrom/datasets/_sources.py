@@ -153,6 +153,34 @@ _TAN_SUFFIXES = ("contacts.pairs", "impute.pairs", "20k.1.clean.3dg", "20k.2.cle
                  "20k.4.clean.3dg", "20k.5.clean.3dg")
 
 
+# Chromatin tracing deposited in the 4DN Data Portal as FISH-Omics Format tables (FOF-CT, 4DN open data on S3):
+# per experiment set a core table (spots: x, y, z, locus, trace, cell) and its companions (spot quality, trace
+# data, cell data, RNA spots / counts), one row per file in fourdn_tracing.tsv next to this module (dataset, set,
+# file accession, uuid, md5, bytes, kind, biosample, the set's description; from the portal's metadata,
+# 2026-10-27).  Files go to <dataset>/<set>/<accession>.csv.
+_FOURDN_TRACING = Path(__file__).resolve().parent / "fourdn_tracing.tsv"
+_FOURDN_OPEN = "https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput"
+
+
+def fourdn_tracing_files(dataset: str) -> list[dict]:
+    """The rows of fourdn_tracing.tsv of one dataset (dicts; ``path`` = the file's path in the data directory)."""
+    lines = [line.rstrip("\n").split("\t") for line in _FOURDN_TRACING.open()]
+    rows = [dict(zip(lines[0], v)) for v in lines[1:]]
+    return [{**r, "path": f"{dataset}/{r['set']}/{r['file']}.csv"} for r in rows if r["dataset"] == dataset]
+
+
+def _fourdn_tracing(dataset: str, description: str) -> dict:
+    rows = fourdn_tracing_files(dataset)
+    return {
+        "files": [(r["path"], f"{_FOURDN_OPEN}/{r['uuid']}/{r['file']}.csv") for r in rows],
+        "md5": {r["path"]: r["md5"] for r in rows},
+        "parallel": 4,
+        "size_mb": round(sum(int(r["bytes"]) for r in rows) / 1e6),
+        "default": False,
+        "description": description,
+    }
+
+
 def _tan2021_files() -> list[tuple[str, str]]:
     if not _TAN_CELLS.exists():
         return []
@@ -466,6 +494,55 @@ DATASETS = {
         "default": False,
         "description": "Su 2020 IMR90 genome-scale DNA-MERFISH (1,041 loci, homologs) + binned Hi-C (Zenodo 3928890)",
     },
+    # Su et al. 2020, the other tables of Zenodo 3928890 (CC-BY-4.0): the whole chromosome 2 with
+    # the authors' Rao 2014 Hi-C in the same loci, chr21 with the cell-cycle state of each copy, and the genome-scale
+    # DNA-MERFISH after alpha-amanitin / with nascent transcription and distances to nuclear bodies.
+    "su2020_chr2": {
+        "files": [("su2020_imr90/chromosome2.tsv", f"{_SU2020}/chromosome2.tsv?download=1"),
+                  ("su2020_imr90/Hi-C_contacts_chromosome2.tsv", f"{_SU2020}/Hi-C_contacts_chromosome2.tsv?download=1"),
+                  ("su2020_imr90/README_August_2020.txt", f"{_SU2020}/README_August%202020.txt?download=1")],
+        "md5": {"su2020_imr90/chromosome2.tsv": "4ac51195ddd67992d64037460a6849f7",
+                "su2020_imr90/Hi-C_contacts_chromosome2.tsv": "be53b23e6d201eaa291530a5e6971bba",
+                "su2020_imr90/README_August_2020.txt": "a93629f38fcc11acdb46ced5fc74bee1"},
+        "size_mb": 132,
+        "default": False,
+        "description": "Su 2020 IMR90 chromosome 2 chromatin tracing + binned Hi-C (Zenodo 3928890)",
+    },
+    "su2020_chr21_cell_cycle": {
+        "files": [("su2020_imr90/chromosome21-cell_cycle.tsv", f"{_SU2020}/chromosome21-cell_cycle.tsv?download=1")],
+        "md5": {"su2020_imr90/chromosome21-cell_cycle.tsv": "d8dc951c966ae0961e9c48bedcbaea54"},
+        "size_mb": 166,
+        "default": False,
+        "description": "Su 2020 IMR90 chr21 chromatin tracing with the cell-cycle state of each copy (Zenodo 3928890)",
+    },
+    "su2020_genome_amanitin": {
+        "files": [("su2020_imr90/genomic-scale-amanitin.tsv", f"{_SU2020}/genomic-scale-amanitin.tsv?download=1")],
+        "md5": {"su2020_imr90/genomic-scale-amanitin.tsv": "cac8fa1d25b93ff393ff0886ca499838"},
+        "size_mb": 537,
+        "default": False,
+        "description": "Su 2020 IMR90 genome-scale DNA-MERFISH after alpha-amanitin (Zenodo 3928890)",
+    },
+    "su2020_genome_transcription": {
+        "files": [("su2020_imr90/genomic-scale-with_transcription_and_nuclear_bodies.tsv",
+                   f"{_SU2020}/genomic-scale-with%20transcription%20and%20nuclear%20bodies.tsv?download=1")],
+        "md5": {"su2020_imr90/genomic-scale-with_transcription_and_nuclear_bodies.tsv": "172bda3fdc5bf3fecb86cd426383b287"},
+        "size_mb": 655,
+        "default": False,
+        "description": "Su 2020 IMR90 genome-scale DNA-MERFISH with nascent transcription and distances to lamina, "
+                       "nucleoli and speckles (Zenodo 3928890)",
+    },
+    # 4DN FOF-CT chromatin tracing (fourdn_tracing.tsv): Bintu et al. 2018 (Science 362:eaau1783; 10 sets: chr21
+    # 28-30 Mb in IMR90 / K562 / A549 / HCT116 RAD21-AID +- auxin, 34.6-37.1 Mb in HCT116, 18.6-20.6 Mb in IMR90,
+    # the IMR90 cell cycle), and the Boettiger lab's ORCA: Mateo et al. 2019 (Nature 568:49; Drosophila embryos,
+    # bithorax complex at 2-10 kb, with 29 RNAs in the same cells), Hafner et al. 2023 (Mol Cell 83:1377; mESC,
+    # chr3 / chr6 at 150 Mb and 3 Mb, CTCF-AID / RAD21-AID +- auxin), Murphy & Boettiger 2024 (Nat Genet 56:493;
+    # HoxA in mESC with Polycomb degrons, neural progenitors, E10.5 brain).
+    "bintu2018_4dn": _fourdn_tracing("bintu2018_4dn", "Bintu 2018 chromatin tracing, 10 sets (4DN FOF-CT)"),
+    "mateo2019_orca": _fourdn_tracing("mateo2019_orca", "Mateo 2019 ORCA of the Drosophila bithorax complex, 7 sets "
+                                      "(4DN FOF-CT)"),
+    "hafner2023_orca": _fourdn_tracing("hafner2023_orca", "Hafner 2023 ORCA of mESC chr3 / chr6, CTCF / RAD21 "
+                                       "degrons, 40 sets (4DN FOF-CT)"),
+    "murphy2024_orca": _fourdn_tracing("murphy2024_orca", "Murphy & Boettiger 2024 ORCA of HoxA, 5 sets (4DN FOF-CT)"),
     # Rao et al. 2014 IMR90 in situ Hi-C reprocessed by 4DN on GRCh38 (set 4DNES1ZEJNRU): the
     # whole-genome input of the bulk deconvolution benchmark (20 kb built from the 10 kb level).
     "rao2014_imr90_4dn": {

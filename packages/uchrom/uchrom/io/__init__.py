@@ -17,6 +17,7 @@ _EXPORTS = {
     "read_bintu_tracing": ("._io", "read_bintu_tracing"),
     "read_su2020_tracing": (".su2020", "read_su2020_tracing"),
     "read_su2020_hic": (".su2020", "read_su2020_hic"),
+    "read_4dn_tracing": (".fourdn_tracing", "read_4dn_tracing"),
     "write_locus_cool": (".cool", "write_locus_cool"),
     "write_fofct": ("._io", "write_fofct"),
     "write_pyhim_trace": (".pyhim", "write_pyhim_trace"),

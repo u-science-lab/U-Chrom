@@ -42,9 +42,11 @@ def test_core_table_parsing(tmp_path):
 
 
 def test_companion_tables_real_takei(tmp_path):
-    from chromdata.cdata import _read_fofct_table
+    from chromdata import read_fofct_table
 
-    ids = _read_fofct_table(CELL_TABLE)[0]["Cell_ID"].astype(str).tolist()
+    table, header = read_fofct_table(CELL_TABLE)
+    ids = table["Cell_ID"].astype(str).tolist()
+    assert header and "Cell_ID" in table.columns
     assert len(ids) == 201
     core = tmp_path / "core.csv"
     _write_core(core, ids)
