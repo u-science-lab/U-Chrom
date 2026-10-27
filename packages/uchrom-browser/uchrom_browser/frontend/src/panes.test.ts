@@ -4,6 +4,8 @@ import {
   addPane,
   addPinnedPane,
   defaultWorkspace,
+  gridSizes,
+  MAIN_3D,
   workspaceOf,
   dropUnknownPins,
   parseWorkspace,
@@ -52,6 +54,20 @@ describe('3-D side panels follow the active pane', () => {
     // unknown active id → first pane
     expect(activePaneOf({ ...ws, activePane: 'nope' })?.id).toBe('P1')
     expect(show3dPanels(addPane(ws, 'genome'))).toBe(false) // the new pane is active
+  })
+})
+
+describe('default grid', () => {
+  it('gives the 3-D view the larger column and row', () => {
+    const ws = defaultWorkspace({ hasCoords: true, hasEmbeddings: false, hasTracks: false })
+    expect(ws.panes.map((p) => p.type)).toEqual(['3d', 'genome', 'stats'])
+    const g = gridSizes(ws)
+    expect(g.cols[0]).toBeCloseTo(MAIN_3D.col)
+    expect(g.rows[0]).toBeCloseTo(MAIN_3D.row)
+    expect(g.cols.reduce((a, b) => a + b, 0)).toBeCloseTo(1)
+    // without 3-D coordinates the views share the grid equally
+    const no3d = defaultWorkspace({ hasCoords: false, hasEmbeddings: true, hasTracks: true })
+    expect(gridSizes(no3d).cols.every((c, _, a) => Math.abs(c - a[0]) < 1e-9)).toBe(true)
   })
 })
 
