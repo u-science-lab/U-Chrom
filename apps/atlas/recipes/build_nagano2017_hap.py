@@ -224,7 +224,8 @@ def cmd_store(args) -> None:
     per, dev = replicate_deviation(cd, ("model_2",), reflection=True)
     cells = cd.cells.join(per[["rmsd_model_2", "median_dev_model_2"]])
     cd = ChromData(cd.coords, cd.spots, bins=cd.bins, cells=cells, layers=cd.layers,
-                   spot_tracks=pd.DataFrame({"model_deviation": dev}), uns=cd.uns)
+                   spot_tracks=pd.DataFrame({"model_deviation": dev}),
+                   uns={**cd.uns, "derived_spot_tracks": ["model_deviation"]})
     cd.link_cool(mcool.name, key="bulk", label=f"All {len(names)} cells (merged)")
     cd.link_scool(scool.name, key="per_cell", label="Per cell (100 kb)", cell_name="cell_id",
                   genome_assembly="mm10", bin_size=RES)

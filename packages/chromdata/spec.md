@@ -188,6 +188,10 @@ chromdata.clusters.add_clusters("x.chromdata.zarr", "sprite", t)  # into an exis
 `bin_tracks` (per locus) and `spot_tracks` (per spot) replace the 1.x
 spot-aligned `tracks`.  During 2.x, `cd.tracks` is a deprecated
 spot-aligned view of both (`cd.tracks_spot_view()` without the warning).
+`uns['derived_spot_tracks']` (a list of column names) marks the `spot_tracks`
+computed from the store's own coordinates rather than measured (e.g. the
+deviation between reconstructed models); the atlas catalog does not list them
+as signals per spot.
 
 ### Additional Storage
 
