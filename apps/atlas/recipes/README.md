@@ -139,7 +139,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `nagano2017_dip/`: Nagano 2017 diploid serum mESC fend pairs (+ the `nagano2017_hap/` fends and chain) | 1.96 GB | fetch `nagano2017_dip_serum`; loader `nagano2017_dip_serum` | uchrom-reproducibility `supp_table3/sc_structures/snaphic_*.py` (SnapHiC's data) |
 | `yu2021_snaphic/`: SnapHiC paper source data (loops by number of cells; mESC reference loops) | 34 MB | fetch `yu2021_snaphic` | tutorial `sc_structures`; uchrom-reproducibility `supp_table3/sc_structures/snaphic_mesc.py` |
 | `snaphic/{mm10,hg19}_filter_regions.txt`: SnapHiC's excluded bins | 3.8 MB | fetch `snaphic_filter_regions` | `call_loops_snaphic(exclude=)`; tutorial `sc_structures`; uchrom-reproducibility `supp_table3/sc_structures/snaphic_*.py` |
-| `nagano2017_hap/`: Nagano 2017 haploid mESC scHi-C fend pairs + mm9 fends + chain | 1.39 GB (+5 GB streamed, 253 MB kept) | fetch `nagano2017_hap` | an unpublished benchmark (step 1) |
+| `nagano2017_hap/`: Nagano 2017 haploid mESC scHi-C fend pairs + mm9 fends + chain | 1.39 GB (+5 GB streamed, 253 MB kept) | fetch `nagano2017_hap`; recipe `build_nagano2017_hap.py` (NucDynamics structures) | an unpublished benchmark (step 1); atlas store `nagano2017_hap` |
 | `takei2021_brain/`: Takei 2021 Science mouse cortex seqFISH+ tables | 597 MB | fetch `takei2021_brain` | an unpublished benchmark (brain imaging reference) |
 | `tan2021_cortex/`: Tan 2021 Dip-C adult cortex, 510 cells | 13 GB | fetch `tan2021_cortex` | an unpublished benchmark (brain Dip-C baseline) |
 | `tan2018_gm12878/`: Tan 2018 Dip-C GM12878, 17 cells | ~0.7 GB | fetch `tan2018_gm12878` | diploid EMber / NucDynamics validation |
@@ -1306,6 +1306,13 @@ GSM by the GEO sample records (`!Sample_description`).  An identical copy,
   carry replicated chromatin and are modelled as haploid anyway (the G1 subset is reported separately).
 - **Download**: `python -m uchrom.datasets fetch nagano2017_hap` (or
   `slurm/download_matched.sbatch PART=mesc`).
+- **Atlas store** (`build_nagano2017_hap.py`: `contacts` → `reconstruct` → `store`, then `derive_embeddings.py
+  --hic per_cell --leiden`) → `nagano2017_hap/nagano2017_hap.chromdata.zarr`: the 603 cells of the selection
+  above (403 serum, 200 2i), their mm10 contacts (`nagano2017_hap_cells_100kb.scool`, one map per cell;
+  `nagano2017_hap_bulk.mcool`, merged, 100 kb - 1 Mb) and **structures computed here** — the authors published
+  none: U-Chrom NucDynamics (protocol `nuc_dynamics_2017`, 100 kb particles, 2 models, seed 1; ~40 s per cell
+  on a GPU), model 1 = coords, model 2 = layer `model_2`, their RMSD after superposition in
+  `cells["rmsd_model_2"]`.
 - **Used by**: an unpublished benchmark nagano` → NucDynamics / hickit → `matched.py`
   (step 1); `robust` matched-imaging analysis (serum cells split into development / held-back halves,
   `robust_matched_split.py`, PREREG §6).
