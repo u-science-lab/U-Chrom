@@ -93,6 +93,9 @@ export interface WorkspaceState {
   gridRows?: number[]
   /** pane shown alone (all others kept mounted but hidden), or null */
   maximized: string | null
+  /** the views of the default layout this one started from (paneSignature): while its views are those, it gives
+   *  way to a newer default (followsNewDefault) — only a layout whose views were added or removed is kept */
+  basis?: string
 }
 
 export const LAYOUTS: WsLayout[] = ['tabs', 'grid']
@@ -127,24 +130,46 @@ export const MIN_FRAC = 0.1
 
 const pane = (id: string, type: PaneType): Pane => ({ id, type, embeddingKey: null, dims: [0, 1] })
 
+/** Default share of the grid's first column and first row when the 3-D view is the first of several. */
+export const MAIN_3D = { col: 0.6, row: 0.62 }
+
+/** `n` fractions, the first `first` and the rest equal. */
+const firstLarger = (n: number, first: number): number[] =>
+  n <= 1 ? [1] : [first, ...Array.from({ length: n - 1 }, () => (1 - first) / (n - 1))]
+
 /**
  * Default views follow the data: every view the dataset can fill
  * (:func:`supportedPaneTypes`), in a grid — a single view fills the space —
  * except Matrix when there is a Genome view, whose matrix rows show the same
- * maps.  Data that fills none gets a Matrix view.  A bare boolean means "has
- * embeddings" with 3-D coords (older callers).
+ * maps.  Data that fills none gets a Matrix view.  A 3-D view first of several
+ * gets the larger part of the grid (MAIN_3D: its column and its row); the
+ * others share the rest.  A bare boolean means "has embeddings" with 3-D
+ * coords (older callers).
  */
 export function defaultWorkspace(kind: boolean | DataKind): WorkspaceState {
   const k: DataKind = typeof kind === 'boolean' ? { hasEmbeddings: kind, hasCoords: true, hasTracks: false } : kind
   const all = supportedPaneTypes(k)
   const types = all.includes('genome') ? all.filter((t) => t !== 'matrix') : all
   const panes = (types.length ? types : (['matrix'] as PaneType[])).map((t, i) => pane(`P${i + 1}`, t))
-  return {
+  const ws: WorkspaceState = {
     layout: 'grid',
     panes,
     activePane: panes[0].id,
     maximized: null,
   }
+  if (panes.length > 1 && panes[0].type === '3d') {
+    const { cols, rows } = gridShape(panes.length)
+    ws.gridCols = firstLarger(cols, MAIN_3D.col)
+    ws.gridRows = firstLarger(rows, MAIN_3D.row)
+  }
+  ws.basis = paneSignature(ws)
+  return ws
+}
+
+/** A saved layout that still has the views of the default it came from, when the default is now another: the new
+ *  default replaces it (its pane settings were not a choice of views).  Layouts saved before `basis` are kept. */
+export function followsNewDefault(saved: WorkspaceState, fresh: WorkspaceState): boolean {
+  return saved.basis !== undefined && paneSignature(saved) === saved.basis && saved.basis !== fresh.basis
 }
 
 /** Panes of `types` in a grid (or `layout`). */
@@ -515,6 +540,7 @@ export function parseWorkspace(raw: unknown): WorkspaceState | null {
     maximized,
     ...(gc ? { gridCols: gc.v } : {}),
     ...(gr ? { gridRows: gr.v } : {}),
+    ...(typeof w.basis === 'string' ? { basis: w.basis } : {}),
   }
 }
 

@@ -256,6 +256,13 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
                   end: Optional[int] = None) -> Dict[str, Any]:
         return _call(_dataset(dataset_id).intervals, key, chrom, start, end)
 
+    @app.get("/api/datasets/{dataset_id}/clusters/{key}")
+    def clusters(dataset_id: str, key: str, chrom: str, start: int, end: int, cell: Optional[str] = None,
+                 group: Optional[str] = None, min_size: int = 2, max_size: Optional[int] = None,
+                 limit: int = 400) -> Dict[str, Any]:
+        return _call(_dataset(dataset_id).clusters, key, chrom, start, end, cell, group, min_size, max_size,
+                     min(int(limit), 2000))
+
     @app.get("/api/datasets/{dataset_id}/contacts/{key}")
     def contacts(dataset_id: str, key: str, chrom: str, start: Optional[int] = None,
                  end: Optional[int] = None, resolution: Optional[int] = None,

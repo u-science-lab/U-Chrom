@@ -57,6 +57,7 @@ from .band import (
 )
 from .pseudobulk_maps import ice, pseudobulk, sample_cells_by_depth
 from .pileup_maps import pileup, pileup_scores
+from .cluster_maps import cluster_pixels, clusters_to_mcool, clusters_to_scool, filter_clusters
 from .contact_stats import ContactFeatureParams, chromosome_dosage, contact_features
 from .separation import SeparationParams, separation_profile
 from .window_scores import window_expected, window_scores
@@ -123,6 +124,10 @@ __all__ = [
     "read_band",
     "ice",
     "pseudobulk",
+    "filter_clusters",
+    "cluster_pixels",
+    "clusters_to_scool",
+    "clusters_to_mcool",
     "sample_cells_by_depth",
     "thin_map",
     "pileup",

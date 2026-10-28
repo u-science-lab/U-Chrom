@@ -252,3 +252,45 @@ def test_whole_genome_view(tmp_path, monkeypatch):
     assert ("chr2", 400, 410) in rows and ("chr1", 150, 300) in rows
     with pytest.raises(ValueError, match="per chromosome"):
         ds.distance("*")
+
+
+def _cluster_dataset():
+    """Two cells' multi-way contacts on chr1 / chr2: cluster k1 of c1 spans chr1:100-900 with a fragment on
+    chr2, k2 (c1) lies in chr1:400-450, k3 (c2) has one fragment at chr1:500."""
+    frags = pd.DataFrame({
+        "cluster": ["k1"] * 4 + ["k2"] * 2 + ["k3"],
+        "cell": ["c1"] * 6 + ["c2"],
+        "chrom": ["chr1", "chr1", "chr1", "chr2", "chr1", "chr1", "chr1"],
+        "start": [100, 420, 900, 50, 400, 440, 500],
+        "end": [150, 470, 950, 90, 410, 450, 520],
+    })
+    empty = pd.DataFrame({"chrom": pd.Series([], dtype=str), "start": pd.Series([], dtype=np.int64),
+                          "end": pd.Series([], dtype=np.int64), "trace_id": pd.Series([], dtype=str)})
+    cd = ChromData(np.zeros((0, 3)), empty, cells=pd.DataFrame(index=pd.Index(["c1", "c2"], name="cell_id")))
+    cd.set_clusters("sprite", frags, cluster="cluster", cell="cell", attrs={"assay": "SPRITE"})
+    return DatasetStore().add(cd, name="clusters")
+
+
+def test_cluster_track_window():
+    d = _cluster_dataset()
+    s = d.summary()
+    assert s["clusters"] == [{"key": "sprite", "n_clusters": 3, "n_fragments": 7, "per_cell": True,
+                              "assay": "SPRITE", "filtered_from": None}]
+    w = d.clusters("sprite", "chr1", 300, 600, min_size=1)
+    assert w["n_clusters"] == 3
+    # by span start: k1 (100-900, 4 fragments, 3 on chr1), k2 (400-450), k3 (500)
+    assert [(c["span"], c["size"], c["chrom_size"], c["cell"]) for c in w["clusters"]] == [
+        ([100, 950], 4, 3, "c1"), ([400, 450], 2, 2, "c1"), ([500, 520], 1, 1, "c2")]
+    assert w["clusters"][0]["fragments"] == [[420, 470]]
+    assert w["clusters"][1]["fragments"] == [[400, 410], [440, 450]]
+    assert [c["cell"] for c in d.clusters("sprite", "chr1", 300, 600, cell_id="c2", min_size=1)["clusters"]] == ["c2"]
+    assert d.clusters("sprite", "chr1", 300, 600)["n_clusters"] == 2                 # default: 2 fragments or more
+    assert d.clusters("sprite", "chr1", 300, 600, max_size=3)["n_clusters"] == 1
+    # beyond the limit: the clusters with the most fragments in the window
+    lim = d.clusters("sprite", "chr1", 0, 1000, min_size=1, limit=1)
+    assert lim["n_clusters"] == 3 and [c["id"] for c in lim["clusters"]] == [w["clusters"][0]["id"]]
+    assert d.clusters("sprite", "chr1", 2000, 3000)["clusters"] == []
+    with pytest.raises(ValueError):
+        d.clusters("sprite", "*", 0, 10)
+    with pytest.raises(KeyError):
+        d.clusters("nope", "chr1", 0, 10)

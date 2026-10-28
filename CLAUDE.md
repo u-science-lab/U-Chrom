@@ -103,7 +103,8 @@ uchrom/                (packages/uchrom/uchrom)
 │                    (maps.py: contact_matrix, rebin_map, thin_map; band.py: banded sparse reads, cis
 │                    expected; pseudobulk_maps.py: per-cell maps summed per group, ICE, cells sampled at
 │                    matched depth; pileup_maps.py: APA; impute_rwr.py: single-cell maps imputed by a
-│                    random walk with restart)
+│                    random walk with restart; cluster_maps.py: maps of the fragment pairs of multi-way contacts,
+│                    per cell (.scool) and pooled (.mcool), and the SpaceA authors' cluster filter)
 │                    and structure comparisons (compare.py)
 ├── emb/             Cell embeddings: FastHigashi / scHiCluster on linked maps (embed_higashi,
 │                    embed_contacts), RNA / ATAC / marks (embed_cells), clusters, metrics, plots

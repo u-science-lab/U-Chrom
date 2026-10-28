@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extent, fmtAxis, histogram, linear, logScale, statsChrom, trackRange } from './stats'
+import { extent, fmtAxis, histogram, integerBins, linear, logScale, statsChrom, trackRange } from './stats'
 import { binIndexAt, defaultTrackSelection, resolveTracks } from './tracks'
 import { defaultWorkspace, paneSignature, parseWorkspace, addPane, workspaceOf } from './workspace'
 import { resolveSource } from './components/MatrixView'
@@ -12,6 +12,15 @@ describe('histogram / scales', () => {
     expect(h.counts).toEqual([1, 1, 1, 2])
     expect(histogram([], 3).counts).toEqual([0, 0, 0])
     expect(histogram([5, 5], 2).edges[0]).toBe(4.5)
+  })
+  it('integer values: bins of whole width, every bin the same number of integers', () => {
+    const lig = Array.from({ length: 50 }, (_, i) => i + 1)
+    const b = integerBins(lig, 40)!
+    expect(b).toEqual({ nbins: 25, range: [0.5, 50.5] })
+    expect(histogram(lig, b.nbins, b.range).counts.every((c) => c === 2)).toBe(true)
+    expect(integerBins([1, 2, 3], 40)).toEqual({ nbins: 3, range: [0.5, 3.5] })
+    expect(integerBins([1, 2.5], 40)).toBeNull()
+    expect(integerBins([], 40)).toBeNull()
   })
   it('linear / log maps and extents', () => {
     expect(linear(0, 10, 100, 200)(5)).toBe(150)

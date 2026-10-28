@@ -83,6 +83,27 @@ export function matrixPixels(m: MatrixData, s: ColorScale, range: [number, numbe
   return px
 }
 
+/**
+ * Imaged loci drawn as tiles that meet: a locus of a distance map (25-100 kb probes 1-3 Mb apart in genome-wide
+ * tracing) is widened to the next locus when the gap to it is no more than 3× the spacing to the previous one, so
+ * a sparse map is not a few dots on white; a gap that is much wider than the local spacing (two imaged regions far
+ * apart) stays empty.  The last locus takes the spacing before it.  Maps of contiguous bins are unchanged.
+ */
+export function tileLoci(starts: readonly number[], ends: readonly number[]): number[] {
+  const n = starts.length
+  const out = ends.slice()
+  for (let i = 0; i < n; i++) {
+    const prev = i > 0 ? starts[i] - starts[i - 1] : n > 1 ? starts[1] - starts[0] : 0
+    if (i < n - 1) {
+      const next = starts[i + 1] - starts[i]
+      if (out[i] < starts[i + 1] && next <= 3 * prev) out[i] = starts[i + 1]
+    } else if (n > 1 && out[i] - starts[i] < prev) {
+      out[i] = starts[i] + prev
+    }
+  }
+  return out
+}
+
 /** Bin index containing genomic position `pos` (binary search on bin starts), or -1. */
 export function binAt(starts: readonly number[], ends: readonly number[], pos: number): number {
   let lo = 0

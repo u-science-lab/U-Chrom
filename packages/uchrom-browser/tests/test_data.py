@@ -172,3 +172,53 @@ def test_cells_natural_order_and_missing_column():
     assert ds.cells() == {"total": 0, "cells": []}
     h = decode_geometry(ds.geometry(GeometryFilter(cell_ids=["x"])))["header"]
     assert h["n_points"] == 0
+
+
+def _cells(offset: float, n_cells: int = 6, n: int = 200, seed: int = 0) -> ChromData:
+    """Random-walk 'structures' of ``n_cells`` cells, cell k shifted by ``k * offset`` along x."""
+    rng = np.random.default_rng(seed)
+    coords, rows = [], []
+    for k in range(n_cells):
+        walk = np.cumsum(rng.normal(size=(n, 3)), axis=0)
+        coords.append(walk - walk.mean(0) + [k * offset, 0, 0])
+        rows += [("chr1", i * 1000, (i + 1) * 1000, f"c{k}_t", f"c{k}") for i in range(n)]
+    spots = pd.DataFrame(rows, columns=["chrom", "start", "end", "trace_id", "cell_id"])
+    return ChromData(np.concatenate(coords), spots)
+
+
+@pytest.mark.parametrize("backed", [False, True])
+def test_cells_overlap_tells_stacked_models_from_placed_cells(tmp_path, backed):
+    for offset, want in ((0.0, True), (200.0, False)):
+        cd = _cells(offset)
+        if backed:
+            path = tmp_path / f"c{int(offset)}.chromdata.zarr"
+            cd.write(path)
+            ds = DatasetStore().load(path)
+        else:
+            ds = DatasetStore().add(cd, name="cells")
+        assert ds.cells_overlap() is want
+        assert ds.summary()["cells_overlap"] is want
+
+
+def test_positions_in_the_3d_frame_are_told_apart():
+    cd = _cells(200.0)                                        # cells placed 200 apart along x
+    centre = pd.DataFrame(np.asarray(cd.coords), columns=list("xyz")).groupby(cd.spots["cell_id"].astype(str).to_numpy()).mean()
+    for shift, want in ((0.0, True), (5000.0, False)):     # positions at the cells' centres, or elsewhere
+        c = cd.copy()
+        cells = pd.DataFrame(index=pd.Index(centre.index, name="cell_id"))
+        cells["px"], cells["py"] = centre["x"].to_numpy() + shift, centre["y"].to_numpy()
+        c.cells = cells
+        c.set_cell_positions(columns=["px", "py"], unit="micron")
+        ds = DatasetStore().add(c, name="placed")
+        assert [s["in_coords_frame"] for s in ds.spatial()] == [want]
+
+
+def test_traces_in_crops_of_their_own_count_as_overlapping():
+    # ORCA-like: x, y local to each trace's crop, z spread over the stack
+    cd = _cells(0.0)
+    xyz = np.asarray(cd.coords).copy()
+    cells = cd.spots["cell_id"].astype(str).to_numpy()
+    for k, c in enumerate(sorted(set(cells))):
+        xyz[cells == c, 2] += 10.0 * k
+    ds = DatasetStore().add(ChromData(xyz, cd.spots), name="crops")
+    assert ds.cells_overlap() is True

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { decodeGeometry } from './api'
 import { HIDDEN_RGB, MISSING_RGB, categoricalColor, categoryIndex, cellRgb, cellValueColor, labelColor, vertexColors } from './colors'
 import { fmtValue } from './components/format'
-import { DEFAULT_VIEW, defaultCategoryField, hasCoords, initialView, orderedCells } from './store'
+import { DEFAULT_VIEW, defaultCategoryField, defaultFieldOf, hasCoords, initialView, isPositionField, orderedCells } from './store'
 import { encodeGeometry, sampleHeader } from './testing'
 import type { CellField, CellInfo, CellValue, DatasetSummary } from './types'
 
@@ -82,6 +82,25 @@ describe('default overview colouring', () => {
   it('initial view colours by the cell type when there is one', () => {
     expect(initialView(ds([typeField]))).toMatchObject({ overviewColor: 'field', cellField: 'cell_type' })
     expect(initialView(ds([numField]))).toBe(DEFAULT_VIEW)
+  })
+  it('many cells without 3-D chromatin: coloured by their first property that is not a position', () => {
+    const cx = { ...numField, name: 'centroid_x', label: 'centroid_x' }
+    const spots = (fields: CellField[]) => ds(fields, { has_coords: false, n_spots: 0, n_cells: 5000 })
+    expect(initialView(spots([cx, numField]))).toMatchObject({ overviewColor: 'field', cellField: 'area' })
+    expect(initialView(spots([typeField, numField]))).toMatchObject({ cellField: 'cell_type' })
+    expect(initialView(ds([cx, numField], { has_coords: false, n_spots: 0, n_cells: 50 }))).toBe(DEFAULT_VIEW)
+    expect(initialView(ds([numField], { n_cells: 5000 }))).toBe(DEFAULT_VIEW) // 3-D chromatin: a colour per cell
+  })
+  it('single-cell structures in one frame: the other cells hidden (the first is focused on load)', () => {
+    expect(initialView(ds([typeField], { cells_overlap: true }))).toMatchObject({ contextOpacity: 0, cellField: 'cell_type' })
+    expect(initialView(ds([], { cells_overlap: true })).contextOpacity).toBe(0)
+    expect(initialView(ds([], { cells_overlap: false }))).toBe(DEFAULT_VIEW)
+  })
+  it('position fields are skipped when a group is picked', () => {
+    expect(['centroid_x', 'tissue_centroid_y', 'x', 'y', 'z_um', 'spatial_x'].every(isPositionField)).toBe(true)
+    expect(['area', 'n_contacts', 'xist', 'lig', 'y_chrom_reads'].some(isPositionField)).toBe(false)
+    expect(defaultFieldOf([{ name: 'x' }, { name: 'y' }, { name: 'fragments' }])?.name).toBe('fragments')
+    expect(defaultFieldOf([{ name: 'x' }])?.name).toBe('x')
   })
   it('knows when a dataset has no coordinates', () => {
     expect(hasCoords(ds([]))).toBe(true)

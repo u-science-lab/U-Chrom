@@ -4,6 +4,9 @@ import {
   addPane,
   addPinnedPane,
   defaultWorkspace,
+  followsNewDefault,
+  gridSizes,
+  MAIN_3D,
   workspaceOf,
   dropUnknownPins,
   parseWorkspace,
@@ -52,6 +55,36 @@ describe('3-D side panels follow the active pane', () => {
     // unknown active id → first pane
     expect(activePaneOf({ ...ws, activePane: 'nope' })?.id).toBe('P1')
     expect(show3dPanels(addPane(ws, 'genome'))).toBe(false) // the new pane is active
+  })
+})
+
+describe('default grid', () => {
+  it('gives the 3-D view the larger column and row', () => {
+    const ws = defaultWorkspace({ hasCoords: true, hasEmbeddings: false, hasTracks: false })
+    expect(ws.panes.map((p) => p.type)).toEqual(['3d', 'genome', 'stats'])
+    const g = gridSizes(ws)
+    expect(g.cols[0]).toBeCloseTo(MAIN_3D.col)
+    expect(g.rows[0]).toBeCloseTo(MAIN_3D.row)
+    expect(g.cols.reduce((a, b) => a + b, 0)).toBeCloseTo(1)
+    // without 3-D coordinates the views share the grid equally
+    const no3d = defaultWorkspace({ hasCoords: false, hasEmbeddings: true, hasTracks: true })
+    expect(gridSizes(no3d).cols.every((c, _, a) => Math.abs(c - a[0]) < 1e-9)).toBe(true)
+  })
+})
+
+describe('saved layouts and a newer default', () => {
+  it('a layout with its default views gives way to a new default; one with views added stays', () => {
+    const before = defaultWorkspace({ hasCoords: true, hasEmbeddings: false, hasTracks: false })
+    const after = defaultWorkspace({ hasCoords: true, hasEmbeddings: true, hasTracks: false })
+    expect(after.panes.map((p) => p.type)).toContain('embedding')
+    expect(before.panes.map((p) => p.type)).not.toContain('embedding')
+    const touched = { ...before, activePane: before.panes[1].id }            // a pane picked: views unchanged
+    expect(followsNewDefault(touched, after)).toBe(true)
+    expect(followsNewDefault(addPane(before, 'genome'), after)).toBe(false) // views of the user's own
+    expect(followsNewDefault(touched, before)).toBe(false)                  // the default did not change
+    const { basis: _, ...legacy } = touched                                  // saved before basis: kept
+    expect(followsNewDefault(legacy, after)).toBe(false)
+    expect(parseWorkspace(JSON.parse(JSON.stringify(touched)))?.basis).toBe(before.basis)
   })
 })
 

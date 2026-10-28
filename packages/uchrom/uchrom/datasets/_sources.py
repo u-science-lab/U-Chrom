@@ -231,6 +231,19 @@ def _tan2018_files() -> list[tuple[str, str]]:
     return out
 
 
+
+def _spacea_library(library: str, sections: str, runs: list) -> dict:
+    """Registry entry of a SpaceA library (GSA CRA038845): runs = [(run, r1 md5, r2 md5, size MB)]."""
+    files, md5 = [], {}
+    for run, m1, m2, _ in runs:
+        for r, m in (("r1", m1), ("r2", m2)):
+            local = f"spacea_ma2026/raw/{run}/{run}_{r}.fastq.gz"
+            files.append((local, f"https://download.cncb.ac.cn/gsa6/CRA038845/{run}/{run}_{r}.fastq.gz"))
+            md5[local] = m
+    return {"files": files, "md5": md5, "size_mb": sum(x[3] for x in runs), "default": False,
+            "description": f"Ma 2026 SpaceA mouse embryo, library {library} ({sections}): fastq of runs "
+                           f"{', '.join(x[0] for x in runs)} (GSA CRA038845)"}
+
 DATASETS = {
     "takei": {
         "filename": "4DNFIHF3JCBY.csv",
@@ -698,6 +711,38 @@ DATASETS = {
         "default": False,
         "description": "Quinodoz 2018 SPRITE mouse ES cells: the authors' clusters, MAPQ >= 10 and >= 30 (GEO GSE114242)",
     },
+    # Ma et al. 2026 (Dev Cell, doi:10.1016/j.devcel.2026.09.004) SpaceA, spatial SPRITE of mouse embryo sections (GSA
+    # CRA038845, academic use): the fastq of every run, one entry per library (a library holds one section or two told
+    # apart by their DPM tag; its runs are sequencing runs of it), reprocessed as Slurm jobs with the authors' pipeline
+    # into SPRITE clusters per spot (apps/atlas/recipes/spacea_ma2026/slurm/; runs.tsv, samples.tsv).  GSA closes long
+    # transfers: the recipe's fetch.sbatch resumes them (wget -c).
+    "ma2026_spacea_c6": _spacea_library('C6', 'E13.5 section C6', [
+        ('CRR2725644', 'a2290c3529708085737d98769b944001', '964eb350ef56d13920c3244ae7d6fe09', 11506),
+        ('CRR2725645', '4175a102fe40b98caebe01604bd87cd7', 'ae14b4ad993ffcfa5b990a32ff8d2cff', 77054),
+        ('CRR2725646', 'd91a37809bf9e66dc986be065e7fa218', '786a772132a204530298af2c6237bed8', 289131),
+    ]),
+    "ma2026_spacea_l1l2": _spacea_library('L1L2', 'E11.5 sections L1 + L2', [
+        ('CRR2725632', 'da487d3e64ae63696947d9e92d5d982b', '5952d41fcf83d3bb3afdaf2fcce37711', 18815),
+        ('CRR2725633', '59153e285f80c8f76f4d68e79da77bb1', 'd00c896640d9e14eb04ab7c52c191600', 217341),
+        ('CRR2725634', '36287716318500fef10dc796fcffd609', 'd4714126a8149a2bf8938b3247e3e369', 287454),
+    ]),
+    "ma2026_spacea_l5l6": _spacea_library('L5L6', 'E12.5 sections L5 + L6', [
+        ('CRR2725635', '29203675a51f046c20a1c077dafeaad2', '214d33573360cc92a6305ed5ec84075c', 15866),
+        ('CRR2725636', '1a383c0e716aedd1c2183b7651b91296', 'c01e01c04fba441f3dab85bdaa1a284e', 70930),
+        ('CRR2725637', '192d8656af26f953f87e48fe4b2d1cfb', '27c1840d4152910dfcc8be33030721f8', 286388),
+    ]),
+    "ma2026_spacea_c1c4": _spacea_library('C1C4', 'E13.5 sections C1 + C4', [
+        ('CRR2725638', '7a2b675294cdf2ec2d4c762555339590', 'f9f5e9023d9bc83a90a0a03e420da92d', 8450),
+        ('CRR2725639', '12d593f43837a9fa1fc90fb79b4492cc', 'c270fcdd5899bcb211202144b3ee6d36', 84097),
+        ('CRR2725640', '9d2f518ef79dd50ad84a407f9591c69f', '56e107b6f132bc604a0f2025e70784e9', 11097),
+        ('CRR2725641', 'f2c7ea3a2da497c9229af0a7eea89408', 'c9e075106cf7ab118df73c9e8b71188f', 95094),
+        ('CRR2725642', 'bdadfe1f07f92cae9aa640c06bcf1cb1', 'b41a06a242afe93d4a90e4d8efac761e', 412790),
+        ('CRR2725643', 'b42948360ec84764374ff019e60604df', '14e87b234ea53ff75e3932f467c4187e', 346384),
+    ]),
+    "ma2026_spacea_f5f6": _spacea_library('F5F6', 'E14.5 sections F5 + F6', [
+        ('CRR2725647', '0b017e165de9e9f0768bcfc007a8550e', '58dacd42ad6925a043cc5edcb7e6ce90', 34214),
+        ('CRR2725648', 'a6eba729987edb4499cb9c6c28f7c866', '2d3fd466bf1edfeda07c0b02aed47013', 417786),
+    ]),
     "tan2018_gm12878": {
         "files": _tan2018_files,
         "size_mb": 700,

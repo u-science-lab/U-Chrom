@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { autoRange, defaultColorScale, effectiveRange, scaleColor } from './colormaps'
-import { binAt, decodeMatrix, matrixPixels, matrixViewport, quantile, scaleFor, zoomMatrixView } from './matrix'
+import { binAt, decodeMatrix, matrixPixels, matrixViewport, quantile, scaleFor, zoomMatrixView, tileLoci } from './matrix'
 
 function encode(header: object, data: number[]): ArrayBuffer {
   let json = new TextEncoder().encode(JSON.stringify(header))
@@ -93,5 +93,18 @@ describe('square matrix view', () => {
     expect(v.xStart + 100 * v.bpPerPx).toBeCloseTo(200)
     expect(v.yStart + 50 * v.bpPerPx).toBeCloseTo(350)
     expect(v.bpPerPx).toBeCloseTo(1)
+  })
+})
+
+
+describe('tileLoci', () => {
+  it('widens sparse loci to the next one, keeps far gaps and contiguous bins', () => {
+    // genome-wide tracing: 25 kb probes 1 Mb apart
+    expect(tileLoci([0, 1e6, 2e6], [25e3, 1.025e6, 2.025e6])).toEqual([1e6, 2e6, 3e6])
+    // two regions of 30 kb segments 7 Mb apart: the gap between them stays empty
+    const s = [0, 30e3, 60e3, 7.06e6, 7.09e6]
+    expect(tileLoci(s, s.map((x) => x + 30e3))).toEqual([30e3, 60e3, 90e3, 7.09e6, 7.12e6])
+    // contiguous bins are unchanged
+    expect(tileLoci([0, 10, 20], [10, 20, 30])).toEqual([10, 20, 30])
   })
 })

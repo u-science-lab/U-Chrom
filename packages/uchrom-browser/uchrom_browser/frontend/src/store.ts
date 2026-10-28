@@ -7,7 +7,7 @@ import { loadSidebars, saveSidebars, type Side, type Sidebars } from './sidebars
 import { applyTheme, loadThemeChoice, resolveTheme, saveThemeChoice, systemPrefersDark, type Palette, type ThemeChoice } from './theme'
 import { isPointPick } from './types'
 import type { Locus } from './genome'
-import { addPinnedPane, addTracePane, defaultWorkspace, dropGroupScope, paneSignature, parseWorkspaces, type DataKind, type WorkspaceState } from './workspace'
+import { addPinnedPane, addTracePane, defaultWorkspace, dropGroupScope, followsNewDefault, paneSignature, parseWorkspaces, type DataKind, type WorkspaceState } from './workspace'
 import type { CellField, CellInfo, CellValue, ColorMode, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo, PointSet } from './types'
 
 let nextId = 1
@@ -76,14 +76,40 @@ export function hasCoords(ds: Pick<DatasetSummary, 'has_coords' | 'n_spots'> | u
  */
 export function defaultCategoryField(ds: Pick<DatasetSummary, 'cell_fields'> | undefined): CellField | null {
   const cats = (ds?.cell_fields ?? []).filter((f) => f.kind === 'category')
-  return cats.find((f) => f.name === 'cell_type') ?? cats.find((f) => /type|cluster/i.test(f.name)) ?? null
+  return cats.find((f) => f.name === 'cell_type') ?? cats.find((f) => /type|cluster/i.test(f.name))
+    ?? cats.find((f) => /leiden|louvain/i.test(f.name)) ?? null
 }
 
-/** Initial view of a dataset: coloured by its cell type when it has one. */
-export function initialView(ds: DatasetSummary): DatasetView {
-  const f = defaultCategoryField(ds)
-  return f ? { ...DEFAULT_VIEW, overviewColor: 'field', cellField: f.name } : DEFAULT_VIEW
+/** A cell field that only repeats where the cell is (centroids, x / y / z): not worth colouring by. */
+export const isPositionField = (name: string) => /centroid/i.test(name) || /^(spatial_)?[xyz](_(um|nm|mm|px|pixel|global|local))?$/i.test(name)
+
+/** The field a group of cell fields is coloured by when it is picked: the first that is not a position. */
+export function defaultFieldOf<F extends Pick<CellField, 'name'>>(fields: readonly F[]): F | undefined {
+  return fields.find((f) => !isPositionField(f.name)) ?? fields[0]
 }
+
+/** Many cells without 3-D chromatin: a colour per cell only paints the dots, a property says more. */
+const MANY_CELLS = 200
+
+/**
+ * Initial view of a dataset: coloured by its cell type when it has one; else, for many cells without 3-D
+ * chromatin (spatial spots, scHi-C), by their first numeric property.
+ */
+export function initialView(ds: DatasetSummary): DatasetView {
+  // single-cell structures in one frame: the other cells hidden around the focused one (setCells focuses the first)
+  const base = ds.cells_overlap ? { ...DEFAULT_VIEW, contextOpacity: 0 } : DEFAULT_VIEW
+  const f = defaultCategoryField(ds)
+  if (f) return { ...base, overviewColor: 'field', cellField: f.name }
+  if (!hasCoords(ds) && ds.n_cells > MANY_CELLS) {
+    const p = defaultFieldOf((ds.cell_fields ?? []).filter((x) => x.kind === 'numeric' && x.group === 'cell'))
+    if (p) return { ...base, overviewColor: 'field', cellField: p.name }
+  }
+  return base
+}
+
+/** Datasets whose first cell was focused on load (DatasetSummary.cells_overlap: stacked structures show nothing,
+ *  so the views open on one cell; the cell list and the embedding pick another).  Once per dataset and session. */
+const autoFocused = new Set<string>()
 
 /** Key of a cached cell-field vector. */
 export const fieldKey = (datasetId: string, field: string) => `${datasetId}\u0000${field}`
@@ -180,6 +206,8 @@ export interface AppState {
   workspaceTouched: boolean
   /** show dataset `owner`'s layout: its saved one, else the default for its data */
   ensureDefaultWorkspace(kind: boolean | DataKind, owner?: string | null): void
+  /** back to the default views of the dataset (its saved layout forgotten) */
+  resetWorkspace(kind: boolean | DataKind): void
   /** replace the workspace (used by the pane actions); saves it for its dataset */
   setWorkspace(update: (ws: WorkspaceState) => WorkspaceState): void
   /** open `cell` in a new view pinned to it (3-D, or Genome without coordinates) */
@@ -439,13 +467,22 @@ export const useStore = create<AppState>((set, get) => {
   ensureDefaultWorkspace(kind, owner = get().workspaceOwner) {
     const s = get()
     if (owner !== s.workspaceOwner) {
+      const fresh = defaultWorkspace(kind)
       const saved = owner ? s.savedWorkspaces[owner] : undefined
-      set({ workspaceOwner: owner, workspace: saved ?? defaultWorkspace(kind), workspaceTouched: !!saved })
+      const keep = saved && !followsNewDefault(saved, fresh) ? saved : undefined
+      set({ workspaceOwner: owner, workspace: keep ?? fresh, workspaceTouched: !!keep })
       return
     }
     if (s.workspaceTouched) return
     const ws = defaultWorkspace(kind)
     if (paneSignature(ws) !== paneSignature(s.workspace)) set({ workspace: ws })
+  },
+  resetWorkspace(kind) {
+    const s = get()
+    const savedWorkspaces = { ...s.savedWorkspaces }
+    if (s.workspaceOwner) delete savedWorkspaces[s.workspaceOwner]
+    saveWorkspaces(savedWorkspaces)
+    set({ workspace: defaultWorkspace(kind), workspaceTouched: false, savedWorkspaces })
   },
   setWorkspace(update) {
     const s = get()
@@ -471,6 +508,12 @@ export const useStore = create<AppState>((set, get) => {
   },
   setCells(datasetId, cells) {
     set({ cells: { ...get().cells, [datasetId]: cells } })
+    const ds = get().datasets.find((d) => d.id === datasetId)
+    const view = get().views[datasetId]
+    if (ds?.cells_overlap && cells.length && view && !view.focusCell && !view.focusGroup && !autoFocused.has(datasetId)) {
+      autoFocused.add(datasetId)
+      set({ views: { ...get().views, [datasetId]: { ...view, focusCell: cells[0].cell_id } } })
+    }
   },
   focusCell(cellId) {
     const s = get()

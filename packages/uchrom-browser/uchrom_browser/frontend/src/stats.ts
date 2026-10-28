@@ -31,6 +31,17 @@ export function histogram(values: Iterable<unknown>, nbins = 30, range?: [number
   return { edges, counts }
 }
 
+/** Bins of whole width centred on the integers when every value is one (counts, channel numbers): `nbins` equal
+ * bins over [min, max] would put two integers into some bins and none into others.  Null for other values. */
+export function integerBins(values: readonly number[], nbins: number): { nbins: number; range: [number, number] } | null {
+  if (!values.length || !values.every(Number.isInteger)) return null
+  const lo = Math.min(...values)
+  const span = Math.max(...values) - lo + 1
+  const w = Math.ceil(span / Math.max(1, Math.floor(nbins)))
+  const n = Math.ceil(span / w)
+  return { nbins: n, range: [lo - 0.5, lo - 0.5 + n * w] }
+}
+
 /** Linear map [d0, d1] → [r0, r1]. */
 export function linear(d0: number, d1: number, r0: number, r1: number): (v: number) => number {
   const k = d1 !== d0 ? (r1 - r0) / (d1 - d0) : 0

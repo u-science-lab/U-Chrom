@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { decodeGeometry } from '../api'
 import { encodeGeometry } from '../testing'
 import { subsetGeometry } from './partition'
-import { explodeGeometry, explodeOffsets } from './explode'
+import { explodeGeometry, explodeOffsets, tileGeometry, tileShifts } from './explode'
 
 /**
  * Two cells.  Cell a: chr1 = 2 spots around (-1, 0, 0), chr2 = 2 spots around (3, 0, 0)
@@ -74,5 +74,22 @@ describe('separated chromosomes', () => {
     }
     const g = decodeGeometry(encodeGeometry(header, [0, 0, 0, NaN, NaN, NaN, 2, 0, 0], [0, 100, 200], [0, 3]))
     expect(explodeOffsets(g).get('\u0000t\u0000chr1')).toEqual([0, 0, 0])
+  })
+})
+
+
+describe('cells side by side', () => {
+  it('moves each cell rigidly so its centroid sits on a grid; subsets move with their cell', () => {
+    const g = geom()
+    const shifts = tileShifts(g)
+    const out = pts(tileGeometry(g, shifts).positions)
+    // cell a: centroid (1, 0, 0) -> slot 0 (0, 0, 0); its shape kept
+    expect(out.slice(0, 4)).toEqual([[-3, 0, 0], [-1, 0, 0], [2, -1, 0], [2, 1, 0]])
+    // cell b: one spot, on slot 1 (x = step), same row
+    expect(out[4][1]).toBe(0)
+    expect(out[4][0]).toBeGreaterThan(0)
+    // a subset (cell a's chr2) moves as in the whole geometry
+    const sub = subsetGeometry(g, (s) => s.trace_id === 'a2')
+    expect(pts(tileGeometry(sub, shifts).positions)).toEqual([[2, -1, 0], [2, 1, 0]])
   })
 })

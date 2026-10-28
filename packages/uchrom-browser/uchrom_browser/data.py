@@ -473,11 +473,49 @@ class Dataset:
             "tracks": self.track_names(),
             "contact_maps": self.contact_maps(),
             "intervals": self.interval_tables(),
+            "clusters": self.cluster_tables(),
             "cell_fields": self.cell_fields(),
             "embeddings": self.embeddings(),
             "point_sets": self.point_sets(),
             "spatial": self.spatial(),
+            "cells_overlap": self.cells_overlap(),
         }
+
+    def cells_overlap(self, n: int = 12) -> bool:
+        """Whether the cells' 3-D structures share one frame — each model centred on the origin (Dip-C, NucDynamics),
+        or each trace in an image crop of its own (ORCA) — so that a view of all cells stacks them: the centres of up
+        to ``n`` cells spread over the list lie closer to each other (median) than half a cell's radius (median
+        distance of its spots to its centre), or closer than a radius in x-y."""
+        if "cells_overlap" in self._cache:
+            return self._cache["cells_overlap"]
+        out = False
+        try:
+            has_cells = self.cd._has_cell_id() if self.backed else "cell_id" in self.cd.spots.columns
+            if self.cd.n_spots and self.cd.n_cells > 1 and has_cells:
+                cats = (list(self.cd._categories("cell_id")) if self.backed
+                        else list(self.cd.spots["cell_id"].astype("category").cat.categories))
+                pick = [cats[i] for i in np.unique(np.linspace(0, len(cats) - 1, min(n, len(cats))).astype(int))]
+                centres, radii = [], []
+                for cell in pick:
+                    xyz = np.asarray(self.cd.get_cell(cell, columns="coords").coords, dtype=float)
+                    xyz = xyz[np.isfinite(xyz).all(1)]
+                    if len(xyz) < 3:
+                        continue
+                    c = xyz.mean(0)
+                    centres.append(c)
+                    radii.append(float(np.median(np.linalg.norm(xyz - c, axis=1))))
+                if len(centres) >= 2:
+                    cen = np.asarray(centres)
+                    iu = np.triu_indices(len(cen), 1)
+                    d = np.linalg.norm(cen[:, None] - cen[None], axis=-1)[iu]
+                    dxy = np.linalg.norm(cen[:, None, :2] - cen[None, :, :2], axis=-1)[iu]
+                    # models centred on the origin, or traces in crops of their own (ORCA: x, y local to each
+                    # trace's image crop, z the depth of the stack — Hafner 2023, Hung 2024)
+                    out = bool(np.median(d) < 0.5 * np.median(radii) or np.median(dxy) < np.median(radii))
+        except Exception:                       # a store this cannot read: the default view as before
+            out = False
+        self._cache["cells_overlap"] = out
+        return out
 
     def traces(self, chrom: Optional[str] = None, offset: int = 0,
                limit: int = 500) -> Dict[str, Any]:
@@ -801,12 +839,46 @@ class Dataset:
                        for r in sorted(counts.index, key=natural_chrom_key)]
             unit = rec.get("unit")
             y_axis = rec.get("y_axis") or ("down" if unit in ("px", "pixel", "spot") else "up")
+            in_coords = rec.get("in_coords_frame")
+            if not isinstance(in_coords, bool):
+                in_coords = self._positions_in_coords(pos[ok])
             out.append({"key": str(key), "unit": unit, "frame": rec.get("frame"), "y_axis": y_axis,
                         "status": rec.get("status"), "source": rec.get("source"),
-                        "regions": regions, "n_images": sum(1 for r in regions if r["image"])})
+                        "regions": regions, "n_images": sum(1 for r in regions if r["image"]),
+                        "in_coords_frame": bool(in_coords)})
         out.sort(key=lambda d: -d["n_images"])
         self._cache["spatial"] = out
         return out
+
+    def _positions_in_coords(self, pos: pd.DataFrame, n: int = 12) -> bool:
+        """Whether cell positions are the cells' places in the 3-D coordinates (a Spatial view then repeats the 3-D
+        one): for up to ``n`` cells, the position lies within a cell's radius of the centre of its spots (x, y)."""
+        try:
+            if not (self.cd.n_spots and len(pos)):
+                return False
+            has_cells = self.cd._has_cell_id() if self.backed else "cell_id" in self.cd.spots.columns
+            if not has_cells:
+                return False
+            cats = (list(self.cd._categories("cell_id")) if self.backed
+                    else list(self.cd.spots["cell_id"].astype("category").cat.categories))
+            by_name = {str(c): c for c in cats}
+            names = [c for c in pos.index.astype(str) if c in by_name]
+            if not names:
+                return False
+            pick = [names[i] for i in np.unique(np.linspace(0, len(names) - 1, min(n, len(names))).astype(int))]
+            near = []
+            for name in pick:
+                xyz = np.asarray(self.cd.get_cell(by_name[name], columns="coords").coords, dtype=float)
+                xyz = xyz[np.isfinite(xyz).all(1)]
+                if len(xyz) < 3:
+                    continue
+                c = xyz.mean(0)
+                radius = float(np.median(np.linalg.norm(xyz - c, axis=1))) or 1.0
+                p = pos.loc[pos.index.astype(str) == name, ["x", "y"]].to_numpy(float)[0]
+                near.append(float(np.linalg.norm(p - c[:2])) < 2 * radius)
+            return bool(near) and float(np.mean(near)) >= 0.75
+        except Exception:                       # unreadable: treat the positions as their own frame
+            return False
 
     def spatial_points(self, key: str, region: Optional[str] = None) -> Dict[str, Any]:
         info = next((s for s in self.spatial() if s["key"] == key), None)
@@ -1114,6 +1186,59 @@ class Dataset:
                 out.append({"key": str(key), "n": int(len(val)), "kind": kind})
                 seen.add(key)
         return out
+
+    def cluster_tables(self) -> List[Dict[str, Any]]:
+        """The multi-way contact tables (``cd.clusters``): key, counts, per cell or bulk, assay, the table a
+        filtered one was made from."""
+        out = []
+        for key, t in (getattr(self.cd, "clusters", None) or {}).items():
+            attrs = t.attrs or {}
+            out.append({"key": str(key), "n_clusters": int(t.n_clusters), "n_fragments": int(t.n_members),
+                        "per_cell": t.cells is not None, "assay": attrs.get("assay"),
+                        "filtered_from": attrs.get("filtered_from")})
+        return out
+
+    def clusters(self, key: str, chrom: str, start: int, end: int, cell_id: Optional[str] = None,
+                 group: Optional[str] = None, min_size: int = 2, max_size: Optional[int] = None,
+                 limit: int = 400) -> Dict[str, Any]:
+        """The clusters with fragments in ``chrom:start-end`` (of one cell, a group's cells or all), as a cluster
+        track draws them: per cluster its size (all chromosomes), fragments on this chromosome, their span and
+        the fragments in the window.  Beyond ``limit`` clusters, those with the most fragments in the window are
+        kept (``n_clusters`` counts them all); the rows go by span start."""
+        tables = getattr(self.cd, "clusters", None) or {}
+        if key not in tables:
+            raise KeyError(key)
+        if str(chrom) == GENOME:
+            raise ValueError("clusters are drawn in a window of one chromosome")
+        t = tables[key]
+        cells = None
+        if t.cells is not None:
+            if cell_id is not None:
+                cells = [cell_id]
+            elif group is not None and group != ALL_CELLS:
+                cells = self.group_cells(group)
+        f = t.region(str(chrom), int(start), int(end), min_size=min_size, max_size=max_size, cells=cells)
+        if not len(f):
+            return {"key": key, "chrom": str(chrom), "start": int(start), "end": int(end), "n_clusters": 0,
+                    "clusters": []}
+        g = f.groupby("cluster", sort=False)
+        per = g.agg(n=("start", "size"), size=("size", "first"), chrom_size=("chrom_size", "first"),
+                    span_start=("span_start", "first"), span_end=("span_end", "first"))
+        if "cell_id" in f:
+            per["cell"] = g["cell_id"].first().astype(str)
+        n_all = len(per)
+        if n_all > limit:
+            per = per.sort_values(["n", "span_start"], ascending=[False, True], kind="stable").head(limit)
+        per = per.sort_values(["span_start", "span_end"], kind="stable")
+        frags = {c: list(zip(s.tolist(), e.tolist())) for c, (s, e) in
+                 ((c, (d["start"], d["end"])) for c, d in f[f["cluster"].isin(per.index)].groupby("cluster"))}
+        return {
+            "key": key, "chrom": str(chrom), "start": int(start), "end": int(end), "n_clusters": int(n_all),
+            "clusters": [{"id": int(c), "cell": r.get("cell"), "size": int(r["size"]),
+                          "chrom_size": int(r["chrom_size"]), "span": [int(r["span_start"]), int(r["span_end"])],
+                          "fragments": [[int(a), int(b)] for a, b in frags[c]]}
+                         for c, r in per.iterrows()],
+        }
 
     def store_tree(self) -> Dict[str, Any]:
         """The store's on-disk structure (``.chromdata.zarr`` / ``.cdz``, local or at a URL; see

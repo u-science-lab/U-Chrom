@@ -1,6 +1,6 @@
 import { WAKE_HINT, useActivity } from './activity'
-import { decodeMatrix, type MatrixData } from './matrix'
-import type { AtlasResponse, FileListing, FilePlace, IntervalTable, RgStats, ScalingStats, TrackData, CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, SpatialPoints, StoreNode, TracePage } from './types'
+import { decodeMatrix, tileLoci, type MatrixData } from './matrix'
+import type { AtlasResponse, CellDetails, CellPage, CellValues, ClusterWindow, DatasetSummary, Embedding, FileListing, FilePlace, Geometry, GeometryHeader, IntervalTable, LayerFilter, PointSet, PointSetPayload, RgStats, ScalingStats, SpatialPoints, StoreNode, TracePage, TrackData } from './types'
 
 async function fetchChecked(url: string, init?: RequestInit): Promise<Response> {
   const act = useActivity.getState()
@@ -289,6 +289,17 @@ export async function fetchIntervals(id: string, key: string, r: RegionQuery): P
   return (await request(`${ds(id)}/intervals/${encodeURIComponent(key)}${query({ chrom: r.chrom, start: r.start, end: r.end })}`)).json()
 }
 
+/** The clusters with fragments in a window: of one cell, a group's cells or all; size bounds on all fragments. */
+export async function fetchClusters(
+  id: string,
+  key: string,
+  r: RegionQuery,
+  opts: { cell?: string | null; group?: string | null; minSize?: number | null; maxSize?: number | null; limit?: number | null } = {},
+): Promise<ClusterWindow> {
+  const q = query({ chrom: r.chrom, start: r.start, end: r.end, cell: opts.cell, group: opts.group, min_size: opts.minSize, max_size: opts.maxSize, limit: opts.limit })
+  return (await request(`${ds(id)}/clusters/${encodeURIComponent(key)}${q}`)).json()
+}
+
 export async function fetchContacts(
   id: string,
   key: string,
@@ -308,7 +319,8 @@ export async function fetchDistance(
 ): Promise<MatrixData> {
   const group = await groupParam(id, opts.group)
   const q = query({ chrom: r.chrom, start: r.start, end: r.end, cell_id: opts.cellId, trace_id: opts.traceId, stat: opts.stat, threshold: opts.threshold, group })
-  return decodeMatrix(await (await request(`${ds(id)}/distance${q}`)).arrayBuffer())
+  const m = decodeMatrix(await (await request(`${ds(id)}/distance${q}`)).arrayBuffer())
+  return { ...m, header: { ...m.header, bin_ends: tileLoci(m.header.bin_starts, m.header.bin_ends) } }
 }
 
 export async function fetchRg(id: string, opts: { chrom?: string | null; cellId?: string | null; group?: string | null } = {}): Promise<RgStats> {
