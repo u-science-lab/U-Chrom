@@ -1,0 +1,26 @@
+##FOF-CT_version=v0.1,,,
+##Table_namespace=4dn_FOF-CT_trace,,,
+##XYZ_unit=micron,,,
+##intensity_unit=a.u.,,,
+#^FOV: This field records the field of view where this trace was detected.,,,
+#^LocusX: This records the x position of the trace in the FOV,,,
+#^LocusY: This records the y position of the trace in the FOV,,,
+"#additional_tables: 4dn_FOF-CT_core, 4dn_FOF-CT_quality, 4dn_FOF-CT_cell",,,
+##columns=(Trace_ID, FOV, LocusX, LocusY)
+49,1,863,1538
+50,1,866,1412
+53,1,878,1514
+54,1,881,1430
+55,1,890,1589
+57,1,902,1433
+64,1,974,1421
+89,1,1205,1256
+108,1,1451,731
+109,1,1457,764
+115,1,1541,500
+118,1,1571,524
+137,1,869,1329
+138,1,885,1339
+146,1,913,1394
+209,2,1007,1214
+210,2,1013,1238

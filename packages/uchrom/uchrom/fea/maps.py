@@ -355,6 +355,76 @@ def rebin_map(cd, contacts: Optional[str] = None, *, resolution: int, anchor: in
     return target if copy else str(out)
 
 
+def rebin_scool(cd, contacts: str = "per_cell", *, resolution: int, out: Union[str, os.PathLike],
+                key_added: Optional[str] = AUTO):
+    """The linked per-cell maps (``.scool``) summed into coarser bins, written as a new ``.scool`` and linked.
+
+    Single-cell maps are kept at a fine resolution (5-10 kb) to be looked at; an embedding of the cells by their
+    maps (:func:`uchrom.emb.embed_contacts`) wants them at about 1 Mb.  The counts of each cell's bins are summed
+    into the bin of the new grid (edges at multiples of ``resolution`` and at the chromosome ends) that holds their
+    start; raw counts, no balancing (as the per-cell maps).
+
+    Parameters
+    ----------
+    cd
+        ``ChromData`` with the per-cell maps linked (``cd.link_scool``) or embedded.
+    contacts
+        Key of the linked maps.
+    resolution
+        Bin size of the new maps (bp), a multiple of the maps' own.
+    out
+        Where to write the ``.scool`` (it is linked by this path; give one next to the store for a relative link).
+    key_added
+        Key of the new maps (default ``"<contacts>_<resolution>"``, e.g. ``"per_cell_1mb"``; ``None``: not linked).
+
+    Returns
+    -------
+    The path of the new ``.scool``.
+    """
+    import cooler
+
+    resolution = int(resolution)
+    record = (cd.uns.get("linked_scool") or {}).get(contacts)
+    if record is None:
+        raise KeyError(f"no per-cell maps linked under {contacts!r}")
+    path = str(cd.linked_scool_path(contacts))
+    cells = list(cooler.fileops.list_scool_cells(path))
+    first = cooler.Cooler(f"{path}::{cells[0]}")
+    if first.binsize and resolution % int(first.binsize):
+        raise ValueError(f"resolution {resolution} is not a multiple of the maps' {first.binsize} bp")
+    sizes = first.chromsizes
+    starts = [np.arange(0, int(n), resolution, dtype=np.int64) for n in sizes]
+    coarse = pd.DataFrame({"chrom": np.repeat(sizes.index.to_numpy(), [len(s) for s in starts]),
+                           "start": np.concatenate(starts)})
+    coarse["end"] = np.minimum(coarse["start"] + resolution, coarse["chrom"].map(sizes).to_numpy())
+    offset = dict(zip(sizes.index, np.r_[0, np.cumsum([len(s) for s in starts])[:-1]]))
+    fine = first.bins()[["chrom", "start"]][:]
+    to_coarse = (fine["chrom"].astype(str).map(offset).to_numpy(np.int64)
+                 + fine["start"].to_numpy(np.int64) // resolution)
+    maps = {}
+    for name in cells:
+        px = cooler.Cooler(f"{path}::{name}").pixels()[:]
+        b1, b2 = to_coarse[px["bin1_id"].to_numpy()], to_coarse[px["bin2_id"].to_numpy()]
+        lo, hi = np.minimum(b1, b2), np.maximum(b1, b2)
+        summed = (pd.DataFrame({"bin1_id": lo, "bin2_id": hi, "count": px["count"].to_numpy()})
+                  .groupby(["bin1_id", "bin2_id"], sort=True, as_index=False)["count"].sum())
+        maps[name.rsplit("/", 1)[-1]] = summed
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cooler.create_scool(str(out), coarse, maps, ordered=True, symmetric_upper=True,
+                        dtypes={"count": np.int32}, mode="w")
+    if key_added == AUTO:
+        key_added = f"{contacts}_{_resolution_label(resolution)}"
+    if key_added is not None:
+        src = cd._links_from()                      # next to the store: a relative link, moved with it
+        here = not isinstance(src, str) and src is not None and out.resolve().parent == Path(src).resolve().parent
+        cd.link_scool(out.name if here else str(out.resolve()), key=key_added, cell_name=record.get("cell_name", "cell_id"),
+                      genome_assembly=record.get("genome_assembly"), bin_size=resolution,
+                      label=f"{record.get('label') or contacts}, rebinned to {_resolution_label(resolution, ' ')}",
+                      rebinned_from=contacts)
+    return str(out)
+
+
 #: pixels thinned per chunk by :func:`thin_map`
 THIN_CHUNK = 5_000_000
 

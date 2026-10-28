@@ -13,9 +13,9 @@ The analysis library (reconstruction, structures, features, embeddings) is ``uch
 
 from ._version import __version__
 from .settings import settings
-from .cdata import ChromData
+from .cdata import ChromData, read_fofct_table
 from .clusters import ClusterTable
 from .results import ResultRecord, ResultsStore
 from .project import UChromProject
 
-__all__ = ["ChromData", "ClusterTable", "ResultRecord", "ResultsStore", "UChromProject", "settings", "__version__"]
+__all__ = ["ChromData", "ClusterTable", "ResultRecord", "ResultsStore", "UChromProject", "read_fofct_table", "settings", "__version__"]

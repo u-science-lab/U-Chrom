@@ -1,0 +1,27 @@
+##FOF-CT_version=v0.1,,,,,,,,,,,,
+##Table_namespace=4dn_FOF-CT_cell,,,,,,,,,,,,
+##genome_assembly=dm6,,,,,,,,,,,,
+##XYZ_unit=micron,,,,,,,,,,,,
+#Software_Title: ChrTracer3,,,,,,,,,,,,
+#Software_Type: SpotLoc+Tracing,,,,,,,,,,,,
+"#Software_Authors: Mateo, LJ; Sinnott-Armstrong, N; Boettiger, AN",,,,,,,,,,,,
+"#Software_Description: ChrTracer3 software was developed for analysis of raw DNA labeled images. As an input, it takes an.xlsx table containing information and folder names of the DNA experiment. As an output, it returns tab delimited.txt ﬁles with drift-corrected x, y, z positions for all labeled barcodes. These can be used directly to calculate the nm scale distances between all pairs of labeled loci. The current version of the software as of this writing is ChrTracer3.",,,,,,,,,,,,
+#Software_Repository: https://github.com/BoettigerLab/ORCA-public,,,,,,,,,,,,
+#Software_PreferredCitationID: https://doi.org/10.1038/s41596-020-00478-x,,,,,,,,,,,,
+#lab_name: Boettiger,,,,,,,,,,,,
+#experimenter_name: Leslie Mateo,,,,,,,,,,,,
+#experimenter_contact: boettiger@stanford.edu,,,,,,,,,,,,
+"#additional_tables: 4dn_FOF-CT_quality, 4dn_FOF-CT_core",,,,,,,,,,,,
+##columns=(Cell_ID,Embryo_ID,nascentRNA_AbdA,nascentRNA_AbdB,nascentRNA_AbdA_x,nascentRNA_AbdA_y,nascentRNA_AbdB_x,nascentRNA_AbdB_y,embryo_x,embryo_y,stage_x,stage_y,Genotype)
+22123,7,29566,57312,8.65881117874803,6.53676506554725,9.87968720511501,4.16655843020488,1726.5375,412.0525,24507.5375,5923.0525,+/+
+22125,7,29473,16301,11.7753396501733,6.40997882811357,-0.999999999997609,-0.999999999762332,1819.5375,415.0525,24600.5375,5926.0525,+/+
+22127,7,29485,27170,5.61831400764328,1.30585915030987,13.3563015485471,7.56752748886516,1729.5375,418.0525,24510.5375,5929.0525,+/+
+22128,7,29485,27170,5.61831400764328,1.30585915030987,13.3563015485471,7.56752748886516,1729.5375,418.0525,24510.5375,5929.0525,+/+
+22129,7,18384,29046,13.9607694657527,21.9999671072137,8.52858577712017,7.25016939827335,1744.5375,421.0525,24525.5375,5932.0525,+/+
+22131,7,21398,9541,11.4544189145009,4.6826916924642,16.6619951736389,1.87541787732427,1786.5375,433.0525,24567.5375,5944.0525,+/+
+22133,7,17578,11163,10.3365718206703,5.50941753319394,7.07698679064297,3.52341151486683,1771.5375,436.0525,24552.5375,5947.0525,+/+
+22135,7,31744,18137,7.77191467704952,4.20755923808474,2.40317784556716,18.1203542456655,1735.5375,436.0525,24516.5375,5947.0525,+/+
+22137,7,10159,9183,9.00000000000002,6.34343327073476,11.1068216834617,3.16929887790357,1831.5375,439.0525,24612.5375,5950.0525,+/+
+22139,7,12049,34216,9.04466756731806,6.76167434739076,9.3041696865424,9.83488325738515,1648.5375,442.0525,24429.5375,5953.0525,+/+
+22141,7,20578,18137,10.6768402826135,3.4761717344264,11.319240422769,6.19306388970443,1726.5375,448.0525,24507.5375,5959.0525,+/+
+22143,7,26639,41478,20.7040152281478,19.2587544630716,2.90298892844508,6.91575607023239,1690.5375,448.0525,24471.5375,5959.0525,+/+

@@ -44,6 +44,12 @@ rebuilt when the loader's version changes; each checked to give what the tutoria
 | `takei2021_mesc_detections` | `takei2021_mesc/takei2021_mesc_detections.chromdata.zarr` | `seqfish`, `takei` | the raw DNA seqFISH+ detections of the same cells (replicate 1, 25 kb loci): 316,995 untraced spots, the authors' homolog call as `label` | tutorial `jie_aligner` |
 | `bintu_imr90`, `bintu_imr90_hg19` | `bintu_imr90/*.chromdata.zarr` | `bintu_imr90` | Bintu 2018 IMR90 chr21 tracing, 1,277 chromosomes × 65 segments of 30 kb, on hg38 (18.6–20.6 Mb) / on hg19 (20.0–21.95 Mb, to pair with Rao 2014) | tutorials `fish_imputation`, `bulk_reconstruction`, `gem_fish_reconstruction` |
 | `su2020_chr21` | `su2020_chr21/su2020_chr21.chromdata.zarr` + `.cool` | `su2020_chr21` | Su 2020 IMR90 chr21 tracing: 7,591 chromosome copies × 651 loci of 50 kb (hg38), genes per locus; the authors' Rao 2014 Hi-C in the same loci, linked (`rao2014`) | tutorials `tad_calling`, `compartment` |
+| `su2020_chr2` | `su2020_chr2/su2020_chr2.chromdata.zarr` + `.cool` | `su2020_chr2` | Su 2020 IMR90 chromosome 2 tracing: 3,029 copies × 935 loci of 50 kb (hg38); the authors' Rao 2014 Hi-C in the same loci, linked (`rao2014`) | — |
+| `su2020_chr21_cell_cycle` | `su2020_chr21_cell_cycle/su2020_chr21_cell_cycle.chromdata.zarr` | `su2020_chr21_cell_cycle` | Su 2020 IMR90 chr21 tracing, 4,558 copies × 651 loci, `traces["cell_cycle"]` | — |
+| `su2020_genome`, `su2020_genome_amanitin`, `su2020_genome_transcription` | `<name>/<name>.chromdata.zarr` | the same names | Su 2020 IMR90 genome-scale DNA-MERFISH, 1,041 loci (hg38), one trace per cell, chromosome and homolog: untreated (1,787 cells), after α-amanitin (4,102), with nascent transcription and distances to lamina / nucleoli / speckles (3,668; `spot_tracks`) | — |
+| `tan2021_cortex` | `tan2021_cortex/tan2021_cortex.chromdata.zarr` + `tan2021_cortex_5kb.scool` (2.0 GB + 663 MB) | `tan2021_cortex` | Tan 2021 Dip-C adult mouse cortex: 510 cells (P56 / P309 / P347) with the authors' cell types, 5 kb maps per cell (`per_cell`) and the first of the authors' five 20 kb structures of each cell (124 M particles, a trace per homolog; mm10) | — |
+| `takei2021_brain_4dn`, `liu2020_mina`, `hung2024_orca`, `huang2021_4dn` | `<name>/<name>.chromdata.zarr` | the same names (4DN FOF-CT) | Takei 2021 mouse cortex DNA seqFISH+ (2,762 cells, 1 Mb and 25 kb loci as traces `c1-` / `c2-`, cell types), Liu 2020 MINA of fetal liver (13,306 cells, chr19 with lamina / nucleolus distances, RNA per cell), Hung 2024 ORCA of Pitx1 in limb buds (103,820 traces), Huang 2021 Sox2 in mESC (8,364 traces, allele and transcription per trace) — see *4DN chromatin-tracing studies* | — |
+| `bintu2018_4dn`, `mateo2019_orca`, `hafner2023_orca`, `murphy2024_orca` | `<name>/<name>.chromdata.zarr` | the same names (4DN FOF-CT) | every experiment of a 4DN chromatin-tracing study in one object (`uchrom.io.read_4dn_tracing`; `cells`: `set`, `condition` = the set's 4DN description, `biosample`; the companion tables as `spot_tracks` / `traces` / `cells` columns) — see *4DN chromatin-tracing studies* | — |
 | `huang2021_sox2` | `huang2021_sox2/huang2021_sox2.chromdata.zarr` | `huang2021_sox2` | Huang 2021 mESC Sox2 tracing (SnapFISH-IMPUTE tables, `uchrom.io.read_snapfish`): 1,416 cells × 2 alleles × 41 loci of 5 kb, undetected loci as NaN | tutorial `fish_imputation` |
 | `rao2014_imr90_chr21` | `rao2014_imr90/rao2014_imr90_chr21.chromdata.zarr` | `rao2014_imr90_chr21` (built from GEO) | Rao 2014 IMR90 Hi-C chr21 at 5 kb (hg19, raw counts), the map linked as `bulk` | tutorials `bulk_reconstruction`, `gem_fish_reconstruction`, `hic_structures` |
 | `kim2020_scihic` | `kim2020_scihic/kim2020_scihic.chromdata.zarr` + `.scool` | `kim2020_scihic` | Kim 2020 sci-Hi-C, H1 ES + HFF: 1,931 cells with cell types, 500 kb maps per cell (linked `.scool`, key `per_cell`; the hg19 bin numbering checked) | tutorial `higashi_embedding` |
@@ -133,7 +139,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `nagano2017_dip/`: Nagano 2017 diploid serum mESC fend pairs (+ the `nagano2017_hap/` fends and chain) | 1.96 GB | fetch `nagano2017_dip_serum`; loader `nagano2017_dip_serum` | uchrom-reproducibility `supp_table3/sc_structures/snaphic_*.py` (SnapHiC's data) |
 | `yu2021_snaphic/`: SnapHiC paper source data (loops by number of cells; mESC reference loops) | 34 MB | fetch `yu2021_snaphic` | tutorial `sc_structures`; uchrom-reproducibility `supp_table3/sc_structures/snaphic_mesc.py` |
 | `snaphic/{mm10,hg19}_filter_regions.txt`: SnapHiC's excluded bins | 3.8 MB | fetch `snaphic_filter_regions` | `call_loops_snaphic(exclude=)`; tutorial `sc_structures`; uchrom-reproducibility `supp_table3/sc_structures/snaphic_*.py` |
-| `nagano2017_hap/`: Nagano 2017 haploid mESC scHi-C fend pairs + mm9 fends + chain | 1.39 GB (+5 GB streamed, 253 MB kept) | fetch `nagano2017_hap` | an unpublished benchmark (step 1) |
+| `nagano2017_hap/`: Nagano 2017 haploid mESC scHi-C fend pairs + mm9 fends + chain | 1.39 GB (+5 GB streamed, 253 MB kept) | fetch `nagano2017_hap`; recipe `build_nagano2017_hap.py` (NucDynamics structures) | an unpublished benchmark (step 1); atlas store `nagano2017_hap` |
 | `takei2021_brain/`: Takei 2021 Science mouse cortex seqFISH+ tables | 597 MB | fetch `takei2021_brain` | an unpublished benchmark (brain imaging reference) |
 | `tan2021_cortex/`: Tan 2021 Dip-C adult cortex, 510 cells | 13 GB | fetch `tan2021_cortex` | an unpublished benchmark (brain Dip-C baseline) |
 | `tan2018_gm12878/`: Tan 2018 Dip-C GM12878, 17 cells | ~0.7 GB | fetch `tan2018_gm12878` | diploid EMber / NucDynamics validation |
@@ -567,6 +573,13 @@ brain cells).
 | `schicar_mouse_cortex` | 263 | `schicar_mop/schicar_mop.chromdata.zarr` | `build_schicar_mop.py` | `schicar_rna`, `schicar_dna`, `schicar_atac` |
 | `unic_human`, `unic_mouse` | 681 / 271 | `unic2025/<id>.chromdata.zarr` | `build_unic2025.py human`, `build_unic2025.py mouse` | `unic2025` |
 | `takei2025_cerebellum` | 2,051 | `takei2025_cerebellum/takei2025_cerebellum_rep1.chromdata.zarr` | `build_takei2025_cerebellum.py` | `takei2025_cerebellum` |
+| `bintu2018_4dn`, `mateo2019_orca`, `hafner2023_orca`, `murphy2024_orca`, `hung2024_orca`, `huang2021_4dn`, `liu2020_mina`, `takei2021_brain_4dn` | 40 / 151 / 151 / 131 / 456 / 6 / 49 / 87 | `<name>/<name>.chromdata.zarr` | loaders of the same names (`uchrom.datasets.load`; see *4DN chromatin-tracing studies*); Hafner / Hung with field-of-view positions; RNA embeddings by `derive_embeddings.py`: `liu2020_mina` `--rna-regex 'Gene_Expression_Counts_\d+' --leiden`, `takei2021_brain_4dn` `--rna-after nuc_volume` | the same names |
+| `su2020_chr2`, `su2020_chr21_cell_cycle`, `su2020_genome`, `su2020_genome_amanitin`, `su2020_genome_transcription` | 26 / 26 / 42 / 105 / 105 | `<name>/<name>.chromdata.zarr` | loaders of the same names; the atlas copy of `su2020_chr2` without its variable-bin Hi-C link | the same names |
+| `takei2021_mesc` | 5 | `takei2021_mesc/takei2021_mesc.chromdata.zarr` | loader `takei2021_mesc`, `derive_embeddings.py --rna-regex 'rna\..*' --leiden` | `takei`, `takei_tables` |
+| `liu2025_mop` | 270 | `liu2025_mop/liu2025_mop.chromdata.zarr` | `build_liu2025_mop.py`, `derive_embeddings.py --rna-after neuron_identity` | `liu2025_mop` |
+| `tan2021_cortex`, `nagano2017_dip_serum` | 3,064 / 896 | `<name>/<name>.chromdata.zarr` | loaders of the same names, `derive_embeddings.py --hic per_cell` | `tan2021_cortex`, `nagano2017_dip_serum` |
+| `nagano2017_hap` | 889 | `nagano2017_hap/nagano2017_hap.chromdata.zarr` | `build_nagano2017_hap.py`, `derive_embeddings.py --hic per_cell --leiden` | `nagano2017_hap` |
+| `spacea_e135_c6` | 274 | SpaceA C6 store (run 1), without `results['hic']` | the SpaceA recipe (PR #155) | — |
 
 Sizes are those of the published stores with their embedded copies (`python -m uchrom.datasets atlas`,
 2026-10-06).  The Stevens 2017 store is described with the Figure 3 datasets.
@@ -1140,8 +1153,15 @@ DOIs checked against Crossref (2026-09-27).
   distance of each spot to the nuclear lamina; columns `Z(nm) x(nm) y(nm) genomic coordinate, homolog
   number, cell number, experiment number, distance to lamina (nm)`.  `Hi-C_contacts_genome-scale.tsv`:
   1,041 × 1,041 Rao 2014 IMR90 read counts summed into 500 kb bins centred on the loci.  The other
-  Zenodo files (chr2, replicates with transcription / nuclear bodies, α-amanitin; 0.08–0.65 GB each) are
-  not fetched.
+  Zenodo files are fetched by their own entries (md5 from Zenodo, checked by `fetch`): `su2020_chr2` —
+  `chromosome2.tsv` (130,300,276 B, `4ac51195…`; 935 loci of 50 kb over the whole chr2, 3,029 traced
+  copies) + `Hi-C_contacts_chromosome2.tsv` (1,844,954 B, `be53b23e…`); `su2020_chr21_cell_cycle` —
+  `chromosome21-cell_cycle.tsv` (166,260,146 B, `d8dc951c…`; chr21 with the cell-cycle state of each of
+  4,558 copies); `su2020_genome_amanitin` — `genomic-scale-amanitin.tsv` (537,247,243 B, `cac8fa1d…`;
+  4,102 cells after α-amanitin); `su2020_genome_transcription` —
+  `genomic-scale-with_transcription_and_nuclear_bodies.tsv` (Zenodo name with spaces; 654,711,554 B,
+  `172bda3f…`; 3,668 cells with nascent transcription per locus and distances to lamina, nucleoli and
+  speckles).  Each has a loader (the table above).
 - **Used by**: tutorials `tad_calling` and `compartment` (chr21); Fig. 3b
   (an unpublished benchmark, whole-chromosome imaging vs Hi-C; `b_dimes.py`);
   an unpublished benchmark (`su2020_chr21` truth cells) and `diploid_sim.py` (genome scale, both
@@ -1293,6 +1313,13 @@ GSM by the GEO sample records (`!Sample_description`).  An identical copy,
   carry replicated chromatin and are modelled as haploid anyway (the G1 subset is reported separately).
 - **Download**: `python -m uchrom.datasets fetch nagano2017_hap` (or
   `slurm/download_matched.sbatch PART=mesc`).
+- **Atlas store** (`build_nagano2017_hap.py`: `contacts` → `reconstruct` → `store`, then `derive_embeddings.py
+  --hic per_cell --leiden`) → `nagano2017_hap/nagano2017_hap.chromdata.zarr`: the 603 cells of the selection
+  above (403 serum, 200 2i), their mm10 contacts (`nagano2017_hap_cells_100kb.scool`, one map per cell;
+  `nagano2017_hap_bulk.mcool`, merged, 100 kb - 1 Mb) and **structures computed here** — the authors published
+  none: U-Chrom NucDynamics (protocol `nuc_dynamics_2017`, 100 kb particles, 2 models, seed 1; ~40 s per cell
+  on a GPU), model 1 = coords, model 2 = layer `model_2`, their RMSD after superposition in
+  `cells["rmsd_model_2"]`.
 - **Used by**: an unpublished benchmark nagano` → NucDynamics / hickit → `matched.py`
   (step 1); `robust` matched-imaging analysis (serum cells split into development / held-back halves,
   `robust_matched_split.py`, PREREG §6).
@@ -1643,6 +1670,61 @@ spots, coords, `cells.cell_type`) → `takei2025_fov0_x{1,3,10,30}.chromdata.zar
 copies of older runs were 27 MB – 0.83 GB).  Ignored by git.  They are labelled *replicated* wherever
 they are reported.  Used by the Fig. 6c browser benchmarks (uchrom-reproducibility `supp_fig6/browser/bench_server.py`,
 `bench_frontend.py`, `run_all.sh`).
+
+## 4DN chromatin-tracing studies (fetch / load `bintu2018_4dn`, `mateo2019_orca`, `hafner2023_orca`, `murphy2024_orca`, `takei2021_brain_4dn`, `liu2020_mina`, `hung2024_orca`, `huang2021_4dn`)
+
+Chromatin tracing the labs deposited in the 4DN Data Portal as FISH-Omics Format tables (FOF-CT; the portal's
+[chromatin tracing collection](https://data.4dnucleome.org/resources/data-collections/chromatin-tracing-datasets)).
+Each experiment of a set is a *core* table (spots) with optional companions keyed by its ids (*spot quality*,
+*trace data*, *cell data*); RNA-only sets (Hafner 2023's RNA FISH counts) are listed but have no traces.
+
+- **Files**: one row per file in `packages/uchrom/uchrom/datasets/fourdn_tracing.tsv` (dataset, set, experiment,
+  file accession, uuid, md5, bytes, kind, biosample, the set's description; from the portal's metadata,
+  2026-10-27), downloaded from 4DN open data on S3
+  (`https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/<uuid>/<accession>.csv`) to
+  `<dataset>/<set>/<accession>.csv`, md5-checked.  Sizes: `bintu2018_4dn` 11 files, 195 MB; `mateo2019_orca`
+  25 files, 603 MB; `hafner2023_orca` 162 files, 495 MB; `murphy2024_orca` 20 files, 308 MB.
+- **Sources**:
+  - Bintu B, Mateo LJ *et al.* *Science* 362:eaau1783 (2018), doi:10.1126/science.aau1783 — 10 sets: chr21:28–30 Mb
+    in IMR90 (also by cell-cycle stage), K562, A549 and HCT116 RAD21-AID ± auxin; 34.6–37.1 Mb in HCT116 ± auxin
+    (and after division in auxin); 18.6–20.6 Mb in IMR90.  GRCh38, 30 kb segments.  (Three of these files are also
+    on the authors' GitHub: `bintu_imr90`, `bintu2018`.)
+  - Mateo LJ *et al.* *Nature* 568:49 (2019), doi:10.1038/s41586-019-1035-4 — ORCA of the Drosophila bithorax
+    complex in embryos (dm6; 2 / 3 / 10 kb steps), with RNA counts of the same cells (`cells`: `mRNA_*`,
+    `nascentRNA_*`, tissue / embryo ids); 7 sets.  The same data are on Zenodo 4741214.
+  - Hafner A *et al.* *Mol Cell* 83:1377 (2023), doi:10.1016/j.molcel.2023.04.008 — ORCA in mESC (GRCm38): chr3 and
+    chr6 at 150 Mb (~1 Mb steps) and 3 Mb (30 kb steps), CTCF-AID / RAD21-AID ± auxin, DMSO; Geminin and nuclear size
+    per cell; 40 sets (32 of DNA).
+  - Murphy SE & Boettiger AN *Nat Genet* 56:493 (2024), doi:10.1038/s41588-024-01661-6 — ORCA of HoxA (GRCm38,
+    5 kb): TC1 mESC with EED / RING1B degrons, neural progenitors, E10.5 brain; 5 sets.
+  - Takei Y *et al.* *Science* 374:586 (2021), doi:10.1126/science.abj1966 — DNA seqFISH+ of the mouse cortex (mm10):
+    3 experiments, each with a 1-Mb and a 25-kb core table (their traces kept apart, `c1-` / `c2-`), the cells' cell
+    types (the table's `cluster label`, named from its header: 1 Pvalb ... 9 Exc) and RNA counts; 675 MB.  The
+    RNA spot tables are fetched but not read.
+  - Liu M *et al.* *Nat Commun* 11:2907 (2020), doi:10.1038/s41467-020-16732-5 — MINA of fetal mouse liver: chr19
+    traced at 50 loci with each spot's distance to the lamina and nucleolus and the RNA counts of 137 genes per
+    cell; 4 experiments, 181 MB.  Chromosomes deposited as `19` (named `chr19`).
+  - Hung TC *et al.* *Nat Genet* 56:306 (2024), doi:10.1038/s41588-023-01641-2 — ORCA of the Pitx1 locus in mouse
+    limb buds; 5 experiments, 1.28 GB.
+  - Huang H *et al.* *Nat Genet* 53:1064 (2021), doi:10.1038/s41588-021-00863-6 — the Sox2 locus in F123 mESC
+    (129 x CAST), allele and Sox2 / GFP / mCherry transcription per trace; 5 sets, 29 MB (the SnapFISH copy is
+    `huang2021_sox2`).  One trace table writes `#columns=` (one `#`); some loci end before they start (2.4 %).
+- **Terms**: the portal asks to cite the 4DN White Paper (doi:10.1038/nature23884) and the 4DN Data Portal paper
+  (doi:10.1038/s41467-022-29697-4), to acknowledge the lab that made the data, and to contact it before using the
+  data in a publication.  In the public atlas since 2026-10-27 (ids `bintu2018_4dn`, `mateo2019_orca`,
+  `hafner2023_orca`, `murphy2024_orca`; with the Su 2020 stores `su2020_chr2`, `su2020_chr21_cell_cycle`,
+  `su2020_genome`, `su2020_genome_amanitin`, `su2020_genome_transcription`; the chr2 store without the linked
+  Hi-C of variable bins, which the embedded copies do not take).
+- **As deposited** (handled by `read_4dn_tracing`, each case recorded in `uns`): Hafner 2023 and Murphy 2024 state
+  `XYZ_unit=micron` over nm (the unit is taken from the spacing of successive loci: `fofct_unit_fixes`); some
+  Hafner core tables declare a column the rows lack (`X, Y, Z,R,Chrom`) or leave `Chrom` out of `##columns`, one
+  repeats the names in a CSV header row with an extra `readout` column, and one cell table has a malformed
+  `##columns` line (`fofct_column_fixes`); ids are spelled `Spot_ID` / `spotID` / `spot_ID`, loci `chr` /
+  `chr_start`; Hafner's spots with an empty `Chrom` (unassigned) are left out (`fofct_dropped_spots`); Mateo 2019 lists some traces twice (69,676 identical rows dropped) and Murphy 2024 reuses trace ids across fields of view (each later block of rows of an id becomes its own trace, `<id>.b<k>`: `fofct_trace_splits`, 1,293 traces); Bintu 2018's 18.6–20.6 Mb and 34.6–37.1 Mb regions are deposited from 18,000,001 and 34,000,001 and are moved to the authors' hg38 coordinates (`Data/README.md` of their repository: +627,713 and +628,095 bp; `fofct_locus_shifts`).  Hafner's
+  `Cell_ID` is numbered per field of view (`0` = no cell), so cells are `(FOV, Cell_ID)`.
+- **Loaders**: `load NAME` builds `<name>/<name>.chromdata.zarr` (every experiment with traces, ids prefixed by the
+  experiment accession; coordinates in µm).
+- **Used by**: the web browser (to be reviewed before an atlas release).
 
 ## Pre-staging data (optional)
 

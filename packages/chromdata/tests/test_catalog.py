@@ -78,3 +78,21 @@ def test_describe_store_multiway(tmp_path):
     cd.write(tmp_path / "m.chromdata.zarr")
     d = atlas.describe_store(tmp_path / "m.chromdata.zarr")
     assert "multi-way per spot" in d["modalities"] and d["cluster_tables"] == 1 and d["format_version"] == "2.4"
+
+
+def test_derived_spot_tracks_are_not_signals(tmp_path):
+    """Spot tracks computed from the store's structures (``uns['derived_spot_tracks']``) are not measured signals."""
+    import numpy as np
+    import pandas as pd
+
+    from chromdata import ChromData
+
+    spots = pd.DataFrame({"chrom": ["chr1"] * 3, "start": [0, 100, 200], "end": [100, 200, 300],
+                          "trace_id": ["t"] * 3, "cell_id": ["c"] * 3})
+    dev = pd.DataFrame({"model_deviation": [0.1, 0.2, 0.3]})
+    ChromData(np.zeros((3, 3)), spots, spot_tracks=dev,
+              uns={"derived_spot_tracks": ["model_deviation"]}).write(tmp_path / "models.chromdata.zarr")
+    ChromData(np.zeros((3, 3)), spots, spot_tracks=dev.assign(intensity=[5.0, 6.0, 7.0]),
+              uns={"derived_spot_tracks": ["model_deviation"]}).write(tmp_path / "measured.chromdata.zarr")
+    assert "signals per spot" not in atlas.describe_store(tmp_path / "models.chromdata.zarr")["modalities"]
+    assert "signals per spot" in atlas.describe_store(tmp_path / "measured.chromdata.zarr")["modalities"]

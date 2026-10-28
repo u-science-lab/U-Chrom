@@ -1,0 +1,18 @@
+##FOF-CT_version=v0.1,,,
+##Table_namespace=4dn_FOF-CT_cell,,,
+##XYZ_unit=micron,,,
+##Geminin: Mean Geminin intensity in the cell measured by immunofluorescence,,,
+"#additional_tables: 4dn_FOF-CT_core, 4dn_FOF-CT_quality, 4dn_FOF-CT_trace",,,
+##columns=(Trace_ID,Cell_ID,Mean_Geminin,Nuclear_Size)
+49,94,21304.6914893617,282
+50,86,12931.25950783,447
+54,86,12931.25950783,447
+55,94,21304.6914893617,282
+89,72,7510.83571428571,420
+108,33,22942.0904977376,221
+109,33,22942.0904977376,221
+115,20,15542.4858299595,247
+118,20,15542.4858299595,247
+137,75,8087.73684210526,247
+209,99,26767.6481012658,395
+210,99,26767.6481012658,395

@@ -85,7 +85,9 @@ def describe_store(path: PathLike) -> Dict[str, Any]:
         mods.append("ATAC per cell")
     if emb["images"]:
         mods.append("images")
-    if len(getattr(cd.spot_tracks, "columns", [])):
+    # measured signals: not the spot tracks computed from the store's own structures (uns['derived_spot_tracks'])
+    derived = {str(c) for c in (uns.get("derived_spot_tracks") or [])}
+    if any(str(c) not in derived for c in getattr(cd.spot_tracks, "columns", [])):
         mods.append("signals per spot")
     if cd.n_spots:
         mods.append("3-D coordinates")

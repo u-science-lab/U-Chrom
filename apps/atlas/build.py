@@ -264,13 +264,26 @@ def render_figures(config: PathLike, root: PathLike, out: PathLike, *, size: int
         except KeyError:
             has_positions = False
         per_cell_xyz = bool(cd.n_spots) and "cell_id" in cd.spots.columns
-        if spec.get("layout", "structure" if (per_cell_xyz and not has_positions) else "") == "structure":
-            cell = spec.get("cell")
-            if cell is None and "rmsd_20k" in cd.cells:                        # the best-determined structure
-                cell = cd.cells["rmsd_20k"].astype(float).idxmin()
-            cell = str(cell if cell is not None else cd.cells.index[0])
-            structure = cd.get_cell(cell)
-            pos, layout, layout_key = None, "structure", cell
+        traces_only = bool(cd.n_spots) and not len(cd.cells)        # traced copies not grouped into cells
+        if spec.get("layout", "structure" if ((per_cell_xyz or traces_only) and not has_positions) else "") == "structure":
+            if spec.get("trace") is not None or traces_only:            # one trace: the pinned one, else the fullest
+                trace = spec.get("trace")
+                if trace is None:
+                    trace = cd.spots["trace_id"].value_counts().idxmax()
+                structure = cd.get_trace(trace)
+                if not structure.n_spots and str(trace).lstrip("-").isdigit():      # integer trace ids
+                    structure = cd.get_trace(int(trace))
+                layout_key = str(trace)
+            else:
+                cell = spec.get("cell")
+                if cell is None and "rmsd_20k" in cd.cells:                    # the best-determined structure
+                    cell = cd.cells["rmsd_20k"].astype(float).idxmin()
+                cell = cell if cell is not None else cd.cells.index[0]
+                structure = cd.get_cell(cell)
+                if not structure.n_spots and str(cell).lstrip("-").isdigit():        # integer cell ids
+                    structure = cd.get_cell(int(cell))
+                layout_key = str(cell)
+            pos, layout = None, "structure"
         else:
             pos, layout, layout_key = _cell_layout(cd, spec.get("positions"), spec.get("embedding"))
         info: Dict[str, Any] = {"section": section, "color_by": column, "layout": layout, "layout_key": layout_key}
@@ -300,7 +313,7 @@ def render_figures(config: PathLike, root: PathLike, out: PathLike, *, size: int
 
 
 def build_site(out: PathLike, catalog: PathLike, *, data_root: str = DEFAULT_ATLAS,
-               template: Optional[PathLike] = None, repo: str = "https://github.com/Nanguage/U-Chrom",
+               template: Optional[PathLike] = None, repo: str = "https://github.com/u-science-lab/U-Chrom",
                install: str = 'pip install "u-chrom[web]"', hosted: str = "") -> Path:
     """Write the static atlas page to ``out`` (deploy the folder on any static host, e.g. Cloudflare Pages):
     the template (``apps/atlas/site``), ``catalog.json``, ``config.js`` (data root, install line, repo) and ``_headers``."""

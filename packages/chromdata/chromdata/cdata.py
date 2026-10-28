@@ -183,7 +183,7 @@ import hashlib
 import json
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Union, Optional, Dict, List, Mapping, Sequence
+from typing import Any, Union, Optional, Dict, List, Mapping, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -3077,6 +3077,14 @@ def _parse_version(s: str):
 # ChromData.read().  Each reader is responsible for its on-disk layout
 # and may call a migration helper to produce the current in-memory form.
 
+def _is_number(text: str) -> bool:
+    try:
+        float(text)
+        return True
+    except ValueError:
+        return False
+
+
 def _read_fofct_table(path: Path):
     """Parse a FOF-CT table: ``##key=value`` / ``#key: value`` headers,
     a ``##columns=(...)`` line and CSV data.  Returns ``(df, header_meta)``
@@ -3096,7 +3104,7 @@ def _read_fofct_table(path: Path):
             stripped = raw.rstrip(",").strip()
             if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
                 stripped = stripped[1:-1]
-            if stripped.lower().startswith("##columns="):
+            if stripped.lower().lstrip("#").startswith("columns=") and stripped.startswith("#"):   # also "#columns="
                 cols_str = stripped.split("=", 1)[1].strip()
                 # remove one enclosing pair only: str.strip("()") would also
                 # eat the ")" of a last column such as "n_per_dist(um)"
@@ -3123,13 +3131,19 @@ def _read_fofct_table(path: Path):
     has_csv_header = bool(first_token) and not (
         first_token[0].isdigit() or first_token[0] in ("-", "+", ".")
     )
-    if has_csv_header and columns is not None and first_token not in columns:
+    header_names = [c.strip().strip('"') for c in data_lines[0].split(",")]
+    all_names = all(n and not _is_number(n) for n in header_names)
+    if has_csv_header and columns is not None and first_token not in columns and not all_names:
         has_csv_header = False  # e.g. cell tables whose first column is an id like "0_1"
     if has_csv_header:
-        header_row = data_lines[0]
         data_lines = data_lines[1:]
         if columns is None:
-            columns = [c.strip() for c in header_row.split(",")]
+            columns = header_names
+        elif len(columns) != len(header_names) and data_lines and \
+                len(header_names) == len(data_lines[0].split(",")):
+            # the ``##columns`` line disagrees with the header row, which matches the rows (Hafner et al. 2023:
+            # ``##columns=(Spot_ID, ..., Chrom_End)`` over ``spotID,traceID,x,y,z,readout,Chrom,...``)
+            columns = header_names
 
     if not data_lines:
         raise ValueError(f"No data rows found in {path}")
@@ -3144,6 +3158,17 @@ def _read_fofct_table(path: Path):
         # Column count mismatch — trust the data and label the extras
         df.columns = (columns + [f"col_{i}" for i in range(len(columns), len(df.columns))])[: len(df.columns)]
     return df, header_meta
+
+
+def read_fofct_table(path) -> Tuple[pd.DataFrame, Dict[str, str]]:
+    """Read any FOF-CT table (core, spot quality, trace data, cell data, RNA spots, ...) as it is.
+
+    Returns ``(table, header)``: the rows under the file's own column names (``##columns=(...)`` or a CSV header
+    row; unnamed columns ``col_<i>``) and the ``##key=value`` / ``#key: value`` header lines as a dict.  Quoted
+    header lines and the trailing commas some writers pad them with are handled.  :meth:`ChromData.from_fofct`
+    reads core tables into a ``ChromData``; this is for the companion tables a caller joins itself.
+    """
+    return _read_fofct_table(Path(path))
 
 
 _FOFCT_CANONICAL = {
@@ -3330,7 +3355,7 @@ def _scan_fofct_header(path: Path):
             stripped = raw.rstrip(",").strip()
             if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
                 stripped = stripped[1:-1]
-            if stripped.lower().startswith("##columns="):
+            if stripped.lower().lstrip("#").startswith("columns=") and stripped.startswith("#"):   # also "#columns="
                 cols_str = stripped.split("=", 1)[1].strip()
                 if cols_str.startswith("(") and cols_str.endswith(")"):
                     cols_str = cols_str[1:-1]

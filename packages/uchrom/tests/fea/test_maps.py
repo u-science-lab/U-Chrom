@@ -194,3 +194,46 @@ def test_thin_map(tmp_path):
         thin_map(cd, "bulk")
     with pytest.raises(ValueError, match="not in"):
         thin_map(cd, "bulk", fraction=1.5)
+
+
+def test_rebin_scool_sums_each_cells_pixels(tmp_path):
+    import cooler
+    from chromdata import ChromData
+    from uchrom.fea import rebin_scool
+
+    rng = np.random.default_rng(3)
+    sizes = {"chr1": 95_000, "chr2": 42_000}
+    res = 5_000
+    bins = pd.concat([pd.DataFrame({"chrom": c, "start": np.arange(0, n, res)}) for c, n in sizes.items()],
+                     ignore_index=True)
+    bins["end"] = np.minimum(bins["start"] + res, bins["chrom"].map(sizes))
+    maps = {}
+    for cell in ("a", "b", "c"):
+        b1 = rng.integers(0, len(bins), 300)
+        b2 = rng.integers(0, len(bins), 300)
+        px = pd.DataFrame({"bin1_id": np.minimum(b1, b2), "bin2_id": np.maximum(b1, b2), "count": rng.integers(1, 5, 300)})
+        maps[cell] = px.groupby(["bin1_id", "bin2_id"], as_index=False)["count"].sum()
+    src = tmp_path / "m.scool"
+    cooler.create_scool(str(src), bins, maps, ordered=True, symmetric_upper=True)
+    cells = pd.DataFrame(index=pd.Index(list(maps), name="cell_id"))
+    empty = pd.DataFrame({"chrom": pd.Series([], dtype=str), "start": pd.Series([], dtype=np.int64),
+                          "end": pd.Series([], dtype=np.int64), "trace_id": pd.Series([], dtype=str)})
+    cd = ChromData(np.zeros((0, 3)), empty, cells=cells, uns={"genome_assembly": "test"})
+    cd.link_scool(str(src), key="per_cell", cell_name="cell_id", bin_size=res)
+    out = rebin_scool(cd, "per_cell", resolution=20_000, out=tmp_path / "m_20kb.scool")
+    assert cd.uns["linked_scool"]["per_cell_20kb"]["bin_size"] == 20_000
+    for cell, px in maps.items():
+        got = cooler.Cooler(f"{out}::/cells/{cell}")
+        assert got.binsize == 20_000 and int(got.pixels()[:]["count"].sum()) == int(px["count"].sum())
+        # brute force: each fine bin into the coarse bin of its start
+        coarse = got.bins()[:]
+        key = {(c, s // 20_000): i for i, (c, s) in enumerate(zip(coarse["chrom"], coarse["start"]))}
+        f = bins.iloc
+        want = {}
+        for b1, b2, n in px.itertuples(index=False):
+            k = tuple(sorted((key[(f[b1]["chrom"], f[b1]["start"] // 20_000)], key[(f[b2]["chrom"], f[b2]["start"] // 20_000)])))
+            want[k] = want.get(k, 0) + n
+        g = got.pixels()[:]
+        assert dict(zip(zip(g["bin1_id"], g["bin2_id"]), g["count"])) == want
+    with pytest.raises(ValueError, match="multiple"):
+        rebin_scool(cd, "per_cell", resolution=7_000, out=tmp_path / "x.scool")

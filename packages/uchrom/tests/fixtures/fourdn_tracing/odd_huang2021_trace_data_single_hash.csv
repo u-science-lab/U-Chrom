@@ -1,0 +1,25 @@
+##FOF-CT_version=v0.1
+##Table_namespace=4dn_FOF-CT_trace
+#experimenter_name: Yuanyuan Han
+#experimenter_contact: apjussil@eng.ucsd.edu
+#Software_Type: SpotLoc
+#Software_Title: DNA-RNA Colocalization
+#Software_Authors: Kern, C.
+#Software_Description: Software to colocalize RNA data with chromatin tracing data.
+#Software_Repository: https://github.com/epigen-UCSD/huang-natgen2021
+#lab_name = Bing Ren - UCSD
+#description: This table contains colocalization information for the RNAs with the chromatin tracing data for the 4CBS cell line.
+#^Allele: The allele to which this Trace was mapped. This can be one of the following values: 129, CAST.
+#^Sox2_Present: This field records whether we detected Sox2 RNAs at the transcription site colocalizing with the imaged chromatin. 0 is absent, 1 is present.
+#^GFP_Present: This field records whether we detected GFP RNAs at the transcription site colocalizing with the imaged chromatin. 0 is absent, 1 is present.
+#^mCherry_Present: This field records whether we detected mCherry RNAs at the transcription site colocalizing with the imaged chromatin. 0 is absent, 1 is present.
+#additional_tables: 4dn_FOF-CT_core
+#columns=(Trace_ID,Allele,Sox2_Present,GFP_Present,mCherry_Present)
+10002_129,129,0.0,0.0,0.0
+10002_CAST,CAST,1.0,1.0,0.0
+10005_129,129,0.0,0.0,0.0
+10005_CAST,CAST,1.0,1.0,0.0
+10007_129,129,0.0,0.0,0.0
+10007_CAST,CAST,1.0,1.0,0.0
+10008_129,129,0.0,0.0,0.0
+10008_CAST,CAST,1.0,1.0,0.0

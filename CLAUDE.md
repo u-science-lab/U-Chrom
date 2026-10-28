@@ -71,7 +71,8 @@ uchrom/                (packages/uchrom/uchrom)
 ├── convention.py    the calling convention of analysis functions
 ├── datasets/        load(name) -> ChromData (atlas stores, loaders _load_*.py), fetch(name) -> original files
 ├── io/              Data I/O (.pairs, .cool, .hic, .3dg, .csv, .pdb, FOF-CT, PyHiM, SnapFISH, Bintu,
-│                    seqFISH+ multi-omics and raw detections, pairs -> per-cell .scool, Juicer loop /
+│                    seqFISH+ multi-omics and raw detections, 4DN FOF-CT tracing studies (read_4dn_tracing:
+│                    experiments + companion tables in one object), pairs -> per-cell .scool, Juicer loop /
 │                    domain lists, Dip-C / hickit .3dg structures as a ChromData)
 ├── recon/           3D reconstruction
 │   ├── sc/          Single-cell reconstruction
