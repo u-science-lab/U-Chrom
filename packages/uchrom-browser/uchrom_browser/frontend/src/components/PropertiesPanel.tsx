@@ -284,7 +284,13 @@ export function StyleSection({ layer, hasCells, paneId }: { layer: Layer; hasCel
           <dd className="muted">{header.n_points.toLocaleString('en-US')}</dd>
         </dl>
       )}
-      {header?.truncated && (
+      {header?.sample ? (
+        <div className="muted">
+          A random sample of {header.sample.cells.toLocaleString('en-US')} of {header.sample.of_cells.toLocaleString('en-US')} cells
+          ({header.n_points.toLocaleString('en-US')} of {header.total_points.toLocaleString('en-US')} points); a cell you open is drawn
+          in full.
+        </div>
+      ) : header?.truncated && (
         <div className="warn">
           Truncated: showing {header.n_points.toLocaleString('en-US')} of {header.total_points.toLocaleString('en-US')} points. Create a subset to see
           everything.

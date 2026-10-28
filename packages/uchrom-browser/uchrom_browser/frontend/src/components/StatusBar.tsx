@@ -12,13 +12,16 @@ export function StatusBar() {
   const shown = layers.filter((l) => l.datasetId === activeId && l.geometry && layerShownIn(l, pane))
   const points = shown.reduce((acc, l) => acc + l.geometry!.header.n_points, 0)
   const loading = layers.some((l) => l.loading)
-  const truncated = shown.some((l) => l.geometry!.header.truncated)
+  // a large store's overview is a sample of whole cells (not a cut): said apart from a truncated selection
+  const sampled = shown.some((l) => !!l.geometry!.header.sample)
+  const truncated = shown.some((l) => l.geometry!.header.truncated && !l.geometry!.header.sample)
   return (
     <footer className="statusbar">
       <span>
         {points.toLocaleString('en-US')} points in {shown.length} visible layer{shown.length === 1 ? '' : 's'}
       </span>
       {loading && <span><span className="spinner small" aria-hidden /> loading…</span>}
+      {sampled && <span>a random sample of the cells</span>}
       {truncated && <span className="warn">some layers are truncated</span>}
       {status && <span className="warn">{status}</span>}
       {error && (
