@@ -573,6 +573,13 @@ brain cells).
 | `schicar_mouse_cortex` | 263 | `schicar_mop/schicar_mop.chromdata.zarr` | `build_schicar_mop.py` | `schicar_rna`, `schicar_dna`, `schicar_atac` |
 | `unic_human`, `unic_mouse` | 681 / 271 | `unic2025/<id>.chromdata.zarr` | `build_unic2025.py human`, `build_unic2025.py mouse` | `unic2025` |
 | `takei2025_cerebellum` | 2,051 | `takei2025_cerebellum/takei2025_cerebellum_rep1.chromdata.zarr` | `build_takei2025_cerebellum.py` | `takei2025_cerebellum` |
+| `bintu2018_4dn`, `mateo2019_orca`, `hafner2023_orca`, `murphy2024_orca`, `hung2024_orca`, `huang2021_4dn`, `liu2020_mina`, `takei2021_brain_4dn` | 40 / 151 / 151 / 131 / 456 / 6 / 49 / 87 | `<name>/<name>.chromdata.zarr` | loaders of the same names (`uchrom.datasets.load`; see *4DN chromatin-tracing studies*); Hafner / Hung with field-of-view positions; RNA embeddings by `derive_embeddings.py`: `liu2020_mina` `--rna-regex 'Gene_Expression_Counts_\d+' --leiden`, `takei2021_brain_4dn` `--rna-after nuc_volume` | the same names |
+| `su2020_chr2`, `su2020_chr21_cell_cycle`, `su2020_genome`, `su2020_genome_amanitin`, `su2020_genome_transcription` | 26 / 26 / 42 / 105 / 105 | `<name>/<name>.chromdata.zarr` | loaders of the same names; the atlas copy of `su2020_chr2` without its variable-bin Hi-C link | the same names |
+| `takei2021_mesc` | 5 | `takei2021_mesc/takei2021_mesc.chromdata.zarr` | loader `takei2021_mesc`, `derive_embeddings.py --rna-regex 'rna\..*' --leiden` | `takei`, `takei_tables` |
+| `liu2025_mop` | 270 | `liu2025_mop/liu2025_mop.chromdata.zarr` | `build_liu2025_mop.py`, `derive_embeddings.py --rna-after neuron_identity` | `liu2025_mop` |
+| `tan2021_cortex`, `nagano2017_dip_serum` | 3,064 / 896 | `<name>/<name>.chromdata.zarr` | loaders of the same names, `derive_embeddings.py --hic per_cell` | `tan2021_cortex`, `nagano2017_dip_serum` |
+| `nagano2017_hap` | 889 | `nagano2017_hap/nagano2017_hap.chromdata.zarr` | `build_nagano2017_hap.py`, `derive_embeddings.py --hic per_cell --leiden` | `nagano2017_hap` |
+| `spacea_e135_c6` | 274 | SpaceA C6 store (run 1), without `results['hic']` | the SpaceA recipe (PR #155) | — |
 
 Sizes are those of the published stores with their embedded copies (`python -m uchrom.datasets atlas`,
 2026-10-06).  The Stevens 2017 store is described with the Figure 3 datasets.

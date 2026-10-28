@@ -594,5 +594,24 @@
   "categories": 1,
   "grid": false,
   "space": "huang2021_4dn.space.webp"
+ },
+ "nagano2017_hap": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "NST_862",
+  "caption": "Haploid mouse ES cell (serum), NucDynamics model 1",
+  "n": 25658,
+  "categories": 20,
+  "grid": false,
+  "space": "nagano2017_hap.space.webp",
+  "map_key": "bulk",
+  "map_label": "All 603 cells (merged)",
+  "chrom": "chr2",
+  "start": 27300000,
+  "end": 67400000,
+  "resolution": 100000,
+  "fill": 0.656,
+  "map": "nagano2017_hap.map.webp"
  }
 }
