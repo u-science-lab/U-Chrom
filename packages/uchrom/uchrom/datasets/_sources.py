@@ -611,6 +611,22 @@ DATASETS = {
                                            "in C. elegans embryos, 6 sets (4DN FOF-CT)"),
     "messina2023_him": _fourdn_tracing("messina2023_him", "Messina 2023 Hi-M of Drosophila embryos, 2 sets "
                                        "(4DN FOF-CT)"),
+    # Preprints and a later paper of 4DN chromatin tracing: Le et al. 2024 (bioRxiv 10.1101/2024.05.08.593251; ORCA of
+    # 376 super-enhancers in mESC, nascent RNA of 44), Fujimori et al. 2026 (Sci Adv 12:eaeb0060; ORCA of a silenced
+    # reporter in HEK293T on the authors' hg38 + reporter build — fujimori2026_hek293t —, MYC in K562 —
+    # fujimori2026_k562 — and NANOG in differentiating mESC — fujimori2026_mesc),
+    # Tastemel et al. 2025 (bioRxiv 10.1101/2025.02.21.639596; the Sox2 locus with a CTCF-site insertion, the sequel of
+    # Huang 2021 on other lines), Jay et al. 2025 (bioRxiv 10.1101/2025.05.30.656885; Ets1-Fli1 in thymocytes).
+    "le2024_se": _fourdn_tracing("le2024_se", "Le 2024 ORCA of 376 super-enhancers in mESC, 2 sets (4DN FOF-CT)"),
+    "fujimori2026_hek293t": _fourdn_tracing("fujimori2026_hek293t", "Fujimori 2026 ORCA of a silenced reporter in "
+                                            "HEK293T, 16 sets (4DN FOF-CT)"),
+    "fujimori2026_k562": _fourdn_tracing("fujimori2026_k562", "Fujimori 2026 ORCA of MYC in K562, 2 sets (4DN FOF-CT)"),
+    "fujimori2026_mesc": _fourdn_tracing("fujimori2026_mesc", "Fujimori 2026 ORCA of NANOG in differentiating mESC, "
+                                         "4 sets (4DN FOF-CT)"),
+    "tastemel2025_sox2": _fourdn_tracing("tastemel2025_sox2", "Tastemel 2025 tracing of the Sox2 locus with a CTCF-site "
+                                         "insertion, 11 sets (4DN FOF-CT)"),
+    "jay2025_thymocytes": _fourdn_tracing("jay2025_thymocytes", "Jay 2025 ORCA of Ets1-Fli1 in thymocytes, 1 set "
+                                          "(4DN FOF-CT)"),
     # Rao et al. 2014 IMR90 in situ Hi-C reprocessed by 4DN on GRCh38 (set 4DNES1ZEJNRU): the
     # whole-genome input of the bulk deconvolution benchmark (20 kb built from the 10 kb level).
     "rao2014_imr90_4dn": {

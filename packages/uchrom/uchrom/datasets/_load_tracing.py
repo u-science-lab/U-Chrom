@@ -187,6 +187,15 @@ def _fov_positions(cd, table: str, xcol: str, ycol: str, copy=()):
                                  "in camera pixels; the 3-D coordinates are local to each trace's image crop")
 
 
+#: core columns that make a trace where the deposit's Trace_ID is none — Tastemel et al. 2025: Trace_ID numbers the
+#: locus (0-42); a trace is one allele (Extra_Cell_ROI_ID: CAST / 129) of a cell.  Le et al. 2024: Trace_ID is one
+#: allele of a cell over every chromosome; a trace is its part on one chromosome
+_TRACE_BY = {"tastemel2025_sox2": ("Cell_ID", "Extra_Cell_ROI_ID"), "le2024_se": ("Trace_ID", "Chrom")}
+
+#: spot-table columns giving each spot's field of view where cells and traces are numbered per field and the core
+#: has no field — Le et al. 2024's 44-SE experiment (the quality table's ``fov``; local crop coordinates)
+_FOV_FROM = {"le2024_se": ("fov",)}
+
 #: trace fields that describe the cell (deposits without Cell_ID: one trace per cell), copied to ``cells``: dataset ->
 #: (trace column, cells column) — Cheng et al. 2025: the gene a cell's sgRNA targets (or NTC) per trace
 _TRACE_FIELDS = {"cheng2025_perturb": [("Perturbation", "perturbation")]}
@@ -228,7 +237,8 @@ def _fourdn(dataset: str, source: str):
             one = lambda k: [_data_path(root, r["path"]) for r in sorted(files.get(k, []), key=lambda r: r["file"])]  # noqa: E731
             entry = {"name": exp or set_, "core": one("core") if len(cores) > 1 else one("core")[0],
                      "meta": {"set": set_, "condition": cores[0]["description"], "biosample": cores[0]["biosample"]},
-                     "locus_shifts": _LOCUS_SHIFTS.get(dataset, ())}
+                     "locus_shifts": _LOCUS_SHIFTS.get(dataset, ()), "trace_by": _TRACE_BY.get(dataset),
+                     "fov_from": _FOV_FROM.get(dataset)}
             for k in ("spot_quality", "spot_bio"):
                 if k in files:
                     entry[k] = one(k)
@@ -315,7 +325,19 @@ for _name, _source, _what in (
         ("gutnik2024_celegans", "Gutnik et al. 2024, Genome Biol 25:71 (4DN FOF-CT)",
          "Gutnik 2024 maternal vs paternal chromosome tracing in C. elegans embryos (ce10)"),
         ("messina2023_him", "Messina et al. 2023, Nat Commun 14:6678 (4DN FOF-CT)",
-         "Messina 2023 Hi-M of Drosophila embryos, nuclear cycles 12 and 14 (dm6)")):
+         "Messina 2023 Hi-M of Drosophila embryos, nuclear cycles 12 and 14 (dm6)"),
+        ("le2024_se", "Le et al. 2024, bioRxiv 10.1101/2024.05.08.593251 (4DN FOF-CT)",
+         "Le 2024 ORCA of 376 super-enhancers in mESC (E14), nascent RNA of 44 (mm10)"),
+        ("fujimori2026_hek293t", "Fujimori et al. 2026, Sci Adv 12:eaeb0060 (4DN FOF-CT)",
+         "Fujimori 2026 ORCA of a reporter silenced and remembered in HEK293T (hg38 + reporter)"),
+        ("fujimori2026_k562", "Fujimori et al. 2026, Sci Adv 12:eaeb0060 (4DN FOF-CT)",
+         "Fujimori 2026 ORCA of the MYC locus in K562 (hg38)"),
+        ("fujimori2026_mesc", "Fujimori et al. 2026, Sci Adv 12:eaeb0060 (4DN FOF-CT)",
+         "Fujimori 2026 ORCA of NANOG in mESC over three days of differentiation (mm10)"),
+        ("tastemel2025_sox2", "Tastemel et al. 2025, bioRxiv 10.1101/2025.02.21.639596 (4DN FOF-CT)",
+         "Tastemel 2025 tracing of the Sox2 locus with a 4-CTCF-site insertion in F123 mESC (mm10)"),
+        ("jay2025_thymocytes", "Jay et al. 2025, bioRxiv 10.1101/2025.05.30.656885 (4DN FOF-CT)",
+         "Jay 2025 ORCA of the Ets1-Fli1 locus in double-positive thymocytes (mm10)")):
     register(Loader(name=_name, build=_fourdn(_name, _source), store=f"{_name}/{_name}.chromdata.zarr",
                     sources=(_name,), description=_what))
 for _name, _build, _what in (

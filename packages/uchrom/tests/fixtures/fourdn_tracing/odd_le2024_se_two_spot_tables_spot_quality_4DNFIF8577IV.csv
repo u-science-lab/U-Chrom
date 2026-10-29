@@ -1,0 +1,28 @@
+##FOF-CT_version=v0.1
+##Table_namespace=4dn_FOF-CT_quality
+##genome_assembly=mm10
+##XYZ_unit=micron
+#Software_Title: ChrTracer3.1
+#Software_Type: SpotLoc+Tracing
+#Software_Authors: Boettiger, AN
+#Software_Description: ChrTracer3.1 software is a script based (rather than GUI based) extension of the ChrTracer3 GUI based software described in our previous publications. This version starts with nuclear segmentation and searches for spots within the 3D bounds of each identified nucleus, rather than a small search area around a seed point.
+#Software_Repository: https://github.com/BoettigerLab/ORCA-public + https://github.com/BoettigerLab/SEclustering-2024
+#Software_PreferredCitationID: https://doi.org/10.1038/s41596-020-00478-x
+#lab_name: Boettiger
+#experimenter_name: Derek Le and Antonina Hafner
+#experimenter_contact: boettiger@stanford.edu
+#additional_tables: 4dn_FOF-CT_core, 4dn_FOF-CT_cell
+##columns=
+(Spot_ID,barcodeID,fitQuality,x_fid,y_fid,z_fid,spt_brightness,spt_bkd,spt_sXY,spt_sZ,fid_brightness,dat_chn,stageX,stageY,fov,hyb)
+1,13,1,139.54038,10.83957,7.8,1206.10833091049,1406.10622115159,1.50971428829066,1.69801296864419,2305,1,450.45,365.75,1,7
+2,13,1,141.83043,14.96166,7.8,2017.41988430985,590.193824028213,1.99999999951096,2.49999999999998,2803,1,450.45,365.75,1,7
+3,14,1,139.54038,7.17549,5.4,448.651833587704,1050.58757322312,1.3511955736184,1.8214387813209,1524,2,450.45,365.75,1,7
+4,14,1,140.4564,13.12962,4.2,992.258110279819,1087.42314930161,0.999286366025732,1.79186090788828,2260,2,450.45,365.75,1,7
+5,15,1,139.99839,9.46554,8.6,3017.96352268281,906.037237215006,0.844063612955401,0.948160856546203,3274,1,450.25,365.35,1,8
+6,15,1,142.28844,14.96166,6.6,1327.39604149819,149.304100218946,1.96816787081789,2.49999999999998,1565,1,450.25,365.35,1,8
+7,16,0,136.79232,10.83957,8.6,NaN,NaN,NaN,NaN,943,2,450.25,365.35,1,8
+8,16,0,140.4564,12.67161,7.6,NaN,NaN,NaN,NaN,827,2,450.25,365.35,1,8
+9,17,1,138.62436,9.00753,8.8,3625.64272875477,980.307291298469,0.937135470213306,1.04140117769415,3175,1,450.15,365.35,1,9
+10,17,1,141.83043,15.41967,6.8,2603.86568615624,201.886961046274,1.48730031476106,2.49999999999998,2610,1,450.15,365.35,1,9
+11,18,1,136.79232,9.92355,7.8,2041.28794236402,1226.31474095089,0.998417994933333,1.23120330487795,3250,2,450.15,365.35,1,9
+12,18,1,140.4564,14.50365,3.6,2130.93608290978,1137.92825474576,1.07888461873673,1.28133392512266,3678,2,450.15,365.35,1,9

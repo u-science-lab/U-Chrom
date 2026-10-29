@@ -856,5 +856,71 @@
   "categories": 20,
   "grid": false,
   "space": "takei2025_e14.space.webp"
+ },
+ "le2024_se": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "4DNEXIQ3X6VY_1873",
+  "caption": "One ES cell, 376 super-enhancers",
+  "n": 744,
+  "categories": 20,
+  "grid": false,
+  "space": "le2024_se.space.webp"
+ },
+ "fujimori2026_hek293t": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "4DNEXHIW9TGO_373",
+  "caption": "The reporter locus, one copy",
+  "n": 19,
+  "categories": 2,
+  "grid": false,
+  "space": "fujimori2026_hek293t.space.webp"
+ },
+ "fujimori2026_k562": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "4DNEXC98KZ4V_842",
+  "caption": "The MYC locus, 48 loci",
+  "n": 48,
+  "categories": 1,
+  "grid": false,
+  "space": "fujimori2026_k562.space.webp"
+ },
+ "fujimori2026_mesc": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "4DNEX7TG2QNO_1592",
+  "caption": "The NANOG locus, 19 loci",
+  "n": 19,
+  "categories": 1,
+  "grid": false,
+  "space": "fujimori2026_mesc.space.webp"
+ },
+ "tastemel2025_sox2": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "4DNEXAGALPNQ_10156_CAST",
+  "caption": "The Sox2 locus, CAST allele",
+  "n": 42,
+  "categories": 1,
+  "grid": false,
+  "space": "tastemel2025_sox2.space.webp"
+ },
+ "jay2025_thymocytes": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "4DNEXSTYC535_1220",
+  "caption": "The Ets1-Fli1 locus, 30 loci",
+  "n": 30,
+  "categories": 1,
+  "grid": false,
+  "space": "jay2025_thymocytes.space.webp"
  }
 }
