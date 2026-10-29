@@ -1,4 +1,5 @@
-"""Takei 2025 cerebellum DNA seqFISH+ — replicate 1, **all** fields of view.
+"""Takei 2025 cerebellum DNA seqFISH+ — replicate 1, **all** fields of view (``--sample``: or a cell line of the same
+deposit, ``E14_rep1`` / ``NMuMG``, into ``takei2025_e14/`` / ``takei2025_nmumg/``, fetched as those names).
 
 Input (fetch explicitly first; nothing is downloaded silently)::
 
@@ -37,8 +38,12 @@ written to ``takei2025_cerebellum_rep1.stream.chromdata.zarr``.
 
 Usage::
 
-    python apps/atlas/recipes/build_takei2025_cerebellum.py [--data-dir DIR] [--fovs 0,1] [--no-combined]
-                                                     [--format zarr|cdz]
+    python apps/atlas/recipes/build_takei2025_cerebellum.py [--sample cerebellum_rep1|E14_rep1|NMuMG]
+                                                     [--data-dir DIR] [--fovs 0,1] [--no-combined]
+                                                     [--combine-only] [--format zarr|cdz]
+
+``--sample E14_rep1`` / ``NMuMG`` build the record's cell lines (fetch ``takei2025_e14`` / ``takei2025_nmumg``):
+no clustering, so the cells carry only their field of view.
 
 ``--data-dir`` defaults to ``<data directory>/takei2025_cerebellum`` (``$UCHROM_DATA``, else ``~/.cache/uchrom``).
 """
@@ -59,15 +64,33 @@ from uchrom.datasets import data_dir
 
 HERE = Path(__file__).resolve().parent
 DATA = data_dir()                       # $UCHROM_DATA, else ~/.cache/uchrom
-TARBALL = "cerebellum_rep1.tar.gz"
 LOCI = "LC1-100k-09022022-mm10-25kb-meta.csv"
-CLUSTERS = "cerebellum_mRNA_cluster_nuc_vol_filtered.csv"
-PREFIX = "takei2025_cerebellum_rep1"
 SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz"}
+#: ``--sample``: (data folder and fetch name, tarball, per-cell clustering or None, store prefix).  The cell lines
+#: (Zenodo 7693825: mESC E14, replicate 1, and NMuMG) have no clustering table.
+SAMPLES = {
+    "cerebellum_rep1": ("takei2025_cerebellum", "cerebellum_rep1.tar.gz",
+                        "cerebellum_mRNA_cluster_nuc_vol_filtered.csv", "takei2025_cerebellum_rep1"),
+    "E14_rep1": ("takei2025_e14", "E14_rep1.tar.gz", None, "takei2025_e14_rep1"),
+    "NMuMG": ("takei2025_nmumg", "NMuMG.tar.gz", None, "takei2025_nmumg"),
+}
+#: ``uns['source']`` of the cell lines (the reader writes the cerebellum's)
+SOURCES = {"E14_rep1": "Takei et al. 2025, Nature (Zenodo 7693825, E14_rep1.tar.gz): DNA seqFISH+ of mouse ES cells "
+                       "(E14), replicate 1",
+           "NMuMG": "Takei et al. 2025, Nature (Zenodo 7693825, NMuMG.tar.gz): DNA seqFISH+ of NMuMG mouse "
+                    "mammary epithelial cells"}
+SAMPLE = "cerebellum_rep1"
+FOLDER, TARBALL, CLUSTERS, PREFIX = SAMPLES[SAMPLE]
+
+
+def use_sample(name: str) -> None:
+    global SAMPLE, FOLDER, TARBALL, CLUSTERS, PREFIX
+    SAMPLE = name
+    FOLDER, TARBALL, CLUSTERS, PREFIX = SAMPLES[name]
 
 
 def default_data_dir() -> Path:
-    return DATA / "takei2025_cerebellum"
+    return DATA / FOLDER
 
 
 def peak_rss_mb() -> float:
@@ -76,9 +99,9 @@ def peak_rss_mb() -> float:
 
 
 def fov_of(name: str) -> int:
-    m = re.search(r"_pos(\d+)\.csv$", name)
+    m = re.search(r"_pos(\d+)\.(?:csv|chromdata\.zarr|cdz)$", name)
     if not m:
-        raise ValueError(f"not a FOV CSV: {name}")
+        raise ValueError(f"not a FOV CSV or store: {name}")
     return int(m.group(1))
 
 
@@ -86,7 +109,7 @@ def extract(data_dir: Path, fovs=None) -> list[Path]:
     """Stream the tarball once; extract FOV CSVs not yet on disk."""
     tar_path = data_dir / TARBALL
     if not tar_path.exists():
-        raise SystemExit(f"{tar_path} missing — run: python -m uchrom.datasets fetch takei2025_cerebellum")
+        raise SystemExit(f"{tar_path} missing — run: python -m uchrom.datasets fetch {FOLDER}")
     raw = data_dir / "raw"
     raw.mkdir(exist_ok=True)
     listing = data_dir / "raw" / "members.json"
@@ -139,7 +162,8 @@ def build_one(csv: Path, out: Path, data_dir: Path) -> dict:
     from uchrom.io.seqfish_multiomics import read_seqfish_multiomics
 
     t0 = time.perf_counter()
-    cd = read_seqfish_multiomics(csv, locus_annotation=data_dir / LOCI, cell_clustering=data_dir / CLUSTERS)
+    cd = read_seqfish_multiomics(csv, locus_annotation=data_dir / LOCI,
+                                 cell_clustering=data_dir / CLUSTERS if CLUSTERS else None)
     cd.uns["fov"] = fov_of(csv.name)
     save(cd, out)
     return {"fov": fov_of(csv.name), "csv": csv.name, "csv_bytes": csv.stat().st_size,
@@ -180,6 +204,12 @@ def concat(paths: list[Path]):
     uns.pop("fov", None)
     uns["fovs"] = [int(cd.uns.get("fov", -1)) for cd in parts]
     del parts
+    if CLUSTERS is None:          # a cell line: no clustering, so no cell types; a cells table of the ids and fields
+        uns.pop("leiden_to_cell_type", None)
+        ids = pd.unique(spots["cell_id"].astype(str))
+        cells = pd.DataFrame({"fov": [int(c.split("_")[1]) for c in ids]}, index=pd.Index(ids, name="cell_id"))
+    if SAMPLE in SOURCES:
+        uns["source"] = SOURCES[SAMPLE]
     cd = ChromData(coords, spots, cells=cells, cellm=cellm, traces=traces, uns=uns)
     cd.tracks = tracks  # spot-aligned: split into bin_tracks / spot_tracks
     return cd
@@ -187,9 +217,12 @@ def concat(paths: list[Path]):
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--sample", default="cerebellum_rep1", choices=sorted(SAMPLES))
     ap.add_argument("--data-dir", type=Path, default=None)
     ap.add_argument("--fovs", default=None, help="comma-separated FOV numbers (default: all)")
     ap.add_argument("--no-combined", action="store_true")
+    ap.add_argument("--combine-only", action="store_true",
+                    help="combine the per-FOV stores already built (no extraction, no FOV builds)")
     ap.add_argument("--drop-raw", action="store_true", help="delete each raw CSV after its FOV is built")
     ap.add_argument("--force", action="store_true", help="rebuild FOV files that already exist")
     ap.add_argument("--format", default="zarr", choices=sorted(SUFFIX),
@@ -199,6 +232,7 @@ def main() -> None:
     ap.add_argument("--memory-budget", default=None, help="streaming writer budget, e.g. 8GB")
     ap.add_argument("--one", nargs=2, metavar=("CSV", "OUT"), help=argparse.SUPPRESS)
     args = ap.parse_args()
+    use_sample(args.sample)
     data_dir = (args.data_dir or default_data_dir()).resolve()
 
     if args.stream:
@@ -208,7 +242,7 @@ def main() -> None:
         out = data_dir / f"{PREFIX}.stream.chromdata.zarr"
         t0 = time.perf_counter()
         cd = read_seqfish_multiomics([str(c) for c in csvs], locus_annotation=data_dir / LOCI,
-                                     cell_clustering=data_dir / CLUSTERS, out=out,
+                                     cell_clustering=data_dir / CLUSTERS if CLUSTERS else None, out=out,
                                      memory_budget=args.memory_budget)
         print(cd)
         print(f"{out} ({size_bytes(out) / 1e9:.2f} GB), {time.perf_counter() - t0:.0f} s, "
@@ -221,15 +255,20 @@ def main() -> None:
 
     fovs = None if args.fovs is None else {int(x) for x in args.fovs.split(",")}
     for name in (LOCI, CLUSTERS):
-        if not (data_dir / name).exists():
-            raise SystemExit(f"{data_dir / name} missing — run: python -m uchrom.datasets fetch takei2025_cerebellum")
-    csvs = extract(data_dir, fovs)
+        if name and not (data_dir / name).exists():
+            raise SystemExit(f"{data_dir / name} missing — run: python -m uchrom.datasets fetch {FOLDER}")
     fov_dir = data_dir / "fov"
+    if args.combine_only:
+        outs = sorted((p for p in fov_dir.glob(f"{PREFIX}_pos*{SUFFIX[args.format]}")
+                       if fovs is None or fov_of(p.name) in fovs), key=lambda p: fov_of(p.name))
+        csvs = []
+    else:
+        csvs = extract(data_dir, fovs)
     fov_dir.mkdir(exist_ok=True)
     summary_path = data_dir / "build_summary.json"
     summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
     per_fov = {int(r["fov"]): r for r in summary.get("fovs", [])}
-    outs = []
+    outs = outs if args.combine_only else []
     for csv in csvs:
         stem = fov_dir / f"{PREFIX}_pos{fov_of(csv.name)}"
         out = stem.with_name(stem.name + SUFFIX[args.format])
@@ -240,7 +279,8 @@ def main() -> None:
             continue
         outs.append(out)
         print(f"[build] {csv.name} → {out.name}", flush=True)
-        proc = subprocess.run([sys.executable, __file__, "--data-dir", str(data_dir), "--one", str(csv), str(out)],
+        proc = subprocess.run([sys.executable, __file__, "--sample", args.sample, "--data-dir", str(data_dir),
+                               "--one", str(csv), str(out)],
                               capture_output=True, text=True)
         if proc.returncode != 0:
             sys.stderr.write(proc.stderr)

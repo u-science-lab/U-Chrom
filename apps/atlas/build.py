@@ -230,7 +230,7 @@ def render_figures(config: PathLike, root: PathLike, out: PathLike, *, size: int
     such as a UMAP) and ``<id>.map.webp`` (a 40-Mb window of that
     section's bulk contact map, chr2 by default; without a bulk map: the all-cells sum of a per-cell map).  The
     config entry ``"figure"`` may pin ``section`` / ``color_by`` / ``positions`` / ``chrom`` / ``region``
-    (``chr2:40e6-80e6``), ``map`` (the contact-map key), ``layout`` (``structure``), ``cell`` or ``embedding`` (a ``cellm``
+    (``chr2:40e6-80e6``), ``map`` (the contact-map key; ``false``: no map figure), ``layout`` (``structure``), ``cell`` or ``embedding`` (a ``cellm``
     key) and give the ``caption`` of
     what the hero figure shows.  The datasets of the config's
     ``"hero"`` list are drawn again at ``hero_size`` (``<id>.hero.space.webp`` ...).  Writes ``figures.json``
@@ -258,6 +258,8 @@ def render_figures(config: PathLike, root: PathLike, out: PathLike, *, size: int
             bulk = spec["map"]
         if bulk is None:          # no bulk map: the all-cells sum of a per-cell map
             bulk = next((k for k, e in emb.items() if e.kind == "per_cell" and e.has_sum()), None)
+        if spec.get("map") is False:
+            bulk = None
         structure = None
         try:
             has_positions = bool(len(cd.cell_positions(spec.get("positions") or "default")))

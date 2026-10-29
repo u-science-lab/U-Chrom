@@ -126,6 +126,30 @@ def test_chromosome_names_made_alike(tmp_path):
     assert len(cd.bins) == len(read_4dn_tracing([dict(name="a", core=f["core"])]).bins)
 
 
+def test_capitalised_chromosome_prefix(tmp_path):
+    f = _files("mateo2019_orca_4DNEXJL6E1NS")
+    cap = tmp_path / "core.csv"                                    # written "Chr3R" (as Liu et al. 2025 write "Chr14")
+    cap.write_text(open(f["core"]).read().replace(",chr3R,", ",Chr3R,"))
+    cd = read_4dn_tracing([dict(name="b", core=cap)])
+    assert cd.uns["fofct_chrom_renames"] == {"Chr3R": "chr3R"}
+    assert set(cd.bins["chrom"].astype(str)) == {"chr3R"}
+
+
+def test_cells_numbered_per_field_of_view_in_the_core():
+    f = F / "odd_liu2025_kras_cells_per_fov_4DNFIEC1D26L.csv"            # CellID 110 in FOVid 1 and in FOVid 12
+    cd = read_4dn_tracing([dict(name="e", core=f)])
+    assert sorted(cd.cells.index) == ["e_1-110", "e_12-110"]
+    assert sorted(cd.cells["fov"]) == ["1", "12"]
+    assert cd.uns["fofct_chrom_renames"] == {"Chr6": "chr6"}
+
+
+def test_cells_numbered_per_field_and_run():
+    f = F / "odd_liu2025_kras_runs_4DNFIU7X8FJJ.csv"         # CellID 36 of FOVid 1 in Dataset IDs 210628 and 210728
+    cd = read_4dn_tracing([dict(name="e", core=f)])
+    assert sorted(cd.cells.index) == ["e_210628-1-36", "e_210728-1-36"]
+    assert sorted(cd.cells["run"]) == ["210628", "210728"] and set(cd.cells["fov"]) == {"1"}
+
+
 def test_reused_trace_ids_split_and_duplicate_rows_dropped(tmp_path):
     f = F / "odd_murphy2024_orca_reused_trace_ids_4DNFIYZDTHMG.csv"
     rows = _rows(f)                                   # one id in two blocks with another trace between them

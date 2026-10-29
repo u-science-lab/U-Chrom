@@ -35,11 +35,12 @@ _IDS = {"spot_id": "Spot_ID", "trace_id": "Trace_ID", "cell_id": "Cell_ID"}
 
 
 def _norm(name) -> str:
-    """``Spot_ID`` / ``spotID`` / ``spot_ID`` -> ``spot_id``, ``chr_start`` -> ``chrom_start`` (the deposits spell
-    the columns several ways)."""
+    """``Spot_ID`` / ``spotID`` / ``spot_ID`` -> ``spot_id``, ``chr_start`` -> ``chrom_start``, ``FOVid`` -> ``fov``
+    (the deposits spell the columns several ways)."""
     k = re.sub(r"[\s_]", "", str(name).strip().lower())
     return {"spotid": "spot_id", "traceid": "trace_id", "cellid": "cell_id", "chromstart": "chrom_start",
-            "chromend": "chrom_end", "chr": "chrom", "chrstart": "chrom_start", "chrend": "chrom_end"}.get(k, k)
+            "chromend": "chrom_end", "chr": "chrom", "chrstart": "chrom_start", "chrend": "chrom_end",
+            "fovid": "fov"}.get(k, k)
 
 
 def _cols(df: pd.DataFrame) -> dict:
@@ -239,15 +240,16 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
         ``spots``: one per detected spot (rows without coordinates or without a locus — an empty ``Chrom``, as
         the unassigned spots of Hafner et al. 2023 — left out, counted in ``uns["fofct_dropped_spots"]``), ``trace_id = "<name>_<Trace_ID>"``,
         ``cell_id = "<name>_<Cell_ID>"`` where the experiment gives cells (in the core, or in a cell table keyed
-        by trace), ``"<name>_<FOV>-<Cell_ID>"`` where its traces have a field of view (the authors number cells
-        per field), else — and for ``Cell_ID`` 0, a trace in no cell — ``"<name>_t<Trace_ID>"`` (one cell per
+        by trace), ``"<name>_<FOV>-<Cell_ID>"`` where its spots (core column ``FOVid`` / ``FOV``) or traces have a
+        field of view (the authors number cells per field; ``"<name>_<run>-<FOV>-<Cell_ID>"`` where the core also
+        has the imaging run, ``Dataset ID``, fields being numbered per run), else — and for ``Cell_ID`` 0, a trace in no cell — ``"<name>_t<Trace_ID>"`` (one cell per
         trace); ``spot_tracks``: the spot-quality columns; ``traces``: ``experiment``, the trace-data columns and
         per-trace cell values; ``cells``: ``experiment``, the ``meta`` values and the cell-data columns.
         ``uns``: ``genome_assembly``, ``xyz_unit`` (``micron``), ``fofct_headers`` (per experiment),
         ``fofct_unit_fixes``, ``fofct_dropped_spots`` (also exact duplicate rows), ``fofct_trace_splits`` (ids reused
         for several traces: :func:`_split_reused_traces`), ``fofct_column_fixes`` (core tables whose declared columns
         were one too many or one too few: :func:`_fix_columns`), ``fofct_chrom_renames`` (chromosome names
-        given the UCSC ``chr`` prefix: ``3R`` -> ``chr3R``, ``19`` -> ``chr19``).
+        given the UCSC ``chr`` prefix: ``3R`` -> ``chr3R``, ``19`` -> ``chr19``, ``Chr14`` -> ``chr14``).
     """
     from chromdata import ChromData, read_fofct_table
 
@@ -289,6 +291,13 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
                                 "chrom_end": df[c["chrom_end"]].to_numpy()})
             if "cell_id" in c:
                 std["cell_id"] = df[c["cell_id"]].to_numpy()
+                if "fov" in c:                    # the field of view of each spot (Liu et al. 2025)
+                    std["fov"] = df[c["fov"]].astype(str).str.replace(r"\.0$", "", regex=True).to_numpy(dtype=object)
+                    run = df[c["datasetid"]].fillna("").astype(str).str.replace(r"\.0$|[\x00-\x1f\"]", "",
+                                                                                regex=True) \
+                        if "datasetid" in c else None                   # an empty "" reads as a control character
+                    if run is not None and (run != "").any():    # and its imaging run, fields numbered per run
+                        std["run"] = run.to_numpy(dtype=object)
             if len(cores) > 1:                    # trace ids are the core's own: c<k>- keeps two cores' traces apart
                 std["trace_id"] = f"c{k + 1}-" + std["trace_id"].astype(str)
                 std["core_file"] = Path(core).stem
@@ -303,7 +312,8 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
             td.index = td.index.astype(str)
             tr = tr.join(td)
         # the authors' cell of each trace: in the core, or in a cell table keyed by trace (Hafner et al. 2023);
-        # numbered per field of view where the traces have one (a cell id spans several fields otherwise), 0 = none
+        # numbered per field of view where the spots or traces have one (a cell id spans several fields otherwise),
+        # 0 = none
         per_trace_cells = None
         cell_raw = None
         if exp.get("cell_data"):
@@ -319,8 +329,11 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
         if cell_raw is not None:
             raw = pd.Series(cell_raw, dtype=object).fillna("").astype(str).str.replace(r"\.0$", "", regex=True)
             none = raw.isin(["", "0", "-1", "nan", "None"]).to_numpy()
-            if "FOV" in tr.columns:
-                fov = tr["FOV"].astype(str).reindex(trace).to_numpy(dtype=object)
+            fov = (df["fov"].astype(str).to_numpy(dtype=object) if "fov" in df.columns
+                   else tr["FOV"].astype(str).reindex(trace).to_numpy(dtype=object) if "FOV" in tr.columns else None)
+            if fov is not None and "run" in df.columns:
+                fov = np.char.add(np.char.add(df["run"].to_numpy().astype(str), "-"), fov.astype(str)).astype(object)
+            if fov is not None:
                 key = np.char.add(np.char.add(fov.astype(str), "-"), raw.to_numpy().astype(str)).astype(object)
             else:
                 key = raw.to_numpy(dtype=object)
@@ -367,6 +380,9 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
         first = pd.DataFrame({"cell_id": cell_id, "trace_id": trace_id}).drop_duplicates("cell_id")
         ce = pd.DataFrame(index=pd.Index(first["cell_id"].to_numpy(), name="cell_id"))
         ce["experiment"] = name
+        for col in ("run", "fov"):
+            if col in df.columns:
+                ce[col] = pd.Series(df[col].to_numpy(), index=cell_id).groupby(level=0).first().reindex(ce.index).to_numpy()
         for k, v in dict(exp.get("meta") or {}).items():
             ce[k] = v
         if per_trace_cells is not None:            # per-cell values given per trace: those of the cell's first trace
@@ -391,11 +407,12 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
         genome_assembly = next(iter(assemblies), "unknown")
     cells_df, traces_df = _tidy(pd.concat(cells), category=True), _tidy(pd.concat(traces))
     spots_df = pd.concat(spots, ignore_index=True)
-    # UCSC chromosome names: one experiment writes "3R", another "chr3R" (Mateo et al. 2019); Liu et al. 2020 "19"
+    # UCSC chromosome names: one experiment writes "3R", another "chr3R" (Mateo et al. 2019); Liu et al. 2020 "19",
+    # Liu et al. 2025 "Chr14"
     chrom = spots_df["chrom"].astype(str).str.replace(r"\.0$", "", regex=True)
-    bare = ~chrom.str.startswith("chr")
-    renamed = {c: f"chr{c}" for c in sorted(chrom[bare].unique())}
-    spots_df["chrom"] = chrom.where(~bare, "chr" + chrom)
+    names = {c: "chr" + re.sub(r"^chr", "", c, flags=re.IGNORECASE) for c in chrom.unique()}
+    renamed = {c: u for c, u in sorted(names.items()) if c != u}
+    spots_df["chrom"] = chrom.map(names)
     return ChromData(coords=np.concatenate(coords), spots=spots_df,
                      spot_tracks=pd.concat(spot_tracks, ignore_index=True), traces=traces_df, cells=cells_df,
                      uns={"genome_assembly": genome_assembly, "xyz_unit": "micron", "fofct_headers": headers,

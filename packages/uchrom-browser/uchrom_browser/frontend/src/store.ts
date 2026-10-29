@@ -7,7 +7,7 @@ import { loadSidebars, saveSidebars, type Side, type Sidebars } from './sidebars
 import { applyTheme, loadThemeChoice, resolveTheme, saveThemeChoice, systemPrefersDark, type Palette, type ThemeChoice } from './theme'
 import { isPointPick } from './types'
 import type { Locus } from './genome'
-import { addPinnedPane, addTracePane, defaultWorkspace, dropGroupScope, followsNewDefault, paneSignature, parseWorkspaces, type DataKind, type WorkspaceState } from './workspace'
+import { addPinnedPane, addTracePane, defaultWorkspace, FEW_CELLS, dropGroupScope, followsNewDefault, paneSignature, parseWorkspaces, type DataKind, type WorkspaceState } from './workspace'
 import type { CellField, CellInfo, CellValue, ColorMode, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo, PointSet } from './types'
 
 let nextId = 1
@@ -107,8 +107,9 @@ export function initialView(ds: DatasetSummary): DatasetView {
   return base
 }
 
-/** Datasets whose first cell was focused on load (DatasetSummary.cells_overlap: stacked structures show nothing,
- *  so the views open on one cell; the cell list and the embedding pick another).  Once per dataset and session. */
+/** Datasets whose first cell was focused on load (DatasetSummary.cells_overlap: stacked structures show nothing, so
+ *  the views open on one cell; the cell list and the embedding pick another) — not a handful of cells (FEW_CELLS),
+ *  which the all-cells view shows side by side.  Once per dataset and session. */
 const autoFocused = new Set<string>()
 
 /** Key of a cached cell-field vector. */
@@ -510,9 +511,12 @@ export const useStore = create<AppState>((set, get) => {
     set({ cells: { ...get().cells, [datasetId]: cells } })
     const ds = get().datasets.find((d) => d.id === datasetId)
     const view = get().views[datasetId]
-    if (ds?.cells_overlap && cells.length && view && !view.focusCell && !view.focusGroup && !autoFocused.has(datasetId)) {
+    const oneCell = !!ds && !!ds.cells_overlap && ds.n_cells > FEW_CELLS
+    if (oneCell && cells.length && view && !view.focusCell && !view.focusGroup && !autoFocused.has(datasetId)) {
       autoFocused.add(datasetId)
-      set({ views: { ...get().views, [datasetId]: { ...view, focusCell: cells[0].cell_id } } })
+      // the dataset on show flies to the cell (its overview may already be framed); another one fits it when shown
+      const fly = get().activeDatasetId === datasetId ? { flyToken: get().flyToken + 1 } : {}
+      set({ views: { ...get().views, [datasetId]: { ...view, focusCell: cells[0].cell_id } }, ...fly })
     }
   },
   focusCell(cellId) {

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { descendantIds, removeCascade, treeOrder, uniqueName } from './layers'
 import { activeView, useStore } from './store'
+import { FEW_CELLS } from './workspace'
 import { decodeGeometry } from './api'
 import { encodeGeometry, sampleHeader } from './testing'
 import type { DatasetSummary, Layer } from './types'
@@ -125,6 +126,17 @@ describe('store', () => {
     expect(s.datasets.map((d) => d.id)).toEqual(['d1'])
     expect(s.layers.every((l) => l.datasetId === 'd1')).toBe(true)
     expect(s.activeDatasetId).toBe('d1')
+  })
+
+  it('opens many overlapping cells on the first one, a handful on all cells', () => {
+    const st = useStore.getState()
+    const cells = ['c1', 'c2', 'c10'].map((cell_id) => ({ cell_id, n_spots: 1, n_traces: 1, n_chroms: 1 }))
+    st.addDataset({ ...ds, id: 'few', name: 'few', n_cells: 3, cells_overlap: true })
+    st.setCells('few', cells)
+    expect(useStore.getState().views['few'].focusCell).toBeNull()
+    st.addDataset({ ...ds, id: 'many', name: 'many', n_cells: FEW_CELLS + 1, cells_overlap: true })
+    st.setCells('many', cells)
+    expect(useStore.getState().views['many'].focusCell).toBe('c1')
   })
 
   it('focuses and steps through cells without creating layers', () => {
