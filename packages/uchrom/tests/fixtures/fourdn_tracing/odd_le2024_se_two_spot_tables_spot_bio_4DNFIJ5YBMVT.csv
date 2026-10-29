@@ -1,0 +1,29 @@
+##FOF-CT_version=v0.1
+##Table_namespace=4dn_FOF-CT_cell
+##genome_assembly=mm10
+##XYZ_unit=micron
+#Software_Title: ChrTracer3.1
+#Software_Type: SpotLoc+Tracing
+#Software_Authors: Boettiger, AN
+#Software_Description: ChrTracer3.1 software is a script based (rather than GUI based) extension of the ChrTracer3 GUI based software described in our previous publications. This version starts with nuclear segmentation and searches for spots within the 3D bounds of each identified nucleus, rather than a small search area around a seed point.
+#Software_Repository: https://github.com/BoettigerLab/ORCA-public + https://github.com/BoettigerLab/SEclustering-2024
+#Software_PreferredCitationID: https://doi.org/10.1038/s41596-020-00478-x
+#lab_name: Boettiger
+#experimenter_name: Derek Le and Antonina Hafner
+#experimenter_contact: boettiger@stanford.edu
+#additional_tables: 4dn_FOF-CT_core, 4dn_FOF-CT_quality
+#notes: nascent RNA burst intensities are recorded for each allel in each cell
+##columns=
+(Spot_ID,Cell_ID,Allele_ID,nascentRNA_burst_intensity,Chrom,Chrom_Start,Chrom_End,RNA_name)
+1,2,1,0,chr1,13064690,13079690,Prdm14
+2,2,0,0,chr1,13064690,13079690,Prdm14
+3,2,1,NaN,chr3,9640796,9655796,Zfp704
+4,2,0,NaN,chr3,9640796,9655796,Zfp704
+5,2,1,NaN,chr1,36064899,36079899,Hs6st1
+6,2,0,NaN,chr1,36064899,36079899,Hs6st1
+7,2,0,NaN,chr3,34541708,34556708,Sox2
+8,2,0,NaN,chr3,34541708,34556708,Sox2
+9,2,1,NaN,chr1,36107431,36122431,Hs6st1
+10,2,0,NaN,chr1,36107431,36122431,Hs6st1
+11,2,1,NaN,chr3,34639696,34654696,Sox2
+12,2,0,NaN,chr3,34639696,34654696,Sox2

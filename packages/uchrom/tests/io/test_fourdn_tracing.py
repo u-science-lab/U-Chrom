@@ -150,6 +150,35 @@ def test_cells_numbered_per_field_and_run():
     assert sorted(cd.cells["run"]) == ["210628", "210728"] and set(cd.cells["fov"]) == {"1"}
 
 
+def test_traces_from_core_columns():
+    f = F / "odd_tastemel2025_sox2_locus_trace_ids_4DNFIH5BHP3E.csv"    # Trace_ID = locus index; cell 11, two alleles
+    by_locus = read_4dn_tracing([dict(name="e", core=f)])
+    assert by_locus.n_traces == len(by_locus.bins) > 2                   # as deposited: one "trace" per locus
+    cd = read_4dn_tracing([dict(name="e", core=f, trace_by=("Cell_ID", "Extra_Cell_ROI_ID"))])
+    assert sorted(cd.traces.index) == ["e_11_129", "e_11_CAST"] and cd.n_cells == 1
+    assert cd.uns["fofct_trace_keys"] == {"e": ["Cell_ID", "Extra_Cell_ROI_ID"]}
+    per = cd.spots.groupby("trace_id", observed=True)["bin_id"]
+    assert (per.nunique() == per.size()).all()                           # each locus once per allele
+
+
+def test_spot_tables_of_other_columns_joined():
+    p = "odd_le2024_se_two_spot_tables_"            # spots 1-12 of one experiment: core, quality, nascent RNA per spot
+    cd = read_4dn_tracing([dict(name="e", core=F / f"{p}core_4DNFI4YJYP5Q.csv",
+                                spot_quality=[F / f"{p}spot_quality_4DNFIF8577IV.csv",
+                                              F / f"{p}spot_bio_4DNFIJ5YBMVT.csv"])])
+    st = cd.spot_tracks
+    assert {"fitQuality", "nascentRNA_burst_intensity", "RNA_name"} <= set(st.columns)
+    assert not {"Chrom", "Chrom_Start", "Chrom_End"} & set(st.columns)          # the spot's own locus, repeated
+    rna = {r[0]: r for r in _rows(F / f"{p}spot_bio_4DNFIJ5YBMVT.csv")}
+    assert st["RNA_name"].notna().all() and set(st["RNA_name"]) <= {r[7] for r in rna.values()}
+    # cells and traces numbered per field of view, the field given in the quality table only
+    fov = read_4dn_tracing([dict(name="e", core=F / f"{p}core_4DNFI4YJYP5Q.csv", fov_from=("fov",),
+                                 spot_quality=[F / f"{p}spot_quality_4DNFIF8577IV.csv"], trace_by=("Trace_ID", "Chrom"))])
+    assert set(fov.cells.index) == {f"e_1-{c}" for c in {r[8] for r in _rows(F / f"{p}core_4DNFI4YJYP5Q.csv")}}
+    assert all(t.startswith("e_1-") and t.rsplit("_", 1)[1] in ("chr1", "chr3") for t in fov.traces.index.astype(str))
+    assert fov.uns["fofct_fov_columns"] == {"e": "fov"}
+
+
 def test_reused_trace_ids_split_and_duplicate_rows_dropped(tmp_path):
     f = F / "odd_murphy2024_orca_reused_trace_ids_4DNFIYZDTHMG.csv"
     rows = _rows(f)                                   # one id in two blocks with another trace between them

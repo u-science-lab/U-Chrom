@@ -3119,7 +3119,10 @@ def _read_fofct_table(path: Path):
             if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
                 stripped = stripped[1:-1]
             if stripped.lower().lstrip("#").startswith("columns=") and stripped.startswith("#"):   # also "#columns="
-                columns = _fofct_column_names(stripped.split("=", 1)[1])
+                # an empty value: the names follow on a line of their own (Le et al. 2024: "##columns=" over
+                # "(Spot_ID,barcodeID,...,hyb)"), read as a CSV header row
+                value = stripped.split("=", 1)[1]
+                columns = _fofct_column_names(value) if value.strip() else None
             elif stripped.startswith("##"):
                 key, _, val = stripped[2:].partition("=")
                 header_meta[key.strip()] = val.strip()
@@ -3140,7 +3143,7 @@ def _read_fofct_table(path: Path):
     has_csv_header = bool(first_token) and not (
         first_token[0].isdigit() or first_token[0] in ("-", "+", ".")
     )
-    header_names = [c.strip().strip('"') for c in data_lines[0].split(",")]
+    header_names = [c.strip('"') for c in _fofct_column_names(data_lines[0].rstrip(","))]
     all_names = all(n and not _is_number(n) for n in header_names)
     if has_csv_header and columns is not None and first_token not in columns and not all_names:
         has_csv_header = False  # e.g. cell tables whose first column is an id like "0_1"
@@ -3368,7 +3371,10 @@ def _scan_fofct_header(path: Path):
             if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
                 stripped = stripped[1:-1]
             if stripped.lower().lstrip("#").startswith("columns=") and stripped.startswith("#"):   # also "#columns="
-                columns = _fofct_column_names(stripped.split("=", 1)[1])
+                # an empty value: the names follow on a line of their own (Le et al. 2024: "##columns=" over
+                # "(Spot_ID,barcodeID,...,hyb)"), read as a CSV header row
+                value = stripped.split("=", 1)[1]
+                columns = _fofct_column_names(value) if value.strip() else None
             elif stripped.startswith("##"):
                 key, _, val = stripped[2:].partition("=")
                 header_meta[key.strip()] = val.strip()
@@ -3383,7 +3389,7 @@ def _scan_fofct_header(path: Path):
                     has_csv_header = False
                 if has_csv_header:
                     if columns is None:
-                        columns = [c.strip() for c in raw.split(",")]
+                        columns = [c.strip('"') for c in _fofct_column_names(raw.rstrip(","))]
                     n_skip += 1
                 break
             n_skip += 1

@@ -39,6 +39,17 @@ def test_columns_line_with_one_bracket(tmp_path):
     assert list(cd.spots_with_loci()["end"]) == [3831959, 4911959] and cd.n_traces == 1
 
 
+def test_column_names_on_the_line_after_an_empty_columns_line(tmp_path):
+    """``##columns=`` left empty with the names, in brackets, on the next line (Le et al. 2024 quality tables)."""
+    from chromdata.cdata import read_fofct_table
+
+    q = tmp_path / "quality.csv"
+    q.write_text("##Table_namespace=4dn_FOF-CT_quality\n##columns=\n(Spot_ID,barcodeID,fitQuality,hyb)\n"
+                 "1,13,1,7\n2,14,1,8\n")
+    df, _ = read_fofct_table(q)
+    assert list(df.columns) == ["Spot_ID", "barcodeID", "fitQuality", "hyb"] and list(df["hyb"]) == [7, 8]
+
+
 def test_padding_columns_dropped(tmp_path):
     """Rows padded with empty fields beyond the named columns (Chen et al. 2023 quality tables) add no columns."""
     from chromdata.cdata import read_fofct_table

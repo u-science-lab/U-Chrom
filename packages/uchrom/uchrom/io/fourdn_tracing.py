@@ -230,7 +230,11 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
         tables), ``meta`` (a mapping of values given
         to each of its cells, e.g. the experiment set, condition and biosample) and ``locus_shifts`` (``(chrom,
         start_from, start_to, offset)``: loci whose start lies in the range moved by ``offset`` bp — a correction
-        the caller knows from the authors, recorded in ``uns["fofct_locus_shifts"]``).
+        the caller knows from the authors, recorded in ``uns["fofct_locus_shifts"]``) and ``trace_by`` (core
+        columns whose values, joined, are the trace id, where the deposit's ``Trace_ID`` is not one; recorded in
+        ``uns["fofct_trace_keys"]``) and ``fov_from`` (spot-table columns, the first present taken, that give each
+        spot's field of view where the core has none: cells and traces are then numbered per field; recorded in
+        ``uns["fofct_fov_columns"]``).
     genome_assembly : str, optional
         Recorded in ``uns``; default: the ``genome_assembly`` of the core tables' headers (they must agree).
 
@@ -255,9 +259,17 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
 
     coords, spots, spot_tracks, traces, cells = [], [], [], [], []
     headers, fixes, assemblies, dropped, column_fixes, trace_splits, shifts = {}, [], set(), {}, [], {}, {}
+    trace_keys, fov_sources = {}, {}
     for exp in experiments:
         name = str(exp["name"])
         cores = list(exp["core"]) if isinstance(exp["core"], (list, tuple)) else [exp["core"]]
+        fov_tables = []
+        if exp.get("fov_from"):
+            for f in [f for k in ("spot_quality", "spot_bio") for f in _as_list(exp.get(k))]:
+                t = _table(f)
+                if "Spot_ID" in t and any(x in t for x in exp["fov_from"]):
+                    t.index = t["Spot_ID"].astype(str).str.replace(r"\.0$", "", regex=True)
+                    fov_tables.append(t)
         parts = []
         dropped[name] = {"no_coordinates": 0, "no_locus": 0, "duplicate_rows": 0}
         for k, core in enumerate(cores):          # an experiment may have several core tables (Takei 2021: 1 Mb, 25 kb)
@@ -266,6 +278,19 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
             headers.setdefault(name, header)
             df = _fix_columns(df, core, label, column_fixes)
             c = _cols(df)
+            fov_col = next((x for x in exp.get("fov_from") or () if any(x in t for t in fov_tables)), None)
+            if fov_col:                           # the field of view of each spot, given in a spot table only
+                fov = pd.concat([t[fov_col] for t in fov_tables if fov_col in t])
+                fov = fov[~fov.index.duplicated()].astype(str).str.replace(r"\.0$", "", regex=True)
+                sid = df[c["spot_id"]].astype(str).str.replace(r"\.0$", "", regex=True)
+                df["FOV"] = sid.map(fov).to_numpy()
+                df[c["trace_id"]] = df["FOV"].astype(str) + "-" + df[c["trace_id"]].astype(str)  # numbered per field too
+                c = _cols(df)
+                fov_sources[name] = fov_col
+            if exp.get("trace_by"):              # the deposit's Trace_ID is no trace (Tastemel 2025: the locus index)
+                keys = [c[_norm(k)] for k in exp["trace_by"]]
+                df[c["trace_id"]] = df[keys].astype(str).agg("_".join, axis=1)
+                trace_keys[name] = list(exp["trace_by"])
             need = ["spot_id", "trace_id", "x", "y", "z", "chrom", "chrom_start", "chrom_end"]
             missing = [x for x in need if x not in c]
             if missing:
@@ -358,12 +383,25 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
         st = pd.DataFrame(index=pd.RangeIndex(len(df)))
         spot_files = [f for k in ("spot_quality", "spot_bio") for f in _as_list(exp.get(k))]
         if spot_files:                            # spot quality / spot biological data, keyed by Spot_ID
-            q = pd.concat([_companion(f, "Spot_ID", name).drop(columns=["Trace_ID", "Cell_ID"], errors="ignore")
-                           for f in spot_files])
-            q.index = pd.Index(q.index.astype(str)).str.replace(r"\.0$", "", regex=True)
-            if q.index.duplicated().any():
-                raise ValueError(f"{name}: a Spot_ID is in several spot tables")
+            # tables of the same columns hold other spots (stacked); tables of other columns, other values of the
+            # same spots (joined: Le et al. 2024 give each spot's quality and its allele's nascent RNA apart)
+            groups = {}
+            for f in spot_files:
+                t = _companion(f, "Spot_ID", name).drop(columns=["Trace_ID", "Cell_ID"], errors="ignore")
+                t.index = pd.Index(t.index.astype(str)).str.replace(r"\.0$", "", regex=True)
+                groups.setdefault(tuple(t.columns), []).append(t)
+            q = None
+            for parts in groups.values():
+                t = pd.concat(parts)
+                if t.index.duplicated().any():
+                    raise ValueError(f"{name}: a Spot_ID is in several spot tables")
+                q = t if q is None else q.join(t, how="outer", rsuffix="_2")
             q = q.reindex(df["spot_id"].to_numpy())
+            for col in [x for x in q.columns if _norm(x) in ("chrom", "chrom_start", "chrom_end")]:
+                own = df[_norm(col)].astype(str).to_numpy()            # a spot's own locus, repeated: left out
+                v = q[col].astype(str).str.replace(r"\.0$", "", regex=True).to_numpy()
+                if ((v == own) | q[col].isna().to_numpy()).all():
+                    q = q.drop(columns=col)
             for col in q.columns:
                 num = pd.to_numeric(q[col], errors="coerce")
                 st[col] = (num.to_numpy(float) if num.notna().sum() >= q[col].notna().sum()
@@ -418,4 +456,6 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
                      uns={"genome_assembly": genome_assembly, "xyz_unit": "micron", "fofct_headers": headers,
                           "fofct_unit_fixes": fixes, "fofct_dropped_spots": dropped,
                           "fofct_column_fixes": column_fixes, "fofct_chrom_renames": renamed,
-                          "fofct_trace_splits": trace_splits, "fofct_locus_shifts": shifts})
+                          "fofct_trace_splits": trace_splits, "fofct_locus_shifts": shifts,
+                          **({"fofct_trace_keys": trace_keys} if trace_keys else {}),
+                          **({"fofct_fov_columns": fov_sources} if fov_sources else {})})

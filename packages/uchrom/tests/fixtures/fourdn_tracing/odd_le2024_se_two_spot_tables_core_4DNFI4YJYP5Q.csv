@@ -1,0 +1,27 @@
+##FOF-CT_version=v0.1
+##Table_namespace=4dn_FOF-CT_core
+##genome_assembly=mm10
+##XYZ_unit=micron
+#Software_Title: ChrTracer3.1
+#Software_Type: SpotLoc+Tracing
+#Software_Authors: Boettiger, AN
+#Software_Description: ChrTracer3.1 software is a script based (rather than GUI based) extension of the ChrTracer3 GUI based software described in our previous publications. This version starts with nuclear segmentation and searches for spots within the 3D bounds of each identified nucleus, rather than a small search area around a seed point.
+#Software_Repository: https://github.com/BoettigerLab/ORCA-public + https://github.com/BoettigerLab/SEclustering-2024
+#Software_PreferredCitationID: https://doi.org/10.1038/s41596-020-00478-x
+#lab_name: Boettiger
+#experimenter_name: Derek Le and Antonina Hafner
+#experimenter_contact: boettiger@stanford.edu
+#additional_tables: 4dn_FOF-CT_quality, 4dn_FOF-CT_rna
+##columns=(Spot_ID, Trace_ID, X, Y, Z, Chrom, Chrom_Start, Chrom_End, Cell_ID,Allele_ID)
+1,17,0.600969608492682,0.636538950707767,0.240545871122672,chr1,13064690,13079690,2,1
+2,18,0.801333568997823,0.498932879663183,0.117847460904019,chr1,13064690,13079690,2,0
+3,5,0.855605436229764,0.682081354178685,0.0721669913968293,chr3,9640796,9655796,2,1
+4,6,0.81596024655088,0.827259184140997,0.300179748461631,chr3,9640796,9655796,2,0
+5,65,0.618569288430761,0.725799721650513,0.227566130847858,chr1,36064899,36079899,2,1
+6,66,0.37130375655425,0.62209630544043,0.203698707284932,chr1,36064899,36079899,2,0
+7,5,NaN,NaN,NaN,chr3,34541708,34556708,2,0
+8,6,NaN,NaN,NaN,chr3,34541708,34556708,2,0
+9,25,0.95996301666886,0.768263422513733,0.164874036971426,chr1,36107431,36122431,2,1
+10,26,0.801663467752287,0.484075909936386,0.238003548131907,chr1,36107431,36122431,2,0
+11,45,0.711251861347793,0.677955401328349,0.384928654768838,chr3,34639696,34654696,2,1
+12,46,0.840850965394902,0.695616143998796,0.348232473808369,chr3,34639696,34654696,2,0
