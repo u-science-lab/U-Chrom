@@ -3085,6 +3085,20 @@ def _is_number(text: str) -> bool:
         return False
 
 
+def _fofct_column_names(value: str) -> list:
+    """The names of a ``##columns=`` value.  One enclosing pair of brackets is removed (``str.strip("()")`` would
+    also eat the ")" of a last column such as "n_per_dist(um)"), and so is a lone bracket of a pair whose other half
+    is missing (Patterson et al. 2023: ``##columns=Spot_ID,...,Chrom_End)``)."""
+    v = value.strip()
+    if v.startswith("(") and v.endswith(")"):
+        v = v[1:-1]
+    elif v.endswith(")") and "(" not in v:
+        v = v[:-1]
+    elif v.startswith("(") and ")" not in v:
+        v = v[1:]
+    return [c.strip() for c in v.split(",")]
+
+
 def _read_fofct_table(path: Path):
     """Parse a FOF-CT table: ``##key=value`` / ``#key: value`` headers,
     a ``##columns=(...)`` line and CSV data.  Returns ``(df, header_meta)``
@@ -3105,12 +3119,7 @@ def _read_fofct_table(path: Path):
             if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
                 stripped = stripped[1:-1]
             if stripped.lower().lstrip("#").startswith("columns=") and stripped.startswith("#"):   # also "#columns="
-                cols_str = stripped.split("=", 1)[1].strip()
-                # remove one enclosing pair only: str.strip("()") would also
-                # eat the ")" of a last column such as "n_per_dist(um)"
-                if cols_str.startswith("(") and cols_str.endswith(")"):
-                    cols_str = cols_str[1:-1]
-                columns = [c.strip() for c in cols_str.split(",")]
+                columns = _fofct_column_names(stripped.split("=", 1)[1])
             elif stripped.startswith("##"):
                 key, _, val = stripped[2:].partition("=")
                 header_meta[key.strip()] = val.strip()
@@ -3157,6 +3166,9 @@ def _read_fofct_table(path: Path):
     elif columns is not None:
         # Column count mismatch — trust the data and label the extras
         df.columns = (columns + [f"col_{i}" for i in range(len(columns), len(df.columns))])[: len(df.columns)]
+        # extras that are only the commas a writer pads every row with (Chen et al. 2023: "1,3008.24,,,") go
+        extra = [c for c in df.columns[len(columns):] if df[c].isna().all()]
+        df = df.drop(columns=extra)
     return df, header_meta
 
 
@@ -3356,10 +3368,7 @@ def _scan_fofct_header(path: Path):
             if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
                 stripped = stripped[1:-1]
             if stripped.lower().lstrip("#").startswith("columns=") and stripped.startswith("#"):   # also "#columns="
-                cols_str = stripped.split("=", 1)[1].strip()
-                if cols_str.startswith("(") and cols_str.endswith(")"):
-                    cols_str = cols_str[1:-1]
-                columns = [c.strip() for c in cols_str.split(",")]
+                columns = _fofct_column_names(stripped.split("=", 1)[1])
             elif stripped.startswith("##"):
                 key, _, val = stripped[2:].partition("=")
                 header_meta[key.strip()] = val.strip()

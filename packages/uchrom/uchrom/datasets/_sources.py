@@ -55,6 +55,11 @@ def _gse(gse: str, name: str) -> str:
     return f"https://ftp.ncbi.nlm.nih.gov/geo/series/{gse[:-3]}nnn/{gse}/suppl/{name}"
 
 
+def _gse_matrix(gse: str, name: str) -> str:
+    """URL of a GEO series matrix (sample titles and characteristics)."""
+    return f"https://ftp.ncbi.nlm.nih.gov/geo/series/{gse[:-3]}nnn/{gse}/matrix/{name}"
+
+
 # Single-cell Hi-C / multi-omics cited by Guo et al. 2026 (Cell) -- the atlas' single-cell studies.
 # HiRES (Liu et al. 2023, Science, doi:10.1126/science.adg3797), GEO GSE223917: 7,895 cells (mouse embryo
 # E7.0-E9.5 + brain), per cell .pairs.gz and the authors' 20 kb diploid structure (.3dg), RNA UMI counts.
@@ -388,6 +393,27 @@ DATASETS = {
         "default": False,
         "description": "Takei 2025 cerebellum DNA seqFISH+ rep 2, all FOVs (Zenodo 7693825)",
     },
+    # the cell lines of the same deposit (mESC E14 replicate 1, NMuMG), same format, no clustering table
+    "takei2025_e14": {
+        "files": [("takei2025_e14/E14_rep1.tar.gz", "https://zenodo.org/records/7693825/files/E14_rep1.tar.gz"),
+                  ("takei2025_e14/LC1-100k-09022022-mm10-25kb-meta.csv",
+                   "https://media.githubusercontent.com/media/CaiGroup/dna-seqfish-plus-multi-omics/main/data/"
+                   "annotation/LC1-100k-09022022-mm10-25kb-meta.csv")],
+        "md5": {"takei2025_e14/E14_rep1.tar.gz": "69ce24a7bc234f6e48b1f47fe7be4257"},
+        "size_mb": 11100,
+        "default": False,
+        "description": "Takei 2025 mESC E14 DNA seqFISH+ rep 1, all FOVs (Zenodo 7693825)",
+    },
+    "takei2025_nmumg": {
+        "files": [("takei2025_nmumg/NMuMG.tar.gz", "https://zenodo.org/records/7693825/files/NMuMG.tar.gz"),
+                  ("takei2025_nmumg/LC1-100k-09022022-mm10-25kb-meta.csv",
+                   "https://media.githubusercontent.com/media/CaiGroup/dna-seqfish-plus-multi-omics/main/data/"
+                   "annotation/LC1-100k-09022022-mm10-25kb-meta.csv")],
+        "md5": {"takei2025_nmumg/NMuMG.tar.gz": "5ce7d58b9b691c45b4154c6aaef8b0f4"},
+        "size_mb": 4160,
+        "default": False,
+        "description": "Takei 2025 NMuMG DNA seqFISH+, all FOVs (Zenodo 7693825)",
+    },
     # the RNA seqFISH spot tables of every Takei 2025 sample (aggregated into the linked AnnData of
     # uchrom.io.load_takei2025_cerebellum)
     "takei2025_rna": {
@@ -565,6 +591,26 @@ DATASETS = {
     "liu2020_mina": _fourdn_tracing("liu2020_mina", "Liu 2020 MINA of fetal mouse liver, 4 experiments (4DN FOF-CT)"),
     "hung2024_orca": _fourdn_tracing("hung2024_orca", "Hung 2024 ORCA of Pitx1 in mouse limb buds (4DN FOF-CT)"),
     "huang2021_4dn": _fourdn_tracing("huang2021_4dn", "Huang 2021 Sox2 locus tracing in mESC, 5 sets (4DN FOF-CT)"),
+    # Third batch of 4DN FOF-CT tracing (metadata 2026-10-28): Liu et al. 2025 (Nat Genet 57:3075; genome-wide and
+    # 5-kb tracing of Kras-driven mouse lung and pancreatic cancers), Cheng et al. 2025 (Nat Methods 22:950;
+    # Perturb-tracing: pooled CRISPR screens read out by chr22 / chr21 tracing), Chen et al. 2023 (Mol Cell 83:1446;
+    # ORCA of the SOX9 4-Mb region in hESC and cranial neural crest, CTCF-site deletions), Patterson et al. 2023
+    # (Sci Adv 9:eadf2245; chrX in naive / primed human PSCs), Sawh et al. 2020 (Mol Cell 78:96) and Gutnik et al.
+    # 2024 (Genome Biol 25:71; chrI / chrV tracing in C. elegans embryos), Messina et al. 2023 (Nat Commun 14:6678;
+    # Hi-M of Drosophila embryos).
+    "liu2025_kras": _fourdn_tracing("liu2025_kras", "Liu 2025 tracing of Kras-driven mouse cancers, 22 sets "
+                                    "(4DN FOF-CT)"),
+    "cheng2025_perturb": _fourdn_tracing("cheng2025_perturb", "Cheng 2025 Perturb-tracing, 15 sets (4DN FOF-CT)"),
+    "chen2023_sox9": _fourdn_tracing("chen2023_sox9", "Chen 2023 ORCA of SOX9 in hESC / neural crest, 5 sets "
+                                     "(4DN FOF-CT)"),
+    "patterson2023_chrx": _fourdn_tracing("patterson2023_chrx", "Patterson 2023 chrX tracing in human PSCs, 21 sets "
+                                          "(4DN FOF-CT)"),
+    "sawh2020_celegans": _fourdn_tracing("sawh2020_celegans", "Sawh 2020 chromosome tracing in C. elegans embryos, "
+                                         "7 sets (4DN FOF-CT)"),
+    "gutnik2024_celegans": _fourdn_tracing("gutnik2024_celegans", "Gutnik 2024 maternal / paternal chromosome tracing "
+                                           "in C. elegans embryos, 6 sets (4DN FOF-CT)"),
+    "messina2023_him": _fourdn_tracing("messina2023_him", "Messina 2023 Hi-M of Drosophila embryos, 2 sets "
+                                       "(4DN FOF-CT)"),
     # Rao et al. 2014 IMR90 in situ Hi-C reprocessed by 4DN on GRCh38 (set 4DNES1ZEJNRU): the
     # whole-genome input of the bulk deconvolution benchmark (20 kb built from the 10 kb level).
     "rao2014_imr90_4dn": {
@@ -803,6 +849,85 @@ DATASETS = {
         "default": False,
         "parallel": 2,
         "description": "HiRES adult brain: per-cell contact pairs + 20 kb diploid structures, 426 cells (GSE223917)",
+    },
+    # Single-cell Hi-C with the authors' 3-D structure of every cell (hickit / Dip-C .3dg, 20 kb particles), the
+    # atlas' third batch (GEO file lists of 2026-10-28; per-cell files, built by
+    # apps/atlas/recipes/build_dipc_structures.py):
+    # Tan et al. 2019 (Nat Struct Mol Biol 26:297; Dip-C of mouse retina and main olfactory epithelium, 409 cells,
+    # three runs per cell), Xu et al. 2025 (Nat Commun 16:3805; haploid human and mouse sperm, mESC controls),
+    # Wu et al. 2024 (Nat Methods 21:974; LiMCA: 3-D genome + RNA of the same mouse olfactory cells) and
+    # Liu et al. 2026 (Genomics Proteomics Bioinformatics, doi:10.1093/gpbjnl/qzag002; HiRES of female hybrid mESC
+    # through the first days of random X inactivation, with RNA).
+    "tan2019_dipc": {
+        "files": lambda: ([(f"tan2019_dipc/raw/GSE121791/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE121791", r"_cell_\d+\.(impute\.pairs\.txt\.gz|20k\.[12]\.clean\.3dg\.txt\.gz)$")]
+            + [(f"tan2019_dipc/raw/GSE121791/{n}", _gse_matrix("GSE121791", n))
+               for n in ("GSE121791-GPL17021_series_matrix.txt.gz", "GSE121791-GPL21103_series_matrix.txt.gz")]),
+        "size_mb": 4400,
+        "default": False,
+        "parallel": 4,
+        "description": "Tan 2019 Dip-C mouse retina + olfactory epithelium, 409 cells: imputed pairs + two 20 kb "
+                       "clean 3dg runs per cell (GSE121791)",
+    },
+    "xu2025_sperm": {
+        "files": lambda: [(f"xu2025_sperm/raw/GSE276999/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE276999", r"_(HS|BJ|ESCO)\d+\.(pairs\.gz|3dg\.txt\.gz)$")],
+        "size_mb": 10800,
+        "default": False,
+        "parallel": 4,
+        "description": "Xu 2025 scHi-C of human and mouse sperm + mESC: pairs and 20 kb haploid 3dg per cell "
+                       "(GSE276999)",
+    },
+    "wu2024_limca": {
+        "files": lambda: ([(f"wu2024_limca/raw/GSE239969/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE239969", r"_p\d+-(bdf1|bc)_\d+(\.impute\.pairs\.gz|_20kb_[12]\.clean\.3dg\.txt\.gz)$")]
+            + [(f"wu2024_limca/raw/GSE239969/{n}", _gse("GSE239969", n))
+               for n in ("GSE239969_LiMCA_olfactory_rna_gene_counts.tsv.gz",)]
+            + [(f"wu2024_limca/raw/GSE239969/{n}", _gse_matrix("GSE239969", n))
+               for n in ("GSE239969_series_matrix.txt.gz",)]),
+        "size_mb": 6800,
+        "default": False,
+        "parallel": 4,
+        "description": "Wu 2024 LiMCA mouse olfactory epithelium, 411 cells: imputed pairs, two 20 kb clean 3dg "
+                       "runs, RNA counts (GSE239969)",
+    },
+    "liu2026_hires_xci": {
+        "files": lambda: ([(f"liu2026_hires_xci/raw/GSE278310/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE278310", r"_d\d+[A-D]\d+\.(pairs\.gz|clean\.20k\.0\.3dg\.txt\.gz)$")]
+            + [(f"liu2026_hires_xci/raw/GSE310759/cells/{n}", _gsm(n)) for n in _geo_filelist(
+                "GSE310759", r"_d\d+[A-D]\d+\.(pairs\.gz|clean\.20k\.0\.3dg\.gz)$")]
+            + [(f"liu2026_hires_xci/raw/GSE278310/{n}", _gse("GSE278310", n))
+               for n in ("GSE278310_ESC_metadata.csv.gz", "GSE278310_ESC_qc_total_umi.csv.gz")]
+            + [(f"liu2026_hires_xci/raw/GSE310759/{n}", _gse("GSE310759", n))
+               for n in ("GSE310759_ESC_metadata_update.csv.gz", "GSE310759_ESC_qc_total_umi_update.csv.gz")]),
+        "size_mb": 16700,
+        "default": False,
+        "parallel": 4,
+        "description": "Liu 2026 HiRES of female hybrid mESC through random X inactivation: pairs, 20 kb diploid "
+                       "3dg, metadata and RNA UMI counts (GSE278310 + GSE310759)",
+    },
+    # NucDynamics structures (Laue lab format; apps/atlas/recipes/build_nuc_structures.py): Lando et al. 2024 (Mol
+    # Cell 84:1406; haploid mESC leaving naive pluripotency, .ncc contacts + 100 kb .n3d with 10 models) and Zhou et
+    # al. 2019 (Nat Plants 5:795; rice egg, sperm, zygote and shoot cells, .ncc + 5 kb PDB).
+    "lando2024_mesc": {
+        "files": lambda: ([(f"lando2024_mesc/raw/GSE214264/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE214264", r"_P\d+[A-H]\d+(\.ncc\.gz|_ambig_10x_100kb\.n3d\.txt\.gz)$")]
+            + [("lando2024_mesc/raw/GSE214264/GSE214264-GPL21103_series_matrix.txt.gz",
+                _gse_matrix("GSE214264", "GSE214264-GPL21103_series_matrix.txt.gz"))]),
+        "size_mb": 400,
+        "default": False,
+        "description": "Lando 2024 single-nucleus Hi-C of haploid mESC: .ncc contacts + 100 kb NucDynamics "
+                       "structures, 10 models (GSE214264)",
+    },
+    "zhou2019_rice": {
+        "files": lambda: ([(f"zhou2019_rice/raw/GSE123109/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE123109", r"\.(ncc\.txt|pdb)\.gz$")]
+            + [("zhou2019_rice/raw/GSE123109/GSE123109_chromosome_chain_annotation.txt.gz",
+                _gse("GSE123109", "GSE123109_chromosome_chain_annotation.txt.gz"))]),
+        "size_mb": 27,
+        "default": False,
+        "description": "Zhou 2019 single-cell Hi-C of rice egg / sperm / zygote / shoot cells: .ncc + 5 kb "
+                       "NucDynamics PDB (GSE123109)",
     },
     "dschic2025_aging": {
         "files": [(f"dschic2025/raw/GSE285812/{n}", _gsm(n)) for n in _DSCHIC_AGING],

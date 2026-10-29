@@ -82,7 +82,13 @@ export interface DataKind {
   hasSpatial?: boolean
   /** several cells (cell-level statistics, groups) */
   manyCells?: boolean
+  /** a handful of cells (at most FEW_CELLS): no Embedding view by default — a few points show no structure */
+  fewCells?: boolean
 }
+
+/** At most this many cells: the default views leave out the Embedding, and the views open on all cells (side by
+ *  side), not on the first one. */
+export const FEW_CELLS = 50
 
 export interface WorkspaceState {
   layout: WsLayout
@@ -141,7 +147,7 @@ const firstLarger = (n: number, first: number): number[] =>
  * Default views follow the data: every view the dataset can fill
  * (:func:`supportedPaneTypes`), in a grid — a single view fills the space —
  * except Matrix when there is a Genome view, whose matrix rows show the same
- * maps.  Data that fills none gets a Matrix view.  A 3-D view first of several
+ * maps, and Embedding for a handful of cells (`fewCells`; still in the + View menu).  Data that fills none gets a Matrix view.  A 3-D view first of several
  * gets the larger part of the grid (MAIN_3D: its column and its row); the
  * others share the rest.  A bare boolean means "has embeddings" with 3-D
  * coords (older callers).
@@ -149,7 +155,9 @@ const firstLarger = (n: number, first: number): number[] =>
 export function defaultWorkspace(kind: boolean | DataKind): WorkspaceState {
   const k: DataKind = typeof kind === 'boolean' ? { hasEmbeddings: kind, hasCoords: true, hasTracks: false } : kind
   const all = supportedPaneTypes(k)
-  const types = all.includes('genome') ? all.filter((t) => t !== 'matrix') : all
+  const types = (all.includes('genome') ? all.filter((t) => t !== 'matrix') : all).filter(
+    (t) => !(k.fewCells && t === 'embedding'),
+  )
   const panes = (types.length ? types : (['matrix'] as PaneType[])).map((t, i) => pane(`P${i + 1}`, t))
   const ws: WorkspaceState = {
     layout: 'grid',

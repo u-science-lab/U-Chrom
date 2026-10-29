@@ -42,6 +42,13 @@ describe('default workspace', () => {
     // one view: a grid of one
     expect(defaultWorkspace({ hasCoords: false, hasEmbeddings: false, hasTracks: false })).toMatchObject({ layout: 'grid', panes: [{ type: 'matrix' }] })
   })
+  it('leaves the Embedding out for a handful of cells', () => {
+    const k = { hasCoords: true, hasEmbeddings: true, hasTracks: false, manyCells: true }
+    expect(defaultWorkspace({ ...k, fewCells: true }).panes.map((p) => p.type)).toEqual(['3d', 'genome', 'stats'])
+    expect(defaultWorkspace(k).panes.map((p) => p.type)).toEqual(['3d', 'embedding', 'genome', 'stats'])
+    // still offered in the view menus
+    expect(supportedPaneTypes({ ...k, fewCells: true })).toContain('embedding')
+  })
   it('prefers UMAP > t-SNE > PCA', () => {
     const e = (key: string, method: string) => ({ key, method, source: 'rna', label: key, n_dims: 2 })
     expect(defaultEmbeddingKey([e('a', 'pca'), e('b', 'tsne'), e('c', 'umap')])).toBe('c')

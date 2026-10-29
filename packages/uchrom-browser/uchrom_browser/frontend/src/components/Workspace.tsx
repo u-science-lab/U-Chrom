@@ -5,6 +5,7 @@ import {
   addPane,
   dropUnknownGroups,
   dropUnknownPins,
+  FEW_CELLS,
   pinnedCell,
   pinnedGroup,
   handleWorkspaceKey,
@@ -57,6 +58,7 @@ function useDataKind(): DataKind {
     hasContactMaps: (ds?.contact_maps?.length ?? 0) > 0,
     hasSpatial: (ds?.spatial?.length ?? 0) > 0,
     manyCells: (ds?.n_cells ?? 0) > 1,
+    fewCells: (ds?.n_cells ?? 0) > 0 && (ds?.n_cells ?? 0) <= FEW_CELLS,
   }
 }
 
@@ -269,7 +271,7 @@ export function Workspace() {
   const datasetId = useStore((s) => s.activeDatasetId)
   const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
   const kind = useDataKind()
-  const { hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, manyCells } = kind
+  const { hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, manyCells, fewCells } = kind
   const resetWorkspace = useStore((s) => s.resetWorkspace)
   const [resetKeys, setResetKeys] = useState<Record<string, number>>({})
   const [menu, setMenu] = useState(false)
@@ -281,8 +283,9 @@ export function Workspace() {
   // default for its data (which follows the data until the user arranges views).
   const owner = ds?.name ?? null
   useEffect(() => {
-    if (datasetId && owner) ensureDefault({ hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, manyCells }, owner)
-  }, [datasetId, owner, hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, manyCells, ensureDefault])
+    if (datasetId && owner)
+      ensureDefault({ hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, manyCells, fewCells }, owner)
+  }, [datasetId, owner, hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, manyCells, fewCells, ensureDefault])
 
   // Pins to cells the active dataset doesn't have (e.g. after switching) are dropped.
   const cellList = useStore((s) => (s.activeDatasetId ? s.cells[s.activeDatasetId] : undefined))

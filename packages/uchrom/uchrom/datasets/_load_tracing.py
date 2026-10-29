@@ -187,6 +187,24 @@ def _fov_positions(cd, table: str, xcol: str, ycol: str, copy=()):
                                  "in camera pixels; the 3-D coordinates are local to each trace's image crop")
 
 
+#: trace fields that describe the cell (deposits without Cell_ID: one trace per cell), copied to ``cells``: dataset ->
+#: (trace column, cells column) — Cheng et al. 2025: the gene a cell's sgRNA targets (or NTC) per trace
+_TRACE_FIELDS = {"cheng2025_perturb": [("Perturbation", "perturbation")]}
+
+
+def _trace_fields_to_cells(cd, fields):
+    tr = cd.traces.copy()
+    tr.index = tr.index.astype(str)
+    cell_of = cd.spots[["trace_id", "cell_id"]].astype(str).drop_duplicates("trace_id").set_index("trace_id")["cell_id"]
+    tr["cell_id"] = cell_of.reindex(tr.index).to_numpy()
+    first = tr.drop_duplicates("cell_id").set_index("cell_id")
+    cells = cd.cells.copy()
+    for col, name in fields:
+        v = first[col].reindex(cells.index.astype(str))
+        cells[name] = pd.Categorical(v.astype(object).where(v.notna(), None).to_numpy())
+    cd.cells = cells
+
+
 def _fourdn(dataset: str, source: str):
     """A loader of a 4DN FOF-CT chromatin-tracing study (fourdn_tracing.tsv): every experiment with a core table,
     its companions joined (:func:`uchrom.io.read_4dn_tracing`); ``cells`` carry the experiment set (``set``), its
@@ -226,6 +244,8 @@ def _fourdn(dataset: str, source: str):
             cd.cells = cells
         if dataset in _FOV_POSITIONS:
             _fov_positions(cd, *_FOV_POSITIONS[dataset])
+        if dataset in _TRACE_FIELDS:
+            _trace_fields_to_cells(cd, _TRACE_FIELDS[dataset])
         cd.uns["source"] = source
         return cd
     build.__doc__ = f"{source}: every experiment of the 4DN deposit in one object (``cells``: set, condition, biosample)."
@@ -281,7 +301,21 @@ for _name, _source, _what in (
         ("hung2024_orca", "Hung et al. 2024, Nat Genet 56:306 (4DN FOF-CT)",
          "Hung 2024 ORCA of the Pitx1 locus in mouse limb buds (mm10)"),
         ("huang2021_4dn", "Huang et al. 2021, Nat Genet 53:1064 (4DN FOF-CT)",
-         "Huang 2021 Sox2 locus tracing in mESC, with RNA FISH of the same cells (mm10)")):
+         "Huang 2021 Sox2 locus tracing in mESC, with RNA FISH of the same cells (mm10)"),
+        ("liu2025_kras", "Liu et al. 2025, Nat Genet 57:3075 (4DN FOF-CT)",
+         "Liu 2025 genome-wide and 5-kb chromatin tracing in Kras-driven mouse lung and pancreatic cancers (mm10)"),
+        ("cheng2025_perturb", "Cheng et al. 2025, Nat Methods 22:950 (4DN FOF-CT)",
+         "Cheng 2025 Perturb-tracing: chr22 / chr21 tracing of pooled CRISPR screens, each cell's perturbation (hg38)"),
+        ("chen2023_sox9", "Chen et al. 2023, Mol Cell 83:1446 (4DN FOF-CT)",
+         "Chen 2023 ORCA of the SOX9 4-Mb region in hESC and cranial neural crest, CTCF-site deletions (hg38)"),
+        ("patterson2023_chrx", "Patterson et al. 2023, Sci Adv 9:eadf2245 (4DN FOF-CT)",
+         "Patterson 2023 chrX tracing in naive and primed human pluripotent stem cells (hg38)"),
+        ("sawh2020_celegans", "Sawh et al. 2020, Mol Cell 78:96 (4DN FOF-CT)",
+         "Sawh 2020 tracing of chrI / chrV TADs in C. elegans embryos (ce10)"),
+        ("gutnik2024_celegans", "Gutnik et al. 2024, Genome Biol 25:71 (4DN FOF-CT)",
+         "Gutnik 2024 maternal vs paternal chromosome tracing in C. elegans embryos (ce10)"),
+        ("messina2023_him", "Messina et al. 2023, Nat Commun 14:6678 (4DN FOF-CT)",
+         "Messina 2023 Hi-M of Drosophila embryos, nuclear cycles 12 and 14 (dm6)")):
     register(Loader(name=_name, build=_fourdn(_name, _source), store=f"{_name}/{_name}.chromdata.zarr",
                     sources=(_name,), description=_what))
 for _name, _build, _what in (

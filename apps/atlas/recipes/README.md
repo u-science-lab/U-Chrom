@@ -616,6 +616,12 @@ brain cells).
 | `tan2021_cortex`, `nagano2017_dip_serum` | 3,064 / 896 | `<name>/<name>.chromdata.zarr` | loaders of the same names, `derive_embeddings.py --hic per_cell` | `tan2021_cortex`, `nagano2017_dip_serum` |
 | `nagano2017_hap` | 889 | `nagano2017_hap/nagano2017_hap.chromdata.zarr` | `build_nagano2017_hap.py`, `derive_embeddings.py --hic per_cell --leiden` | `nagano2017_hap` |
 | `spacea_e135_c6` | 274 | SpaceA C6 store (run 1), without `results['hic']` | the SpaceA recipe (PR #155) | — |
+| `takei2025_e14`, `takei2025_nmumg` | 4,421 / 1,883 | `takei2025_e14/takei2025_e14_rep1.chromdata.zarr`, `takei2025_nmumg/takei2025_nmumg.chromdata.zarr` | `build_takei2025_cerebellum.py --sample E14_rep1`, `... --sample NMuMG` | `takei2025_e14`, `takei2025_nmumg` |
+| `liu2025_kras`, `cheng2025_perturb`, `chen2023_sox9`, `patterson2023_chrx`, `sawh2020_celegans`, `gutnik2024_celegans`, `messina2023_him` | 312 / 55 / 19 / 8 / 2 / 3 / 5 | `<name>/<name>.chromdata.zarr` | loaders of the same names (see *4DN chromatin-tracing studies*) | the same names |
+| `tan2018_gm12878` | 394 | `tan2018_gm12878/tan2018_gm12878.chromdata.zarr` | loader `tan2018_gm12878`, `derive_embeddings.py --hic per_cell` | `tan2018_gm12878` |
+| `tan2019_dipc`, `wu2024_limca`, `liu2026_hires_xci` | 1,029 / 1,322 / 1,258 | `<name>/<name>.chromdata.zarr` | `build_dipc_structures.py <name>`, `derive_embeddings.py --hic per_cell --leiden` | the same names |
+| `xu2025_sperm_human`, `xu2025_sperm_mouse` | 1,017 / 704 | `xu2025_sperm/<id>.chromdata.zarr` | `build_dipc_structures.py xu2025_sperm`, `derive_embeddings.py --hic per_cell --leiden` | `xu2025_sperm` |
+| `lando2024_mesc`, `zhou2019_rice` | 71 / 15 | `<name>/<name>.chromdata.zarr` | `build_nuc_structures.py <name>`, `derive_embeddings.py --hic per_cell` (`--leiden` for Lando) | the same names |
 
 Sizes are those of the published stores with their embedded copies (`python -m uchrom.datasets atlas`,
 2026-10-06).  The Stevens 2017 store is described with the Figure 3 datasets.
@@ -660,6 +666,14 @@ Sizes are those of the published stores with their embedded copies (`python -m u
 
   The raw CSVs stay in `takei2025_cerebellum/raw/` (7.9 GB; uchrom-reproducibility `extended_data_fig1/allele_qc.py` reads their
   three allele columns); `--drop-raw` deletes them.
+- **Cell lines** (`--sample E14_rep1` / `--sample NMuMG`; fetch `takei2025_e14` / `takei2025_nmumg`: the record's
+  `E14_rep1.tar.gz` and `NMuMG.tar.gz` with the same locus map): built the same way into
+  `takei2025_e14/takei2025_e14_rep1.chromdata.zarr` and `takei2025_nmumg/takei2025_nmumg.chromdata.zarr`.  No
+  clustering is deposited for them, so the cells carry only their field of view (`cells['fov']`) and no cell type;
+  `uns['source']` names the sample.  E14 replicate 1: 11 FOVs, 523 cells, 22,797 traces, 32.1 M spots (median
+  48,841 loci per cell; 4.62 GB, peak RSS 86 GB when combining).  NMuMG: 10 FOVs, 384 cells, 19,911 traces, 12.0 M
+  spots (median 24,297 loci per cell; 1.97 GB, peak RSS 34 GB).  `--combine-only` redoes the combined store from the per-FOV stores.  Atlas
+  `takei2025_e14`, `takei2025_nmumg`.
 - **Caveat — allele calls**: the default `dbscan_ldp_nbr_allele` traces often merge both homologs / add
   off-trace spots; see uchrom-reproducibility `extended_data_fig1/allele_qc.py` and
   uchrom-reproducibility `extended_data_fig1/results/allele_qc.json`.
@@ -1116,6 +1130,56 @@ Figure 3 datasets.
 - Not fetched: ChAIR (Nat. Methods 2025; CNCB OMIX009588 / 9589, 120 GB from China), Nagano 2013 (10 Th1
   cells), Ramani 2017 sciHi-C (cell lines, hg19 / mm10 mix).
 
+### Single-cell Hi-C with the authors' structures (`tan2019_dipc/`, `xu2025_sperm/`, `wu2024_limca/`, `liu2026_hires_xci/`, `lando2024_mesc/`, `zhou2019_rice/`)
+
+Studies that deposit, per cell, the contacts and the authors' own 3-D structure.  `build_dipc_structures.py STUDY`
+(hickit / Dip-C `.3dg`, 20 kb particles averaged to 100 kb, or 200 kb for HiRES) and `build_nuc_structures.py
+STUDY` (NucDynamics `.n3d` / PDB with `.ncc` contacts) bin each cell's contacts at 100 kb (`<store>_cells_100kb.scool`)
+and all cells together (`<store>_bulk.mcool`, 100 kb, 500 kb, 1 Mb; ICE from 500 kb), write the first structure of
+each cell as the coordinates (a trace per cell, chromosome and copy) and a second run or model, where one is
+deposited, as a layer with its deviation from the first after superposition (per particle:
+`spot_tracks['run_deviation']` / `['model_deviation']`; per cell: `rmsd_*`, `median_dev_*`).  Then
+`derive_embeddings.py STORE --hic per_cell [--leiden]` and `python -m chromdata.embedded STORE`.  Fetch the
+originals with `python -m uchrom.datasets fetch STUDY` (GEO per-sample files; the series matrices give the
+labels).
+
+- **Tan 2019 Dip-C** (Tan L, Xing D, Daley N, Xie XS, *Nat Struct Mol Biol* 26:297, 2019,
+  doi:10.1038/s41594-019-0205-2; GEO GSE121791): 409 cells of the mouse retina (132) and main olfactory
+  epithelium (277), the `impute.pairs` and the 20 kb `clean.3dg` of runs 1 and 2; 4.4 GB.  103 M contacts.  The
+  runs agree for most cells (RMSD of run 2 to run 1 after superposition: median 1.09 particle radii) but differ by
+  more than 5 radii in 112 cells, mostly shallow ones (Spearman -0.7 between the RMSD and the contacts); single
+  chromosome copies differ as much, and swapping the homologs does not bring the runs together, so the runs
+  themselves disagree.  GEO's `cell type` repeats the tissue.  Atlas `tan2019_dipc`.
+- **Xu 2025 sperm** (Xu H *et al.*, *Nat Commun* 16:3805, 2025, doi:10.1038/s41467-025-59055-z; GEO GSE276999):
+  `.pairs.gz` and one 20 kb `.3dg` per cell (haploid sperm: a structure per chromosome); 10.8 GB.  Two stores:
+  `xu2025_sperm_human` (hg38, 1,028 sperm, 179 M contacts) and `xu2025_sperm_mouse` (mm10, 739 sperm and 48 ES
+  cells as controls, 119 M contacts); the Hi-C Leiden clusters put the 48 ES cells, and only them, in a cluster
+  of their own.  Atlas `xu2025_sperm_human`, `xu2025_sperm_mouse`.
+- **Wu 2024 LiMCA** (Wu H *et al.*, *Nat Methods* 21:974, 2024, doi:10.1038/s41592-024-02239-0; GEO GSE239969):
+  410 cells of the mouse main olfactory epithelium (postnatal day 3-119; the authors' cell types: mOSN, iOSN,
+  progenitor-1 / -2, unknown), `impute.pairs` (267 M contacts) and 20 kb `clean.3dg` of runs 1 and 2, and the
+  gene counts of all cells in one table, whose columns name the cells `p014.bc_001` for the structures'
+  `p014-bc_001` (mapped; all 410 found); 6.4 GB.  Runs 1 and 2: RMSD median 1.48 particle radii, more than 5 in 131
+  cells.  The RNA Leiden clusters follow the authors' cell types (e.g. 83 of cluster 0's 84 cells are mOSN, 41
+  of cluster 4's 48 progenitor-1).  Atlas `wu2024_limca`.
+- **Liu 2026 HiRES of X inactivation** (Liu X *et al.*, *Genomics Proteomics Bioinformatics* qzag002, 2026,
+  doi:10.1093/gpbjnl/qzag002; GEO GSE278310 + the update GSE310759): female C57BL/6J x CAST/EiJ mESC on day 0,
+  0.5, 1, 1.5, 2, 2.5, 3 and 4 of differentiation (`d05`, `d15`, `d25` are half days), 1,741 cells with `.pairs.gz`
+  (386 M contacts) and one 20 kb `clean.20k.0.3dg` each (averaged to 200 kb), the metadata tables (day, sample,
+  the authors' RMSDs, Y/X ratio) and the UMI tables; 16 GB.  The UMI tables hold 1,507 of the cells (254 cells of
+  every day are missing although the metadata give their UMIs).  Atlas `liu2026_hires_xci`.
+- **Lando 2024** (Lando D *et al.*, *Mol Cell* 84:1406, 2024, doi:10.1016/j.molcel.2024.02.015; GEO
+  GSE214264): 36 haploid 129/Ola mESC (Rex1-GFPd2) leaving naive pluripotency: 3 naive, 8 Rex1-high and 15
+  Rex1-low after 24 h, 9 primed after 48 h; `.ncc` contacts (3.6 M) and `.n3d` structures at 100 kb, 10 models
+  (models 1 and 2 read: RMSD median 0.29 particle radii); 277 MB.  Atlas `lando2024_mesc`.
+- **Zhou 2019 rice** (Zhou S, Jiang W, Zhao Y, Zhou DX, *Nat Plants* 5:795, 2019,
+  doi:10.1038/s41477-019-0471-3; GEO GSE123109): 15 cells of *Oryza sativa* Nipponbare (IRGSP-1.0): 4 egg, 4 sperm,
+  3 unicellular zygotes, 4 shoot cells; `.ncc` contacts (2,200-17,300 per cell, most of them within 300 kb: 96 % of Egg_1's cis contacts) and one
+  NucDynamics PDB per cell at 5 kb, chains named by `GSE123109_chromosome_chain_annotation.txt.gz`; 27 MB.
+  Check: contacting 100-kb bins more than 200 kb apart lie 0.17-0.40 times as far apart as random pairs at the
+  same separation in 13 cells; in Shoot_cell_3 and Sperm_2 0.79-0.90 (no other chain fits their contacts better).
+  No map figure (too few contacts); its 15 cells form one Leiden cluster, so none is kept.  Atlas `zhou2019_rice`.
+
 ## Figure 3 datasets — bridges between contacts and geometry
 
 Inputs of uchrom-reproducibility `supp_table3/nucdyn` (plan and reference numbers:
@@ -1455,6 +1519,8 @@ EMber / NucDynamics benchmarks of an unpublished benchmark (PREREG §6 diploid a
   structures but no pairs and are left out); used by uchrom-reproducibility `supp_table3/sc_structures/structures_*.py` (the tracing
   callers on reconstructed structures).  The `.con` files are not used there: they hold the
   contacts kept after Dip-C's filters (cell 1: 430 k vs 1,048,961 pairs), not comparable with the pairs.
+- **Atlas**: `tan2018_gm12878` = the loader's store with `derive_embeddings.py --hic per_cell` (a 1 Mb per-cell
+  map and a Hi-C embedding of the 14 cells) and its maps embedded.
 
 ### `wu2025_scmicroc/`: Wu 2025 scMicro-C, GM12878 (12 deepest cells, ~0.4 GB + 3dg; fetch `wu2025_scmicroc`)
 
@@ -1707,7 +1773,7 @@ copies of older runs were 27 MB – 0.83 GB).  Ignored by git.  They are labelle
 they are reported.  Used by the Fig. 6c browser benchmarks (uchrom-reproducibility `supp_fig6/browser/bench_server.py`,
 `bench_frontend.py`, `run_all.sh`).
 
-## 4DN chromatin-tracing studies (fetch / load `bintu2018_4dn`, `mateo2019_orca`, `hafner2023_orca`, `murphy2024_orca`, `takei2021_brain_4dn`, `liu2020_mina`, `hung2024_orca`, `huang2021_4dn`)
+## 4DN chromatin-tracing studies (fetch / load `bintu2018_4dn`, `mateo2019_orca`, `hafner2023_orca`, `murphy2024_orca`, `takei2021_brain_4dn`, `liu2020_mina`, `hung2024_orca`, `huang2021_4dn`, `liu2025_kras`, `cheng2025_perturb`, `chen2023_sox9`, `patterson2023_chrx`, `sawh2020_celegans`, `gutnik2024_celegans`, `messina2023_him`)
 
 Chromatin tracing the labs deposited in the 4DN Data Portal as FISH-Omics Format tables (FOF-CT; the portal's
 [chromatin tracing collection](https://data.4dnucleome.org/resources/data-collections/chromatin-tracing-datasets)).
@@ -1716,10 +1782,13 @@ Each experiment of a set is a *core* table (spots) with optional companions keye
 
 - **Files**: one row per file in `packages/uchrom/uchrom/datasets/fourdn_tracing.tsv` (dataset, set, experiment,
   file accession, uuid, md5, bytes, kind, biosample, the set's description; from the portal's metadata,
-  2026-10-27), downloaded from 4DN open data on S3
+  2026-10-27; the last seven studies 2026-10-28), downloaded from 4DN open data on S3
   (`https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/<uuid>/<accession>.csv`) to
   `<dataset>/<set>/<accession>.csv`, md5-checked.  Sizes: `bintu2018_4dn` 11 files, 195 MB; `mateo2019_orca`
-  25 files, 603 MB; `hafner2023_orca` 162 files, 495 MB; `murphy2024_orca` 20 files, 308 MB.
+  25 files, 603 MB; `hafner2023_orca` 162 files, 495 MB; `murphy2024_orca` 20 files, 308 MB; `liu2025_kras` 29
+  files, 1.6 GB; `cheng2025_perturb` 16 files, 207 MB; `chen2023_sox9` 16 files, 62 MB; `patterson2023_chrx` 21
+  files, 25 MB; `sawh2020_celegans` 7 files, 6 MB; `gutnik2024_celegans` 6 files, 10 MB; `messina2023_him` 2
+  files, 18 MB.
 - **Sources**:
   - Bintu B, Mateo LJ *et al.* *Science* 362:eaau1783 (2018), doi:10.1126/science.aau1783 — 10 sets: chr21:28–30 Mb
     in IMR90 (also by cell-cycle stage), K562, A549 and HCT116 RAD21-AID ± auxin; 34.6–37.1 Mb in HCT116 ± auxin
@@ -1745,6 +1814,32 @@ Each experiment of a set is a *core* table (spots) with optional companions keye
   - Huang H *et al.* *Nat Genet* 53:1064 (2021), doi:10.1038/s41588-021-00863-6 — the Sox2 locus in F123 mESC
     (129 x CAST), allele and Sox2 / GFP / mCherry transcription per trace; 5 sets, 29 MB (the SnapFISH copy is
     `huang2021_sox2`).  One trace table writes `#columns=` (one `#`); some loci end before they start (2.4 %).
+  - Liu M *et al.* *Nat Genet* 57:3075 (2025), doi:10.1038/s41588-025-02297-w — genome-wide tracing (all
+    autosomes) and 5-kb tracing of selected regions in normal lung AT2 and pancreatic duct cells, pre-invasive
+    lesions, adenoma, LUAD and PDAC of K-MADM-Trp53 mice and KP adenoma cells with Rnf2 knocked down, rescued or
+    degraded (mm10); 22 sets, 29 experiments, 91,020 cells, 1,182,597 traces of 1,651 loci.  Chromosomes deposited
+    as `Chr14` (named `chr14`).
+  - Cheng Y *et al.* *Nat Methods* 22:950 (2025), doi:10.1038/s41592-025-02652-z — Perturb-tracing: chr22
+    (27 loci) in A549-Cas9 cells of a pooled screen of 137 genes (404 sgRNAs, 8 non-targeting), each trace's
+    sgRNA in a trace table (`Perturbation`, copied to `cells['perturbation']`), and CHD7 / PCBP1 / ZNF114
+    knock-downs, CHD7 over-expression in A549, RPE-1 (chr21 / chr22) and neural crest cells (hg38); 15 sets,
+    97,594 traces.
+  - Chen LF, Long HK *et al.* *Mol Cell* 83:1446 (2023), doi:10.1016/j.molcel.2023.03.009 — ORCA of 4 Mb around
+    SOX9 (78 loci of 5 kb at 50-kb steps; hg38) in H9 hESC and cranial neural crest cells, wild type and CTCF-site
+    deletions (E1.35, promoter), with spot intensities; 5 sets, 12,764 traces.
+  - Patterson B, Yang B *et al.* *Sci Adv* 9:eadf2245 (2023), doi:10.1126/sciadv.adf2245 — chrX at 40 loci in
+    female hESC (H9, HES-3, H7) and IMR-90 iPSC, primed and naive, some with XIST / ATRX RNA FISH (hg38); 21 sets,
+    10,835 traces.
+  - Sawh AN *et al.* *Mol Cell* 78:96 (2020), doi:10.1016/j.molcel.2020.02.006 — chrV (one locus per TAD, 22 TADs;
+    and three regions at 100 kb) and chrI (14 TADs) in early C. elegans embryos, wild type and cec-4 (ce10); 7
+    sets, 8,268 traces.
+  - Gutnik S *et al.* *Genome Biol* 25:71 (2024), doi:10.1186/s13059-024-03199-6 — chrV at 22 loci in embryos of
+    the N2 and Hawaiian strains and their F1 hybrids, maternal or paternal copy marked by strain-specific probes
+    (ce10); 6 sets, 16,806 traces.
+  - Messina O *et al.* *Nat Commun* 14:6678 (2023), doi:10.1038/s41467-023-42485-y — Hi-M of the dpp locus (35
+    loci across 430 kb of chr2L; dm6) in embryos at nuclear cycles 12 and 14; 2 sets, 19,211 traces.
+
+  The last six deposit no `Cell_ID`: each trace is its own cell, carrying its set and description.
 - **Terms**: the portal asks to cite the 4DN White Paper (doi:10.1038/nature23884) and the 4DN Data Portal paper
   (doi:10.1038/s41467-022-29697-4), to acknowledge the lab that made the data, and to contact it before using the
   data in a publication.  In the public atlas since 2026-10-27 (ids `bintu2018_4dn`, `mateo2019_orca`,
@@ -1757,7 +1852,11 @@ Each experiment of a set is a *core* table (spots) with optional companions keye
   repeats the names in a CSV header row with an extra `readout` column, and one cell table has a malformed
   `##columns` line (`fofct_column_fixes`); ids are spelled `Spot_ID` / `spotID` / `spot_ID`, loci `chr` /
   `chr_start`; Hafner's spots with an empty `Chrom` (unassigned) are left out (`fofct_dropped_spots`); Mateo 2019 lists some traces twice (69,676 identical rows dropped) and Murphy 2024 reuses trace ids across fields of view (each later block of rows of an id becomes its own trace, `<id>.b<k>`: `fofct_trace_splits`, 1,293 traces); Bintu 2018's 18.6–20.6 Mb and 34.6–37.1 Mb regions are deposited from 18,000,001 and 34,000,001 and are moved to the authors' hg38 coordinates (`Data/README.md` of their repository: +627,713 and +628,095 bp; `fofct_locus_shifts`).  Hafner's
-  `Cell_ID` is numbered per field of view (`0` = no cell), so cells are `(FOV, Cell_ID)`.
+  `Cell_ID` is numbered per field of view (`0` = no cell), so cells are `(FOV, Cell_ID)`; so are Liu 2025's,
+  per imaging run too (`CellID`, `FOVid` and `Dataset ID` in the core table: cells `<run>-<FOV>-<CellID>`, kept as
+  `cells['run']`, `cells['fov']`; every cell then spans under 25 µm, median 8.2 µm).  Patterson 2023's
+  `##columns=` lines close a bracket they never open (`…,Chrom_End)`) and Chen 2023's rows end in empty fields
+  past the declared columns (all-empty extra columns are dropped).
 - **Loaders**: `load NAME` builds `<name>/<name>.chromdata.zarr` (every experiment with traces, ids prefixed by the
   experiment accession; coordinates in µm).
 - **Used by**: the web browser (to be reviewed before an atlas release).

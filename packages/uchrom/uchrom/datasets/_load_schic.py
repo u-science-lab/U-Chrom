@@ -181,6 +181,7 @@ def _tan2018_structures(folder: Path, maps):
                                           "by cell (rotation + translation, mirror allowed); cells: rmsd_rep*, "
                                           "median_dev_rep*"}
     uns["xyz_unit"] = cd.uns["xyz_unit"]
+    uns["derived_spot_tracks"] = ["rep_deviation"]
     out = ChromData(cd.coords, cd.spots, bins=cd.bins, cells=cells, traces=cd.traces, layers=cd.layers,
                     spot_tracks=pd.DataFrame({"rep_deviation": per_spot}), uns=uns)
     return out

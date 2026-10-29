@@ -30,6 +30,26 @@ def _write_core(path, cell_ids):
     path.write_text("\n".join(lines) + "\n")
 
 
+def test_columns_line_with_one_bracket(tmp_path):
+    """A ``##columns=`` line missing its opening bracket (Patterson et al. 2023) still names every column."""
+    core = tmp_path / "core.csv"
+    core.write_text("##XYZ_unit=micron,,,,,,,\n##columns=Spot_ID,Trace_ID,X,Y,Z,Chrom,Chrom_Start,Chrom_End)\n"
+                    "1,1,1.0,2.0,3.0,chrX,2751959,3831959\n2,1,1.5,2.0,3.0,chrX,3831959,4911959\n")
+    cd = ChromData.from_fofct(core)
+    assert list(cd.spots_with_loci()["end"]) == [3831959, 4911959] and cd.n_traces == 1
+
+
+def test_padding_columns_dropped(tmp_path):
+    """Rows padded with empty fields beyond the named columns (Chen et al. 2023 quality tables) add no columns."""
+    from chromdata.cdata import read_fofct_table
+
+    q = tmp_path / "quality.csv"
+    q.write_text("##Table_namespace=4dn_FOF-CT_quality,,,,\n##columns=(Spot_ID, Peak_Intensity),,,\n"
+                 "1,3008.2,,,\n2,2049.6,,,\n")
+    df, _ = read_fofct_table(q)
+    assert list(df.columns) == ["Spot_ID", "Peak_Intensity"] and df["Peak_Intensity"].tolist() == [3008.2, 2049.6]
+
+
 def test_core_table_parsing(tmp_path):
     core = tmp_path / "core.csv"
     _write_core(core, ["0_1", "0_2"])

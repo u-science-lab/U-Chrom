@@ -599,7 +599,9 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     if (newGeometry.length) requestAnimationFrame(() => mark('geometry-drawn', { points: newGeometry }))
 
     if (!fittedRef.current) {
-      const box = unionBox(fixed && focus !== null ? mainGeometries(t) : drawnGeometries(t))
+      // a focused cell (or a pinned view's cell): its own geometry, once loaded
+      const main = focus !== null ? mainGeometries(t) : []
+      const box = unionBox(main.length ? main : focus !== null && !fixed ? [] : drawnGeometries(t))
       if (box) {
         jumpTo(t, box)
         fittedRef.current = true
@@ -670,12 +672,13 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     return () => clearTimeout(timer)
   }, [paneExplode])
 
-  // Explicit reset / dataset switch → refit on everything drawn.
+  // Explicit reset / dataset switch → refit on everything drawn (on the focused cell, when one is; not yet loaded:
+  // the fit waits for its geometry).
   useEffect(() => {
     fittedRef.current = false
     const t = threeRef.current
     if (!t) return
-    const box = unionBox(drawnGeometries(t))
+    const box = unionBox(hasFocusRef.current ? mainGeometries(t) : drawnGeometries(t))
     if (box) {
       jumpTo(t, box)
       fittedRef.current = true
