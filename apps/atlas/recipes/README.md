@@ -466,7 +466,8 @@ datasets (`stevens2017`, `su2020_chr21`, `rao2014_imr90_chr21`) and the atlas (`
 
 - **Source**: Ma et al. 2026, *Developmental Cell* (doi:10.1016/j.devcel.2026.09.004), SpaceA; Genome Sequence
   Archive (CNCB-NGDC) [CRA038845](https://ngdc.cncb.ac.cn/gsa/browse/CRA038845), **academic use** under the GSA's
-  terms (not re-hosted; not in the public atlas).  Analysis code: github.com/YuetongXU/SpaceA-Paper (commit
+  terms (the fastq are not re-hosted; the derived section stores are in the public atlas, a decision of the
+  maintainers: C6 run 1 since 2026-10-27, all nine sections since 2026-10-30).  Analysis code: github.com/YuetongXU/SpaceA-Paper (commit
   `c1e1753`, barcode configs, the Snakefile, the DPM split and the cluster filter), the Guttman lab's
   github.com/GuttmanLab/sprite-pipeline (commit `5e11a58`, BarcodeIdentification and the cluster scripts).
 - **Files**: paired fastq per run, `https://download.cncb.ac.cn/gsa6/CRA038845/<run>/<run>_r{1,2}.fastq.gz`, md5 in
@@ -494,6 +495,11 @@ datasets (`stevens2017`, `su2020_chr21`, `rao2014_imr90_chr21`) and the atlas (`
   duplicates → 1,407,822 clusters; store 192 MB, 4,974 spots (median 994 fragments, 2,475 spots with ≥ 1,000).
   Every cluster is kept as written; the authors' filters (cluster size 2–1,000, chromosome share, cis share, spot
   QC) are analysis choices.
+- **All runs** (2026-10-30), per section: spots / clusters / after the authors' filter (`clusters["spacea_filtered"]`):
+  E11.5 L1 9,216 / 23.8 M / 4.0 M; L2 9,216 / 37.0 M / 6.2 M; E12.5 L5 9,826 / 52.0 M / 5.8 M; L6 9,883 / 50.1 M /
+  5.1 M; E13.5 C1 9,918 / 14.3 M / 2.5 M; C4 9,771 / 9.0 M / 1.9 M; C6 5,000 (a 50 × 100 grid) / 8.2 M / 1.4 M;
+  E14.5 F5 9,982 / 21.6 M / 3.2 M; F6 9,996 / 28.1 M / 4.2 M.  Atlas ids `spacea_e115_l1` ... `spacea_e145_f6`
+  (the atlas copies without `results['hic']`, the scHiCluster features: read at every remote open, 0.3 GB).
 - **Used by**: the per-spot check of `ChromData.clusters` (U-Chrom PR #153: `get_cell`, `region` with size and
   spot filters, backed and over HTTP, equal to memory).
 
@@ -615,7 +621,7 @@ brain cells).
 | `liu2025_mop`, `liu2025_mecp2` | 813 / 1,309 | `liu2025_mop_4dn/liu2025_mop_4dn.chromdata.zarr` (since 2026-10-30: the four MOp experiments; before, one, by `build_liu2025_mop.py`), `liu2025_mecp2/liu2025_mecp2.chromdata.zarr` | loaders `liu2025_mop_4dn`, `liu2025_mecp2`; `derive_embeddings.py --rna-after neuron_identity` / `--rna-after Mecp2_genotype` | the same names |
 | `tan2021_cortex`, `nagano2017_dip_serum` | 3,064 / 896 | `<name>/<name>.chromdata.zarr` | loaders of the same names, `derive_embeddings.py --hic per_cell` | `tan2021_cortex`, `nagano2017_dip_serum` |
 | `nagano2017_hap` | 889 | `nagano2017_hap/nagano2017_hap.chromdata.zarr` | `build_nagano2017_hap.py`, `derive_embeddings.py --hic per_cell --leiden` | `nagano2017_hap` |
-| `spacea_e135_c6` | 274 | SpaceA C6 store (run 1), without `results['hic']` | the SpaceA recipe (PR #155) | — |
+| `spacea_e115_l1`, `spacea_e115_l2`, `spacea_e125_l5`, `spacea_e125_l6`, `spacea_e135_c1`, `spacea_e135_c4`, `spacea_e135_c6`, `spacea_e145_f5`, `spacea_e145_f6` | 4,953 / 7,075 / 5,406 / 4,409 / 4,638 / 3,093 / 2,580 / 2,811 / 4,538 | `spacea_ma2026/work/<sample>/spacea_<sample>.chromdata.zarr` (all runs; `spacea_e135_c6` held run 1 only until 2026-10-30), without `results['hic']` | the SpaceA recipe (`spacea_ma2026/slurm/`, `build_store.sbatch <sample>`) | `ma2026_spacea_<library>` |
 | `takei2025_e14`, `takei2025_nmumg` | 4,421 / 1,883 | `takei2025_e14/takei2025_e14_rep1.chromdata.zarr`, `takei2025_nmumg/takei2025_nmumg.chromdata.zarr` | `build_takei2025_cerebellum.py --sample E14_rep1`, `... --sample NMuMG` | `takei2025_e14`, `takei2025_nmumg` |
 | `liu2025_kras`, `cheng2025_perturb`, `chen2023_sox9`, `patterson2023_chrx`, `sawh2020_celegans`, `gutnik2024_celegans`, `messina2023_him`, `le2024_se`, `fujimori2026_hek293t`, `fujimori2026_k562`, `fujimori2026_mesc`, `tastemel2025_sox2`, `jay2025_thymocytes`, `jensen2025_cargo`, `llimos2022_axin2` | 312 / 55 / 19 / 8 / 2 / 3 / 5 / 169 / 13 / 3 / 9 / 41 / 7 / 6 / 2 | `<name>/<name>.chromdata.zarr` | loaders of the same names (see *4DN chromatin-tracing studies*) | the same names |
 | `tan2018_gm12878` | 394 | `tan2018_gm12878/tan2018_gm12878.chromdata.zarr` | loader `tan2018_gm12878`, `derive_embeddings.py --hic per_cell` | `tan2018_gm12878` |
