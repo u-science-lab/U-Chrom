@@ -533,11 +533,12 @@
   "map": "nagano2017_dip_serum.map.webp"
  },
  "liu2025_mop": {
-  "section": null,
+  "section": "4DNEXBUVZYLI",
   "color_by": "cluster_subclass",
   "layout": "space",
   "layout_key": "default",
-  "n": 14733,
+  "caption": "One section, cell subclasses",
+  "n": 11038,
   "categories": 22,
   "grid": false,
   "space": "liu2025_mop.space.webp"
@@ -553,12 +554,13 @@
   "space": "takei2021_brain_4dn.space.webp"
  },
  "takei2021_mesc": {
-  "section": null,
-  "color_by": null,
-  "layout": "space",
-  "layout_key": "default",
-  "n": 201,
-  "categories": 0,
+  "section": "4DNEXLZAD21X/FOV 0",
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "4DNEXM45AILX_4_18",
+  "caption": "One ES cell, 1-Mb and 25-kb loci",
+  "n": 8646,
+  "categories": 20,
   "grid": false,
   "space": "takei2021_mesc.space.webp"
  },
@@ -922,5 +924,38 @@
   "categories": 1,
   "grid": false,
   "space": "jay2025_thymocytes.space.webp"
+ },
+ "liu2025_mecp2": {
+  "section": "4DNEXDSE1987",
+  "color_by": "Mecp2_genotype",
+  "layout": "space",
+  "layout_key": "default",
+  "caption": "One motor-cortex section, Mecp2 KO / WT cells",
+  "n": 13585,
+  "categories": 2,
+  "grid": false,
+  "space": "liu2025_mecp2.space.webp"
+ },
+ "jensen2025_cargo": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "4DNEXX8WH5HH_2101",
+  "caption": "The Prdm8-Fgf5 locus, 40 loci",
+  "n": 40,
+  "categories": 1,
+  "grid": false,
+  "space": "jensen2025_cargo.space.webp"
+ },
+ "llimos2022_axin2": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "4DNEXU2FYC2S_643",
+  "caption": "The AXIN2 locus, 25 loci",
+  "n": 25,
+  "categories": 1,
+  "grid": false,
+  "space": "llimos2022_axin2.space.webp"
  }
 }

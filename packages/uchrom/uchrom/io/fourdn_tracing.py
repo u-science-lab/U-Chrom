@@ -151,6 +151,10 @@ def _scale(header: Mapping[str, str], step: float, name: str, fixes: list) -> fl
     return scale
 
 
+#: RNA-spot table columns (:func:`_norm`) -> points['rna'] columns
+_RNA_COLUMNS = {"rnaname": "gene", "genename": "gene", "geneid": "gene_id", "cell_id": "cell_id", "spot_id": "spot_id"}
+
+
 def _table(path) -> pd.DataFrame:
     """A companion table with its id columns named ``Spot_ID`` / ``Trace_ID`` / ``Cell_ID``, however the file spells
     them, and the names of a malformed ``##columns`` line taken from after its ``(...)`` (Hafner et al. 2023:
@@ -227,7 +231,7 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
         One per experiment: ``name`` (prefix of its ids), ``core`` (the core table, or a list of them — their
         trace ids prefixed ``c<k>-``, ``traces["core_file"]`` naming the table) and optionally ``spot_quality`` /
         ``spot_bio`` (one or several tables keyed by ``Spot_ID``), ``trace_data``, ``cell_data`` (companion
-        tables), ``meta`` (a mapping of values given
+        tables), ``rna_spot`` (RNA-spot tables: ``points['rna']``), ``meta`` (a mapping of values given
         to each of its cells, e.g. the experiment set, condition and biosample) and ``locus_shifts`` (``(chrom,
         start_from, start_to, offset)``: loci whose start lies in the range moved by ``offset`` bp — a correction
         the caller knows from the authors, recorded in ``uns["fofct_locus_shifts"]``) and ``trace_by`` (core
@@ -257,7 +261,7 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
     """
     from chromdata import ChromData, read_fofct_table
 
-    coords, spots, spot_tracks, traces, cells = [], [], [], [], []
+    coords, spots, spot_tracks, traces, cells, rna = [], [], [], [], [], []
     headers, fixes, assemblies, dropped, column_fixes, trace_splits, shifts = {}, [], set(), {}, [], {}, {}
     trace_keys, fov_sources = {}, {}
     for exp in experiments:
@@ -351,6 +355,7 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
                 cell_raw = per_trace_cells["Cell_ID"].astype(str).reindex(trace).to_numpy(dtype=object)
         if "cell_id" in c:
             cell_raw = df[c["cell_id"]].astype(str).to_numpy(dtype=object)
+        fov, raw_ids = None, None
         if cell_raw is not None:
             raw = pd.Series(cell_raw, dtype=object).fillna("").astype(str).str.replace(r"\.0$", "", regex=True)
             none = raw.isin(["", "0", "-1", "nan", "None"]).to_numpy()
@@ -363,6 +368,7 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
             else:
                 key = raw.to_numpy(dtype=object)
             cell = np.where(none, np.char.add("t", trace.astype(str)).astype(object), key)
+            raw_ids = np.where(none, cell, raw.to_numpy(dtype=object))
         else:
             cell = np.char.add("t", trace.astype(str)).astype(object)               # one cell per trace
         trace_id = np.char.add(f"{name}_", trace.astype(str)).astype(object)
@@ -429,13 +435,36 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
             vals.index = ce.index
             ce = ce.join(vals)
         elif exp.get("cell_data"):                 # a cell table keyed by the core's Cell_ID (Mateo et al. 2019)
-            cv = cdf.drop_duplicates("Cell_ID")
-            cv = cv.set_index(cv["Cell_ID"].astype(str).str.replace(r"\.0$", "", regex=True)).drop(columns="Cell_ID")
-            raw_first = pd.Series(cell, index=cell_id).groupby(level=0).first()
+            ids = cdf["Cell_ID"].astype(str).str.replace(r"\.0$", "", regex=True)
+            tab_fov = next((x for x in cdf.columns if _norm(x) == "fov"), None)
+            if fov is not None and tab_fov is not None:    # cells numbered per field: the table's field and cell
+                ids = cdf[tab_fov].astype(str).str.replace(r"\.0$", "", regex=True) + "-" + ids
+                key = pd.Series(cell, index=cell_id)
+            else:                                 # the table's Cell_ID, even where the core keys cells by field too
+                key = pd.Series(raw_ids if raw_ids is not None else cell, index=cell_id)
+            cv = cdf.assign(_key=ids.to_numpy()).drop_duplicates("_key").set_index("_key").drop(columns="Cell_ID")
+            cv.index.name = None
+            raw_first = key.groupby(level=0).first()
             vals = cv.reindex(raw_first.reindex(ce.index).to_numpy())
             vals.index = ce.index
             ce = ce.join(vals)
         cells.append(ce)
+
+        # RNA spots (FOF-CT RNA-spot tables): points['rna'] in µm (the core's unit), their cells named as the core's
+        for f in _as_list(exp.get("rna_spot")):
+            from chromdata import read_fofct_table
+            r, _ = read_fofct_table(f)
+            r = r.rename(columns={x: _RNA_COLUMNS.get(_norm(x), _norm(x)) for x in r.columns})
+            if not {"x", "y", "z"} <= set(r.columns):
+                raise ValueError(f"{name}: {Path(f).name} has no X / Y / Z (columns {list(r.columns)})")
+            r[["x", "y", "z"]] = r[["x", "y", "z"]].astype(float) * scale
+            if "gene_id" in r:                    # 4DN writes lists like "NM_001363480,"
+                r["gene_id"] = r["gene_id"].astype(str).str.strip().str.rstrip(",")
+            if "cell_id" in r and raw_ids is not None:
+                named = dict(zip(pd.Series(raw_ids).astype(str), cell_id))
+                r["cell_id"] = r["cell_id"].astype(str).str.replace(r"\.0$", "", regex=True).map(named)
+            r.insert(3, "experiment", name)
+            rna.append(r)
 
     if not coords:
         raise ValueError("read_4dn_tracing: no experiments")
@@ -451,7 +480,8 @@ def read_4dn_tracing(experiments: Iterable[Mapping], *, genome_assembly: Optiona
     names = {c: "chr" + re.sub(r"^chr", "", c, flags=re.IGNORECASE) for c in chrom.unique()}
     renamed = {c: u for c, u in sorted(names.items()) if c != u}
     spots_df["chrom"] = chrom.map(names)
-    return ChromData(coords=np.concatenate(coords), spots=spots_df,
+    points = {"rna": pd.concat(rna, ignore_index=True)} if rna else None
+    return ChromData(coords=np.concatenate(coords), spots=spots_df, points=points,
                      spot_tracks=pd.concat(spot_tracks, ignore_index=True), traces=traces_df, cells=cells_df,
                      uns={"genome_assembly": genome_assembly, "xyz_unit": "micron", "fofct_headers": headers,
                           "fofct_unit_fixes": fixes, "fofct_dropped_spots": dropped,

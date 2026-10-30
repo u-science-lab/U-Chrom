@@ -611,13 +611,13 @@ brain cells).
 | `takei2025_cerebellum` | 2,051 | `takei2025_cerebellum/takei2025_cerebellum_rep1.chromdata.zarr` | `build_takei2025_cerebellum.py` | `takei2025_cerebellum` |
 | `bintu2018_4dn`, `mateo2019_orca`, `hafner2023_orca`, `murphy2024_orca`, `hung2024_orca`, `huang2021_4dn`, `liu2020_mina`, `takei2021_brain_4dn` | 40 / 151 / 151 / 131 / 456 / 6 / 49 / 87 | `<name>/<name>.chromdata.zarr` | loaders of the same names (`uchrom.datasets.load`; see *4DN chromatin-tracing studies*); Hafner / Hung with field-of-view positions; RNA embeddings by `derive_embeddings.py`: `liu2020_mina` `--rna-regex 'Gene_Expression_Counts_\d+' --leiden`, `takei2021_brain_4dn` `--rna-after nuc_volume` | the same names |
 | `su2020_chr2`, `su2020_chr21_cell_cycle`, `su2020_genome`, `su2020_genome_amanitin`, `su2020_genome_transcription` | 26 / 26 / 42 / 105 / 105 | `<name>/<name>.chromdata.zarr` | loaders of the same names; the atlas copy of `su2020_chr2` without its variable-bin Hi-C link | the same names |
-| `takei2021_mesc` | 5 | `takei2021_mesc/takei2021_mesc.chromdata.zarr` | loader `takei2021_mesc`, `derive_embeddings.py --rna-regex 'rna\..*' --leiden` | `takei`, `takei_tables` |
-| `liu2025_mop` | 270 | `liu2025_mop/liu2025_mop.chromdata.zarr` | `build_liu2025_mop.py`, `derive_embeddings.py --rna-after neuron_identity` | `liu2025_mop` |
+| `takei2021_mesc` | 51 | `takei2021_mesc_4dn/takei2021_mesc_4dn.chromdata.zarr` (since 2026-10-30: the whole 4DN set; before, `takei2021_mesc/` of the loader `takei2021_mesc`, replicate 1 at 25 kb) | loader `takei2021_mesc_4dn`, `derive_embeddings.py --rna-after 'area_cyto(um2)' --leiden` | `takei2021_mesc_4dn` |
+| `liu2025_mop`, `liu2025_mecp2` | 813 / 1,309 | `liu2025_mop_4dn/liu2025_mop_4dn.chromdata.zarr` (since 2026-10-30: the four MOp experiments; before, one, by `build_liu2025_mop.py`), `liu2025_mecp2/liu2025_mecp2.chromdata.zarr` | loaders `liu2025_mop_4dn`, `liu2025_mecp2`; `derive_embeddings.py --rna-after neuron_identity` / `--rna-after Mecp2_genotype` | the same names |
 | `tan2021_cortex`, `nagano2017_dip_serum` | 3,064 / 896 | `<name>/<name>.chromdata.zarr` | loaders of the same names, `derive_embeddings.py --hic per_cell` | `tan2021_cortex`, `nagano2017_dip_serum` |
 | `nagano2017_hap` | 889 | `nagano2017_hap/nagano2017_hap.chromdata.zarr` | `build_nagano2017_hap.py`, `derive_embeddings.py --hic per_cell --leiden` | `nagano2017_hap` |
 | `spacea_e135_c6` | 274 | SpaceA C6 store (run 1), without `results['hic']` | the SpaceA recipe (PR #155) | — |
 | `takei2025_e14`, `takei2025_nmumg` | 4,421 / 1,883 | `takei2025_e14/takei2025_e14_rep1.chromdata.zarr`, `takei2025_nmumg/takei2025_nmumg.chromdata.zarr` | `build_takei2025_cerebellum.py --sample E14_rep1`, `... --sample NMuMG` | `takei2025_e14`, `takei2025_nmumg` |
-| `liu2025_kras`, `cheng2025_perturb`, `chen2023_sox9`, `patterson2023_chrx`, `sawh2020_celegans`, `gutnik2024_celegans`, `messina2023_him`, `le2024_se`, `fujimori2026_hek293t`, `fujimori2026_k562`, `fujimori2026_mesc`, `tastemel2025_sox2`, `jay2025_thymocytes` | 312 / 55 / 19 / 8 / 2 / 3 / 5 / 169 / 13 / 3 / 9 / 41 / 7 | `<name>/<name>.chromdata.zarr` | loaders of the same names (see *4DN chromatin-tracing studies*) | the same names |
+| `liu2025_kras`, `cheng2025_perturb`, `chen2023_sox9`, `patterson2023_chrx`, `sawh2020_celegans`, `gutnik2024_celegans`, `messina2023_him`, `le2024_se`, `fujimori2026_hek293t`, `fujimori2026_k562`, `fujimori2026_mesc`, `tastemel2025_sox2`, `jay2025_thymocytes`, `jensen2025_cargo`, `llimos2022_axin2` | 312 / 55 / 19 / 8 / 2 / 3 / 5 / 169 / 13 / 3 / 9 / 41 / 7 / 6 / 2 | `<name>/<name>.chromdata.zarr` | loaders of the same names (see *4DN chromatin-tracing studies*) | the same names |
 | `tan2018_gm12878` | 394 | `tan2018_gm12878/tan2018_gm12878.chromdata.zarr` | loader `tan2018_gm12878`, `derive_embeddings.py --hic per_cell` | `tan2018_gm12878` |
 | `tan2019_dipc`, `wu2024_limca`, `liu2026_hires_xci` | 1,029 / 1,322 / 1,258 | `<name>/<name>.chromdata.zarr` | `build_dipc_structures.py <name>`, `derive_embeddings.py --hic per_cell --leiden` | the same names |
 | `xu2025_sperm_human`, `xu2025_sperm_mouse` | 1,017 / 704 | `xu2025_sperm/<id>.chromdata.zarr` | `build_dipc_structures.py xu2025_sperm`, `derive_embeddings.py --hic per_cell --leiden` | `xu2025_sperm` |
@@ -1773,7 +1773,7 @@ copies of older runs were 27 MB – 0.83 GB).  Ignored by git.  They are labelle
 they are reported.  Used by the Fig. 6c browser benchmarks (uchrom-reproducibility `supp_fig6/browser/bench_server.py`,
 `bench_frontend.py`, `run_all.sh`).
 
-## 4DN chromatin-tracing studies (fetch / load `bintu2018_4dn`, `mateo2019_orca`, `hafner2023_orca`, `murphy2024_orca`, `takei2021_brain_4dn`, `liu2020_mina`, `hung2024_orca`, `huang2021_4dn`, `liu2025_kras`, `cheng2025_perturb`, `chen2023_sox9`, `patterson2023_chrx`, `sawh2020_celegans`, `gutnik2024_celegans`, `messina2023_him`, `le2024_se`, `fujimori2026_hek293t`, `fujimori2026_k562`, `fujimori2026_mesc`, `tastemel2025_sox2`, `jay2025_thymocytes`)
+## 4DN chromatin-tracing studies (fetch / load `bintu2018_4dn`, `mateo2019_orca`, `hafner2023_orca`, `murphy2024_orca`, `takei2021_brain_4dn`, `liu2020_mina`, `hung2024_orca`, `huang2021_4dn`, `liu2025_kras`, `cheng2025_perturb`, `chen2023_sox9`, `patterson2023_chrx`, `sawh2020_celegans`, `gutnik2024_celegans`, `messina2023_him`, `le2024_se`, `fujimori2026_hek293t`, `fujimori2026_k562`, `fujimori2026_mesc`, `tastemel2025_sox2`, `jay2025_thymocytes`, `jensen2025_cargo`, `llimos2022_axin2`, `takei2021_mesc_4dn`, `liu2025_mop_4dn`, `liu2025_mecp2`)
 
 Chromatin tracing the labs deposited in the 4DN Data Portal as FISH-Omics Format tables (FOF-CT; the portal's
 [chromatin tracing collection](https://data.4dnucleome.org/resources/data-collections/chromatin-tracing-datasets)).
@@ -1789,7 +1789,10 @@ Each experiment of a set is a *core* table (spots) with optional companions keye
   files, 1.6 GB; `cheng2025_perturb` 16 files, 207 MB; `chen2023_sox9` 16 files, 62 MB; `patterson2023_chrx` 21
   files, 25 MB; `sawh2020_celegans` 7 files, 6 MB; `gutnik2024_celegans` 6 files, 10 MB; `messina2023_him` 2
   files, 18 MB; `le2024_se` 5 files, 587 MB; `fujimori2026_hek293t` 57 files, `fujimori2026_k562` 2,
-  `fujimori2026_mesc` 8 (72 MB together); `tastemel2025_sox2` 11 files, 201 MB; `jay2025_thymocytes` 2 files, 14 MB.
+  `fujimori2026_mesc` 8 (72 MB together); `tastemel2025_sox2` 11 files, 201 MB; `jay2025_thymocytes` 2 files, 14 MB;
+  `jensen2025_cargo` 3 files, 20 MB; `llimos2022_axin2` 12 files, 7 MB; `takei2021_mesc_4dn` 12 files, 266 MB;
+  `liu2025_mop_4dn` 8 files, 6.2 GB; `liu2025_mecp2` 12 files, 10.2 GB (cores and cell tables: their spot
+  demultiplexing and RNA-spot tables, 60 GB, are not registered).
 - **Sources**:
   - Bintu B, Mateo LJ *et al.* *Science* 362:eaau1783 (2018), doi:10.1126/science.aau1783 — 10 sets: chr21:28–30 Mb
     in IMR90 (also by cell-cycle stage), K562, A549 and HCT116 RAD21-AID ± auxin; 34.6–37.1 Mb in HCT116 ± auxin
@@ -1855,7 +1858,24 @@ Each experiment of a set is a *core* table (spots) with optional companions keye
   - Jay A *et al.* bioRxiv 2025, doi:10.1101/2025.05.30.656885 (preprint) — ORCA of Ets1-Fli1 (30 loci, 30 kb) in
     double-positive thymocytes; 1 set, 2,880 traces.
 
-  Cheng, Chen, Patterson, Sawh, Gutnik, Messina, Fujimori and Jay deposit no `Cell_ID`: each trace is its own cell,
+  - Jensen CL *et al.* *Mol Cell* 85:347 (2025), doi:10.1016/j.molcel.2024.10.021 — ORCA of 40 loci (5 kb) around
+    Prdm8-Fgf5 (chr5) in R1 mESC with dCas9-VPR recruited by CARGO arrays 7.5 kb upstream of Prdm8 or 33 kb
+    upstream of Fgf5, and a non-targeting control; 3 sets, 10,441 traces.
+  - Llimos G *et al.* *Nat Commun* 13:2042 (2022), doi:10.1038/s41467-022-29625-6 — AXIN2 (25 loci, chr17) in
+    lymphoblastoid lines homozygous for the indel rs143348853 or the reference; 2 sets, 6,047 traces.  The headers
+    state GRCm38; the loci are hg38 (the loader sets it: `uns['genome_assembly_note']`).
+  - Takei 2021 mESC, the whole set 4DNESL2AY9CM (`takei2021_mesc_4dn`, atlas `takei2021_mesc` since 2026-10-30):
+    both replicates, each with a 1-Mb (2,460 loci) and a 25-kb (1,200 loci) core, quality, cell and RNA-spot
+    tables; 446 cells, 27,302 traces, 7,772 nascent-RNA spots, RNA counts of 45 genes (429 cells in the cell
+    tables); positions in the fields of view (`cent_ROI_x / y`).
+  - Liu 2025, the four MOp experiments of 4DNESMTNNB3N (`liu2025_mop_4dn`, atlas `liu2025_mop` since 2026-10-30:
+    46,340 cells, 695,013 traces) and the Mecp2 heterozygous MOp and V1 sets 4DNESPE924IP / 4DNESQU9R2NY
+    (`liu2025_mecp2`: 64,591 cells, 1,120,853 traces, each cell's Mecp2 genotype; subclasses for the MOp cells);
+    RNA counts of 242 genes per cell and positions in the tissue (`cell_center_x / y_global`, a region per section).
+  - Not added: Su 2020's 4DN sets (the data of the Zenodo stores `su2020_*`), Wang 2016 and Cheng 2021 (sets on
+    the portal without files), Nir 2018 (single-molecule localisations, not traces).
+
+  Cheng, Chen, Patterson, Sawh, Gutnik, Messina, Fujimori, Jay, Jensen and Llimos deposit no `Cell_ID`: each trace is its own cell,
   carrying its set and description.  None of these files or sets is registered twice (checked on accession and
   md5 against the whole registry).
 - **Terms**: the portal asks to cite the 4DN White Paper (doi:10.1038/nature23884) and the 4DN Data Portal paper
@@ -1880,7 +1900,9 @@ Each experiment of a set is a *core* table (spots) with optional companions keye
   field of view in its 44-SE experiment, the field only in the quality table (`fov_from`: cells `<fov>-<Cell_ID>`;
   local crop coordinates); and its `Trace_ID` is an allele over every chromosome (`trace_by` Trace_ID + Chrom).
   Tastemel 2025's `Trace_ID` numbers the locus (traces = `Cell_ID` + `Extra_Cell_ROI_ID`, the allele: `trace_by`),
-  and one locus has zero length (34,721,078, at the insertion).  Jay 2025 states `XYZ_unit=micron` over nm.
+  and one locus has zero length (34,721,078, at the insertion).  Jay 2025, Jensen 2025 and Llimos 2022 state `XYZ_unit=micron`
+  over nm.  Liu 2025's cores give `Cell_ID` and `FOV_ID`, and so do its cell tables: cells are joined to them by
+  field and cell.  Takei 2021's RNA-spot tables are read into `points['rna']` (their cells named as the core's).
 - **Loaders**: `load NAME` builds `<name>/<name>.chromdata.zarr` (every experiment with traces, ids prefixed by the
   experiment accession; coordinates in µm).
 - **Used by**: the web browser (to be reviewed before an atlas release).

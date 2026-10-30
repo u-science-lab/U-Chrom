@@ -152,6 +152,36 @@ _FOV_POSITIONS = {"hafner2023_orca": ("traces", "LocusX", "LocusY", ()),
                   "hung2024_orca": ("spots", "Raw_X", "Raw_Y", ("Limb", "Section_ID"))}
 
 
+#: the assembly of a deposit whose header states another — Llimos et al. 2022 write GRCm38 over the human AXIN2
+#: locus (chr17:65.49-65.69 Mb: hg38)
+_ASSEMBLY = {"llimos2022_axin2": "hg38"}
+_ASSEMBLY_NOTES = {"llimos2022_axin2": "the deposit's headers state GRCm38; the loci (AXIN2, chr17:65.49-65.69 Mb, "
+                                       "lymphoblastoid cells) are hg38"}
+
+#: cell-table centroid columns (µm) as cell positions: dataset -> (x column, y column, frame, region) — region
+#: ``experiment`` (each experiment a section of its own) or ``fov`` (``<experiment>/FOV <n>``, the field the cell id
+#: starts with: Takei et al. 2021 ``<fov>_<cell>``)
+_CELL_CENTROIDS = {"takei2021_mesc_4dn": ("cent_ROI_x", "cent_ROI_y", "fov", "fov"),
+                   "liu2025_mop_4dn": ("cell_center_x_global", "cell_center_y_global", "global", "experiment"),
+                   "liu2025_mecp2": ("cell_center_x_global", "cell_center_y_global", "global", "experiment")}
+
+
+def _cell_centroids(cd, xcol: str, ycol: str, frame: str, region: str):
+    cells = cd.cells.copy()
+    exp = cells["experiment"].astype(str)
+    if region == "fov":
+        fov = pd.Series(cells.index.astype(str), index=cells.index).str.split("_").str[-2]
+        cells["region"] = pd.Categorical(exp + "/FOV " + fov)
+    else:
+        cells["region"] = pd.Categorical(exp)
+    xy = cells[[xcol, ycol]].apply(pd.to_numeric, errors="coerce").to_numpy(float)
+    cd.cells = cells.drop(columns=[xcol, ycol])
+    cd.set_cell_positions(xy, cell_ids=cells.index, unit="micron", frame=frame, region_col="region",
+                          source=f"FOF-CT cell table {xcol} / {ycol}")
+    front = ["experiment", "region", "centroid_x", "centroid_y"]       # the gene columns stay last (--rna-after)
+    cd.cells = cd.cells[front + [c for c in cd.cells.columns if c not in front]]
+
+
 def _fov_positions(cd, table: str, xcol: str, ycol: str, copy=()):
     """Cell positions in their field of view (pixels; ``cd.set_cell_positions`` key ``fov``, region
     ``<experiment>/FOV <n>``): the mean position of the cell's traces (``table="traces"``) or spots (``"spots"``)."""
@@ -239,14 +269,16 @@ def _fourdn(dataset: str, source: str):
                      "meta": {"set": set_, "condition": cores[0]["description"], "biosample": cores[0]["biosample"]},
                      "locus_shifts": _LOCUS_SHIFTS.get(dataset, ()), "trace_by": _TRACE_BY.get(dataset),
                      "fov_from": _FOV_FROM.get(dataset)}
-            for k in ("spot_quality", "spot_bio"):
+            for k in ("spot_quality", "spot_bio", "rna_spot"):
                 if k in files:
                     entry[k] = one(k)
             for k in ("trace_data", "cell_data"):
                 if k in files:
                     entry[k] = one(k)[0]
             experiments.append(entry)
-        cd = read_4dn_tracing(experiments)
+        cd = read_4dn_tracing(experiments, genome_assembly=_ASSEMBLY.get(dataset))
+        if dataset in _ASSEMBLY:
+            cd.uns["genome_assembly_note"] = _ASSEMBLY_NOTES[dataset]
         if dataset in _CELL_LABELS:                     # the authors' numbered cell types, named
             col, names = _CELL_LABELS[dataset]
             cells = cd.cells.copy()
@@ -254,6 +286,8 @@ def _fourdn(dataset: str, source: str):
             cd.cells = cells
         if dataset in _FOV_POSITIONS:
             _fov_positions(cd, *_FOV_POSITIONS[dataset])
+        if dataset in _CELL_CENTROIDS:
+            _cell_centroids(cd, *_CELL_CENTROIDS[dataset])
         if dataset in _TRACE_FIELDS:
             _trace_fields_to_cells(cd, _TRACE_FIELDS[dataset])
         cd.uns["source"] = source
@@ -337,7 +371,17 @@ for _name, _source, _what in (
         ("tastemel2025_sox2", "Tastemel et al. 2025, bioRxiv 10.1101/2025.02.21.639596 (4DN FOF-CT)",
          "Tastemel 2025 tracing of the Sox2 locus with a 4-CTCF-site insertion in F123 mESC (mm10)"),
         ("jay2025_thymocytes", "Jay et al. 2025, bioRxiv 10.1101/2025.05.30.656885 (4DN FOF-CT)",
-         "Jay 2025 ORCA of the Ets1-Fli1 locus in double-positive thymocytes (mm10)")):
+         "Jay 2025 ORCA of the Ets1-Fli1 locus in double-positive thymocytes (mm10)"),
+        ("jensen2025_cargo", "Jensen et al. 2025, Mol Cell 85:347 (4DN FOF-CT)",
+         "Jensen 2025 ORCA of the Prdm8-Fgf5 locus in R1 mESC, dCas9-VPR recruited by CARGO arrays (mm10)"),
+        ("llimos2022_axin2", "Llimos et al. 2022, Nat Commun 13:2042 (4DN FOF-CT)",
+         "Llimos 2022 tracing of the AXIN2 locus in lymphoblastoid lines, with and without an indel (hg19 / hg38)"),
+        ("takei2021_mesc_4dn", "Takei et al. 2021, Nature 590:344 (4DN FOF-CT)",
+         "Takei 2021 DNA seqFISH+ of mESC: both replicates, 1-Mb and 25-kb loci, RNA and cell tables (mm10)"),
+        ("liu2025_mop_4dn", "Liu et al. 2025, Sci Adv 11:eadv2067 (4DN FOF-CT)",
+         "Liu 2025 DNA-MERFISH of 2,000 loci in mouse MOp, four experiments, cell types and RNA per cell (mm10)"),
+        ("liu2025_mecp2", "Liu et al. 2025, Sci Adv 11:eadv2067 (4DN FOF-CT)",
+         "Liu 2025 DNA-MERFISH of 2,000 loci in Mecp2 heterozygous MOp and V1 (mm10)")):
     register(Loader(name=_name, build=_fourdn(_name, _source), store=f"{_name}/{_name}.chromdata.zarr",
                     sources=(_name,), description=_what))
 for _name, _build, _what in (

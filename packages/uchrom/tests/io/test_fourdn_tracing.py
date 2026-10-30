@@ -179,6 +179,31 @@ def test_spot_tables_of_other_columns_joined():
     assert fov.uns["fofct_fov_columns"] == {"e": "fov"}
 
 
+def test_cell_table_joined_where_cells_are_keyed_by_field():
+    p = "odd_liu2025_mop_cells_by_fov_"           # two cells; core and cell table both give FOV_ID and Cell_ID
+    cd = read_4dn_tracing([dict(name="e", core=F / f"{p}core_4DNFI36ZLABD.csv",
+                                cell_data=F / f"{p}cell_data_4DNFIA7FUW8Y.csv")])
+    table = {r[0]: r for r in _rows(F / f"{p}cell_data_4DNFIA7FUW8Y.csv")}
+    assert len(cd.cells) == 2
+    for cid, row in cd.cells.iterrows():
+        fov, raw = cid.split("_", 1)[1].split("-", 1)
+        assert row["cluster_subclass"] == table[raw][7] and row["cell_volume_from_merlin"] == pytest.approx(float(table[raw][2]))
+
+
+def test_rna_spot_tables_as_points():
+    from tests import FIXTURES
+    core = F / "odd_takei2021_mesc_two_cells_core_4DNFIHF3JCBY.csv"      # rows of cell 0_1
+    rna_file = FIXTURES / "4DNFIJ52NVDV.csv"                              # the experiment's RNA spots, all cells
+    cd = read_4dn_tracing([dict(name="e", core=core, rna_spot=rna_file)])
+    rna = cd.points["rna"]
+    rows = _rows(rna_file)
+    assert len(rna) == len(rows) and {"x", "y", "z", "gene", "gene_id", "cell_id", "experiment"} <= set(rna.columns)
+    assert rna["x"].to_numpy() == pytest.approx([float(r[1]) for r in rows])            # micron, as the core
+    mine = [r[6] == "0_1" for r in rows]
+    assert (rna["cell_id"][mine] == "e_0_1").all() and rna["cell_id"][[not m for m in mine]].isna().all()
+    assert not rna["gene_id"].str.endswith(",").any()
+
+
 def test_reused_trace_ids_split_and_duplicate_rows_dropped(tmp_path):
     f = F / "odd_murphy2024_orca_reused_trace_ids_4DNFIYZDTHMG.csv"
     rows = _rows(f)                                   # one id in two blocks with another trace between them
