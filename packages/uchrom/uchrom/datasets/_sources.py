@@ -627,6 +627,22 @@ DATASETS = {
                                          "insertion, 11 sets (4DN FOF-CT)"),
     "jay2025_thymocytes": _fourdn_tracing("jay2025_thymocytes", "Jay 2025 ORCA of Ets1-Fli1 in thymocytes, 1 set "
                                           "(4DN FOF-CT)"),
+    # Jensen et al. 2025 (Mol Cell 85:347; Prdm8-Fgf5 with dCas9-VPR recruited by CARGO), Llimos et al. 2022 (Nat
+    # Commun 13:2042; the AXIN2 locus in lymphoblastoid lines with / without a leukemia-protective indel), and the
+    # whole 4DN sets of two studies of which single files are registered above: Takei et al. 2021 mESC (both
+    # replicates, 1 Mb and 25 kb: takei2021_mesc_4dn) and Liu et al. 2025 (Sci Adv 11:eadv2067; the four MOp
+    # experiments with RNA: liu2025_mop_4dn; the Mecp2 knock-out MOp and V1 sets: liu2025_mecp2; their spot
+    # demultiplexing and RNA-spot tables, 60 GB, not registered).
+    "jensen2025_cargo": _fourdn_tracing("jensen2025_cargo", "Jensen 2025 ORCA of Prdm8-Fgf5 with CARGO-VPR, 3 sets "
+                                        "(4DN FOF-CT)"),
+    "llimos2022_axin2": _fourdn_tracing("llimos2022_axin2", "Llimos 2022 tracing of AXIN2 in lymphoblastoid lines, "
+                                        "2 sets (4DN FOF-CT)"),
+    "takei2021_mesc_4dn": _fourdn_tracing("takei2021_mesc_4dn", "Takei 2021 DNA seqFISH+ of mESC, both replicates, "
+                                          "1 Mb and 25 kb (4DN FOF-CT)"),
+    "liu2025_mop_4dn": _fourdn_tracing("liu2025_mop_4dn", "Liu 2025 DNA-MERFISH of mouse MOp, 4 experiments with "
+                                       "cell tables, 6.2 GB (4DN FOF-CT)"),
+    "liu2025_mecp2": _fourdn_tracing("liu2025_mecp2", "Liu 2025 DNA-MERFISH of Mecp2 heterozygous MOp and V1, "
+                                     "6 experiments with cell tables, 10.2 GB (4DN FOF-CT)"),
     # Rao et al. 2014 IMR90 in situ Hi-C reprocessed by 4DN on GRCh38 (set 4DNES1ZEJNRU): the
     # whole-genome input of the bulk deconvolution benchmark (20 kb built from the 10 kb level).
     "rao2014_imr90_4dn": {

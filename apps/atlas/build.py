@@ -34,10 +34,20 @@ MAP_RAMP = ((255, 255, 255), (247, 196, 178), (226, 104, 80), (178, 30, 38), (10
 FIGURE_WINDOW = 40_000_000      # bp of the contact-map thumbnail (a window of the chromosome, not all of it)
 
 
+def _section_column(cd) -> Optional[str]:
+    """The cells column naming each cell's section: ``section``, else the region column of its positions (tracing
+    stores of several tissue sections: ``uns['cell_spatial']['default']['region_col']``)."""
+    if "section" in cd.cells:
+        return "section"
+    col = ((cd.uns.get("cell_spatial") or {}).get("default") or {}).get("region_col")
+    return col if col in cd.cells else None
+
+
 def _section_choice(cd, emb: Dict[str, Any], section: Optional[str], color_by: Optional[str]):
     """(section, colour column, bulk map) of a thumbnail: a section with a bulk map and a covering label column."""
     cells = cd.cells
-    sections = [str(s) for s in cells["section"].astype(str).unique()] if "section" in cells else [None]
+    scol = _section_column(cd)
+    sections = [str(s) for s in cells[scol].astype(str).unique()] if scol else [None]
     bulk = {k: v for k, v in emb.items() if v.kind == "bulk"}
 
     def bulk_of(s):       # the bulk map of a section is keyed bulk.<section>[.<variant>]
@@ -45,7 +55,7 @@ def _section_choice(cd, emb: Dict[str, Any], section: Optional[str], color_by: O
         return min(hits, key=len) if hits else None
 
     def column_of(s):
-        sub = cells if s is None else cells[cells["section"].astype(str) == s]
+        sub = cells if s is None else cells[cells[scol].astype(str) == s]
         for c in ([color_by] if color_by else COLOR_COLUMNS):
             if c in sub and len(sub) and sub[c].notna().mean() >= 0.9 and 1 < sub[c].nunique() <= 60:
                 return c
@@ -291,8 +301,9 @@ def render_figures(config: PathLike, root: PathLike, out: PathLike, *, size: int
         info: Dict[str, Any] = {"section": section, "color_by": column, "layout": layout, "layout_key": layout_key}
         if spec.get("caption"):
             info["caption"] = spec["caption"]
-        if pos is not None and section is not None and "section" in cd.cells:
-            pos = pos[(cd.cells.loc[pos.index, "section"].astype(str) == section).to_numpy()]
+        scol = _section_column(cd)
+        if pos is not None and section is not None and scol:
+            pos = pos[(cd.cells.loc[pos.index, scol].astype(str) == section).to_numpy()]
         labels = cd.cells.loc[pos.index, column] if (pos is not None and column) else None
         for tag, px in [("", size)] + ([("hero.", hero_size)] if d["id"] in hero else []):
             if structure is not None:
