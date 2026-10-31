@@ -110,3 +110,32 @@ register(Loader(
     store="takei2021_mesc/takei2021_mesc_detections.chromdata.zarr", sources=("seqfish", "takei"),
     description="Takei 2021 mESC raw DNA seqFISH+ detections (Zenodo, 25-kb loci, rep 1): 316,995 untraced "
                 "spots in 201 cells, the authors' homolog call as `label`"))
+
+
+def _build_payne2021_igs(table: str):
+    def build(root: Path, out: Path):
+        """Payne et al. 2021 in situ genome sequencing (IGS), the authors' read table (:func:`uchrom.io.read_igs`):
+        one spot per read on 1-Mb bins, a trace per chromosome territory (an unordered set of reads)."""
+        from uchrom.io import read_igs
+
+        from . import fetch
+
+        fetch("payne2021_igs", root=root)
+        cd = read_igs(root / "payne2021_igs" / "raw" / table)
+        cd.uns["source"] = (
+            "Payne et al. 2021, Science 371:eaay3446: in situ genome sequencing, the authors' read table "
+            f"{table} (GitHub zchiang/in_situ_genome_sequencing_analysis, MIT licence)")
+        return cd
+    return build
+
+
+register(Loader(
+    name="payne2021_igs_pgp1", build=_build_payne2021_igs("Table_S1_pgp1_data_table.csv"),
+    store="payne2021_igs/payne2021_igs_pgp1.chromdata.zarr", sources=("payne2021_igs",),
+    description="Payne 2021 IGS of PGP1 human fibroblasts (hg38): 29,707 reads in 106 cells placed on 1-Mb bins, "
+                "a trace per chromosome territory (homologs h1 / h2), other reads as points"))
+register(Loader(
+    name="payne2021_igs_embryo", build=_build_payne2021_igs("Table_S2_embryo_data_table.csv"),
+    store="payne2021_igs/payne2021_igs_embryo.chromdata.zarr", sources=("payne2021_igs",),
+    description="Payne 2021 IGS of mouse zygotes, 2-cell and 4-cell embryos (mm10): 247,593 reads in 113 cells of "
+                "57 embryos, a trace per chromosome territory (maternal / paternal), other reads as points"))

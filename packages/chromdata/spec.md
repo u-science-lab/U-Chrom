@@ -18,6 +18,11 @@ Cell
 - A **Trace** is an ordered chain of Spots along a chromatin fiber.
 - A **Cell** contains one or more Traces.
 
+`uns['trace_kind']` says what a trace is: `"fibre"` (the default when absent) — an ordered chain, one spot per
+bin; `"set"` — an unordered set of observations of a chromosome region: sequenced reads (in situ genome
+sequencing), single-molecule localisations, detections not yet traced (all detections of a chromosome in a
+cell).  In a set several spots may share a bin; a viewer draws the spots as points, not as a chain.
+
 ## Attributes
 
 ### Locus axis (format 2.0)

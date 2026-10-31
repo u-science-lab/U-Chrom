@@ -77,7 +77,7 @@ def read_seqfish_detections(
     ChromData
         One spot per detection, in the file's order; coordinates in nm.  ``cell_id = "<fov>_<cellID>"``;
         ``trace_id = "<cell_id>_<chrom>"``: one *candidate set* per (cell, chromosome) — all detections
-        of a chromosome in a cell, both homologs together, not a fibre.  Spot columns ``spot_id`` (row
+        of a chromosome in a cell, both homologs together, not a fibre (``uns['trace_kind'] = 'set'``).  Spot columns ``spot_id`` (row
         number in the file), ``fov``, ``channel``, the locus key (``region`` or ``name``) and ``label``
         (``labelID``, when the file has it); the other numeric columns (intensities) are ``spot_tracks``.
 
@@ -149,7 +149,7 @@ def read_seqfish_detections(
     cells = cells.set_index("cell_id")
     src = Path(path).name + (f"!{member}" if member else "")
     return ChromData(coords, spots, bins=bins, cells=cells, spot_tracks=tracks,
-                     uns={"xyz_unit": "nm", "voxel_nm": [float(x) for x in v],
+                     uns={"xyz_unit": "nm", "voxel_nm": [float(x) for x in v], "trace_kind": "set",
                           "source": f"DNA seqFISH+ detections {src}"})
 
 

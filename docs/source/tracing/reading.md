@@ -8,6 +8,7 @@
 | the tables of Su et al. 2020 (chromosome- and genome-scale DNA-MERFISH), with the authors' binned Hi-C | `uchrom.io.read_su2020_tracing`, `read_su2020_hic`; a locus × locus map as a `.cool`: `write_locus_cool` |
 | SnapFISH / SnapFISH-IMPUTE coordinate + annotation tables | `uchrom.io.read_snapfish(coor, ann)` |
 | raw DNA seqFISH+ detections (not yet traced) | `uchrom.io.read_seqfish_detections` → [from detections to traces](traces) |
+| in situ genome sequencing reads (Payne et al. 2021): a trace per chromosome territory, its reads an unordered set (`uns['trace_kind'] = 'set'`) | `uchrom.io.read_igs`; `uchrom.datasets.load("payne2021_igs_embryo")` |
 | several spots of one trace on one locus | `uchrom.im.merge_duplicate_spots` (`uc.pp.merge_duplicate_spots`) |
 | published datasets, ready as `ChromData` | `uchrom.datasets.load("takei2021_mesc")`, `load("bintu_imr90")`, ... ([datasets](../datasets/index)) |
 

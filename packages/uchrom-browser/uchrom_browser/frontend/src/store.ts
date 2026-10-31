@@ -348,8 +348,10 @@ export const useStore = create<AppState>((set, get) => {
     if (!get().views[ds.id]) set({ views: { ...get().views, [ds.id]: initialView(ds) } })
     if (!get().layers.some((l) => l.datasetId === ds.id && l.parentId === null)) {
       // Imaging data: tubes for the focused cell; the crowded overview falls
-      // back to lines automatically.
-      const style: Partial<LayerStyle> = ds.trace_mode ? { mode: 'tube' } : {}
+      // back to lines automatically.  Traces that are sets of reads or
+      // localisations, not fibres, are points.
+      const style: Partial<LayerStyle> =
+        ds.trace_kind === 'set' ? { mode: 'points' } : ds.trace_mode ? { mode: 'tube' } : {}
       const id = get().addLayer({ datasetId: ds.id, parentId: null, name: ds.name, filter: {}, style })
       set({ selectedLayerId: id, resetViewToken: get().resetViewToken + 1 })
     }

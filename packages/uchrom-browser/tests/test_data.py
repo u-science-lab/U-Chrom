@@ -48,6 +48,9 @@ def test_summary_and_traces():
     assert s["chroms"][1] == {"name": "chr2", "start": 0, "end": 5000,
                               "n_spots": 5, "n_traces": 1}
     assert s["trace_mode"] is False  # one trace per chromosome
+    assert s["trace_kind"] == "fibre"
+    ds.cd.uns["trace_kind"] = "set"                  # traces of reads / localisations: drawn as points
+    assert ds.summary()["trace_kind"] == "set"
 
     t = ds.traces()
     assert t["total"] == 3

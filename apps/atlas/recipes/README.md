@@ -82,6 +82,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `sim_cell1/`: NucDynamics structure of Cell 1 + its contacts (structure predates the `count_contacts` fix) | 1.4 MB | fixture, `packages/uchrom-browser/tests/fixtures/`; recipe `build_sim_cell1.py` | browser genome-view test; uchrom-reproducibility `extended_data_fig1/f_roundtrip.py`; Fig. 6 agent benchmark |
 | `fixture_barcode_only.ecsv`, `fixture_with_chrom.ecsv`: PyHiM ECSV traces | 1 KB each | fixture, `packages/uchrom/tests/fixtures/` | `packages/uchrom/tests/im/test_from_pyhim_trace.py` |
 | `macs3/`: MACS3's own regression results (BSD 3-Clause) | 1.2 MB | fixture, `packages/uchrom/tests/fixtures/` | `packages/uchrom/tests/fea/test_peak_features.py` |
+| `igs/`: Payne 2021 IGS reads of one PGP1 fibroblast and one 4-cell-embryo cell (MIT) | 99 KB | fixture, `packages/uchrom/tests/fixtures/` (source: fetch `payne2021_igs`) | `packages/uchrom/tests/io/test_igs.py` |
 | `apps/atlas/recipes/ref_hg38/`: UCSC hg38 `gap` and `centromeres` tables | 12 KB + 1.5 KB | in this folder | `probe_human_ssab_layout.py` |
 | an unpublished benchmark (derived), `tan2021_adult_cortex_cells.tsv` | 78 KB + 31 KB | in the repository | an unpublished benchmark; the cell list of fetch `tan2021_cortex` |
 
@@ -1912,6 +1913,32 @@ Each experiment of a set is a *core* table (spots) with optional companions keye
 - **Loaders**: `load NAME` builds `<name>/<name>.chromdata.zarr` (every experiment with traces, ids prefixed by the
   experiment accession; coordinates in µm).
 - **Used by**: the web browser (to be reviewed before an atlas release).
+
+## `payne2021_igs/`: Payne 2021 in situ genome sequencing (79 MB; fetch `payne2021_igs`, load `payne2021_igs_pgp1`, `payne2021_igs_embryo`)
+
+- **Source**: Payne, Chiang, Reginato et al. 2021, *Science* 371:eaay3446, doi:10.1126/science.aay3446; the authors'
+  tables in GitHub `zchiang/in_situ_genome_sequencing_analysis` (`data/`, commit e1279b0, MIT licence):
+  `Table_S1_pgp1_data_table.csv` (8.1 MB), `Table_S2_embryo_data_table.csv` (74 MB) and
+  `Table_S3_description_of_data.xlsx` (the columns).
+- **Content**: one row per read sequenced in place, with its position in the nucleus (µm) and the genomic position
+  of its alignment.  PGP1 human fibroblasts (hg38): 36,602 reads in 106 cells, the chromosome territory of each read
+  (`cluster` 1 / 2, 0 = none).  Mouse zygotes, 2-cell and 4-cell embryos (mm10): 249,733 reads in 113 cells of 57
+  embryos (24 / 40 / 49 cells), positions in the embryo's frame, the territory (`cluster`; -1 = territories overlap)
+  and its parent (`cluster_hap_imputed`: 0 maternal, 1 paternal, -1 unknown), distances to the lamina, nucleolar
+  precursor bodies and centromeres, compartment / LAD annotations.  `hg38_chr` 1-22, 23 = X, 24 = Y; the codes
+  25-31 (6,895 reads, most at position 0) are not described by the authors.
+- **Representation** (`uchrom.io.read_igs`): a read is one observation of its locus, a territory is not an ordered
+  fibre — each territory is a trace holding its reads as an unordered set (`uns['trace_kind'] = 'set'`, drawn as
+  points by the web browser), on 1-Mb bins (`resolution=`) with the read's own position in the spot column `pos`;
+  traces `<cell>_<chrom>_<homolog>` (`mat` / `pat`, `h1` / `h2` without a parent, `none`, `overlap`); reads off the
+  primary chromosomes (chrM, unplaced, several UMIs, the undescribed codes) are `points['other_reads']`.  Stores:
+  PGP1 29,707 reads in 3,921 traces, embryos 247,593 reads in 4,301 traces (1,479 maternal, 1,428 paternal).
+- **Checks** (2026-10-31): within a territory, the 3-D distance of two reads grows with their genomic distance
+  (median 0.84 µm under 1 Mb to 2.73 µm over 50 Mb in PGP1, Spearman 0.39; embryos 2.0 to 8.5 µm, 0.45); in
+  zygotes the maternal and paternal territories of a chromosome lie a median 24.5 µm apart (472 pairs: the two
+  pronuclei).
+- **Used by**: the loaders; test fixtures `packages/uchrom/tests/fixtures/igs/` (one fibroblast, one 4-cell-embryo
+  cell, rows as published).
 
 ## Pre-staging data (optional)
 

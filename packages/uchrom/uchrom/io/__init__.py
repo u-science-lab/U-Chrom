@@ -23,6 +23,7 @@ _EXPORTS = {
     "write_pyhim_trace": (".pyhim", "write_pyhim_trace"),
     "read_snapfish": (".snapfish", "read_snapfish"),
     "read_seqfish_detections": (".seqfish_detections", "read_seqfish_detections"),
+    "read_igs": (".igs", "read_igs"),
     "read_seqfish_multiomics": (".seqfish_multiomics", "read_seqfish_multiomics"),
     "read_seqfish_transcriptome": (".seqfish_multiomics", "read_seqfish_transcriptome"),
     "load_seqfish_multiomics_linked": (".seqfish_multiomics", "load_seqfish_multiomics_linked"),
