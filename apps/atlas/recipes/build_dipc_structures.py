@@ -8,6 +8,8 @@ Four studies deposit, per cell, the contact pairs and 20 kb structures (``python
                       controls; two stores, xu2025_sperm_human (hg38) and xu2025_sperm_mouse (mm10)
   wu2024_limca        Wu et al. 2024, Nat Methods 21:974 (GEO GSE239969): LiMCA, 3-D genome and RNA of the same
                       mouse olfactory epithelium cells, 411 cells (runs 1 and 2 read), cell types, RNA counts
+  wu2024_limca_human  the same paper's human cell lines (GEO GSE240114): 221 GM12878 cells with three 20 kb runs
+                      (runs 1 and 2 read); store wu2024_limca_gm12878 (hg38), no RNA deposited
   liu2026_hires_xci   Liu et al. 2026, Genomics Proteomics Bioinformatics qzag002 (GEO GSE278310 + GSE310759):
                       HiRES of female hybrid mESC over the first days of random X inactivation, with RNA
 
@@ -147,6 +149,20 @@ def wu2024(raw: Path) -> dict:
                       "structures (runs 1 and 2), cell types and RNA counts of each cell"}
 
 
+def wu2024h(raw: Path) -> dict:
+    files = _cell_files(raw / "GSE240114" / "cells", r"^GSM\d+_(?P<cell>GM12878_cell_\d+)"
+                        r"(?P<role>\.impute\.pairs|_20Kb_1\.clean|_20Kb_2\.clean)(?:\.3dg\.txt)?\.gz$")
+    files = {c: (f[".impute.pairs"], f["_20Kb_1.clean"], f.get("_20Kb_2.clean")) for c, f in files.items()
+             if ".impute.pairs" in f and "_20Kb_1.clean" in f}
+    m = _series_matrix([raw / "GSE240114" / "GSE240114_series_matrix.txt.gz"])
+    m["cell_id"] = m["title"].str.replace(r"_RNA$", "", regex=True)
+    m = m.drop_duplicates("cell_id").set_index("cell_id")
+    cells = pd.DataFrame({"gsm": m["geo_accession"], "cell_type": m["cell type"]}).reindex(sorted(files))
+    return {"stores": {"wu2024_limca_gm12878": cells}, "files": files, "assembly": "hg38", "res_3d": 100_000,
+            "source": "Wu et al. 2024, Nat Methods 21:974 (LiMCA, human cell lines; GEO GSE240114): imputed contact "
+                      "pairs and the authors' 20 kb clean structures (runs 1 and 2) of each GM12878 cell"}
+
+
 def _day(label) -> float:
     """'d05' -> 0.5, 'd15' -> 1.5, 'd2' -> 2 (the HiRES X-inactivation days: day 0 to 4, half days written without
     the point)."""
@@ -180,7 +196,8 @@ def liu2026(raw: Path) -> dict:
                       "contact pairs, the authors' 20 kb clean structures, metadata and RNA UMI counts of each cell"}
 
 
-STUDIES = {"tan2019_dipc": tan2019, "xu2025_sperm": xu2025, "wu2024_limca": wu2024, "liu2026_hires_xci": liu2026}
+STUDIES = {"tan2019_dipc": tan2019, "xu2025_sperm": xu2025, "wu2024_limca": wu2024, "wu2024_limca_human": wu2024h,
+           "liu2026_hires_xci": liu2026}
 
 
 # -- workers -----------------------------------------------------------------------------------------------------

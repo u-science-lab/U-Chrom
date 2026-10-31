@@ -139,3 +139,52 @@ register(Loader(
     store="payne2021_igs/payne2021_igs_embryo.chromdata.zarr", sources=("payne2021_igs",),
     description="Payne 2021 IGS of mouse zygotes, 2-cell and 4-cell embryos (mm10): 247,593 reads in 113 cells of "
                 "57 embryos, a trace per chromosome territory (maternal / paternal), other reads as points"))
+
+
+def _build_beckwith2025(source: str, archive: str, member: str):
+    def build(root: Path, out: Path):
+        """Beckwith et al. 2025 (Ellenberg lab), the authors' LoopTrace table (:func:`uchrom.io.read_looptrace`):
+        one spot per fitted locus, loci = windows of the library's spot size around ``g_pos`` (hg38), nm."""
+        import shutil
+
+        from uchrom.io import read_looptrace
+
+        from . import fetch
+
+        fetch(source, root=root)
+        raw = root / "beckwith2025" / "raw"
+        table = raw / Path(member).name
+        if not table.is_file():
+            with zipfile.ZipFile(raw / archive) as z, z.open(member) as src, open(table.with_suffix(".part"), "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            table.with_suffix(".part").rename(table)
+        cd = read_looptrace(table)
+        paper = ("Beckwith et al. 2025, Cell 188:2656 (doi:10.1016/j.cell.2025.02.028), figshare 27003022"
+                 if source == "beckwith2025_mitosis" else
+                 "Beckwith et al. 2025, Nat Commun 16:6673 (doi:10.1038/s41467-025-61689-y), figshare 27613239")
+        cd.uns["source"] = f"{paper} (CC BY 4.0): the authors' table {Path(member).name}"
+        return cd
+    return build
+
+
+register(Loader(
+    name="beckwith2025_mitosis",
+    build=_build_beckwith2025("beckwith2025_mitosis", "mitofold1_data_code.zip", "exp_data/mitofold_traces.csv.gz"),
+    store="beckwith2025/beckwith2025_mitosis.chromdata.zarr", sources=("beckwith2025_mitosis",),
+    description="Beckwith 2025 mitotic chromosome tracing, HeLa Kyoto WT, SMC4-depleted and TSA-treated (hg38): "
+                "28,379 traces in 3,930 nuclei from interphase to metaphase, eight libraries (1-Mb regions at 12 kb "
+                "to whole chromosomes at 1 Mb); coords = spots passing the authors' QC, layers['fit'] every fit"))
+register(Loader(
+    name="beckwith2025_looptrace",
+    build=_build_beckwith2025("beckwith2025_looptrace", "looptrace_experimental_data.zip",
+                              "looptrace_RPE1_HKWT_dRAD21_dCTCF_dWAPL_experimental_data_combined.csv.gz"),
+    store="beckwith2025/beckwith2025_looptrace.chromdata.zarr", sources=("beckwith2025_looptrace",),
+    description="Beckwith 2025 LoopTrace, RPE-1 and HeLa Kyoto WT / RAD21-, CTCF-, WAPL-depleted (hg38): 118,479 "
+                "traces of ten regions (4-10 kb spots), no nuclei, coordinates in each trace's crop"))
+register(Loader(
+    name="beckwith2025_looptrace_fish",
+    build=_build_beckwith2025("beckwith2025_looptrace", "looptrace_experimental_data.zip",
+                              "looptrace_RPE1_denaturing_nondenaturing_FISH_comparison.csv.gz"),
+    store="beckwith2025/beckwith2025_looptrace_fish.chromdata.zarr", sources=("beckwith2025_looptrace",),
+    description="Beckwith 2025 LoopTrace, RPE-1 traced with non-denaturing vs denaturing FISH (hg38): 36,277 traces "
+                "of six regions in 4,666 nuclei"))
