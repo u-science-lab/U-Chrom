@@ -13,6 +13,7 @@ cooler = pytest.importorskip("cooler")
 from chromdata import ChromData  # noqa: E402
 
 from uchrom.fea import pseudobulk  # noqa: E402
+from uchrom.fea.pseudobulk_maps import ice  # noqa: E402
 from uchrom.io.pairs_maps import bin_pairs, genome_bins, pairs_to_scool  # noqa: E402
 
 RES = 1000
@@ -243,6 +244,13 @@ def test_default_folders(tmp_path, monkeypatch):
     assert _default_out_dir(Local()) == ((tmp_path / "x").resolve() / "kim2020_pseudobulk", True)
 
 
+def _cooler_version():
+    return tuple(int(x) for x in cooler.__version__.split(".")[:2])
+
+
+# ice() follows cooler 0.12's balancing: diagonals left out only within chromosomes, the main diagonal counted
+# once, bins left without data masked, a trans_only stat
+@pytest.mark.skipif(_cooler_version() < (0, 12), reason="ice() follows cooler >= 0.12")
 @pytest.mark.parametrize("trans", [True, False])
 def test_ice_matches_cooler_balance(tmp_path, trans):
     store, bins, maps, cells = _dataset(tmp_path, n_cells=60, seed=7)
@@ -261,6 +269,16 @@ def test_ice_matches_cooler_balance(tmp_path, trans):
         with clr.open("r") as h5:
             attrs = dict(h5["bins/weight"].attrs)
         assert set(attrs) == set(stats) and np.allclose(attrs["scale"], stats["scale"], equal_nan=True)
+        # the main diagonal kept: counted once in the marginals
+        px = clr.pixels()[:]
+        offsets = clr._load_dset("indexes/chrom_offset")
+        ours, _ = ice(px["bin1_id"].to_numpy(), px["bin2_id"].to_numpy(), px["count"].to_numpy(), offsets,
+                      cis_only=not trans, ignore_diags=0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            ref, _ = cooler.balance_cooler(clr, cis_only=not trans, ignore_diags=0)
+        ok = np.isfinite(ref)
+        assert np.array_equal(np.isfinite(ours), ok) and np.allclose(ours[ok], ref[ok], rtol=1e-9, atol=0)
 
 
 def test_sample_cells_by_depth():
