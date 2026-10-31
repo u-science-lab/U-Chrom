@@ -434,14 +434,15 @@ def _group_pixels(parts: Dict[int, Tuple[np.ndarray, ...]], grid: _Grid, g: int)
 # ----------------------------------------------------------------------------------------------------------
 
 class _SymUpper:
-    """A symmetric map held as its upper triangle ``U``: ``S @ x = U @ x + U.T @ x`` (the transpose is a view;
-    the diagonal counts twice, as in cooler's marginals)."""
+    """A symmetric map held as its upper triangle ``U``: ``S @ x = U @ x + U.T @ x - diag(U) x`` (the transpose
+    is a view; the diagonal counts once, as in cooler's marginals since 0.12)."""
 
     def __init__(self, U):
         self.U = U
+        self.d = U.diagonal()
 
     def __matmul__(self, x):
-        return self.U @ x + self.U.T @ x
+        return self.U @ x + self.U.T @ x - self.d * x
 
     def __getitem__(self, key):
         return _SymUpper(self.U[key])
@@ -454,13 +455,16 @@ def ice(b1: np.ndarray, b2: np.ndarray, count: np.ndarray, chrom_offsets: np.nda
         ignore_diags: int = 2, min_nnz: int = 10, mad_max: float = 5, tol: float = 1e-5,
         max_iters: int = 200) -> Tuple[np.ndarray, dict]:
     """Iterative correction (ICE; Imakaev et al. 2012, Nat Methods 9:999) of an in-memory map, the algorithm
-    and filters of ``cooler.balance_cooler`` (Abdennur & Mirny 2020) without re-reading the file each iteration.
+    and filters of ``cooler.balance_cooler`` (Abdennur & Mirny 2020; as of cooler 0.12) without re-reading the
+    file each iteration.
 
-    Pixels with ``|bin1 - bin2| < ignore_diags`` (and, ``cis_only``, the trans pixels) are left out; bins with
+    Pixels of one chromosome with ``|bin1 - bin2| < ignore_diags`` (and, ``cis_only``, the trans pixels) are
+    left out — neighbouring bins across a chromosome boundary are trans; bins with
     fewer than ``min_nnz`` non-zero pixels, and bins whose marginal (normalised by its chromosome's median) lies
     ``mad_max`` median absolute deviations below the median in log space, are masked; then the bias is divided
     by the normalised marginal of the bias-corrected map until the marginals' variance is under ``tol``, and
-    rescaled so that the balanced marginals are 1.  ``cis_only``: each chromosome on its own.
+    rescaled so that the balanced marginals are 1; bins left with no data are masked.  The main diagonal counts
+    once in the marginals.  ``cis_only``: each chromosome on its own.
 
     Parameters
     ----------
@@ -474,8 +478,8 @@ def ice(b1: np.ndarray, b2: np.ndarray, count: np.ndarray, chrom_offsets: np.nda
     bias : ndarray (n_bins,)
         Balanced = count * bias[i] * bias[j]; NaN on masked bins.
     stats : dict
-        As ``cooler.balance_cooler``: ``tol, min_nnz, min_count, mad_max, cis_only, ignore_diags, scale,
-        converged, var, divisive_weights`` (per chromosome when ``cis_only``).
+        As ``cooler.balance_cooler``: ``tol, min_nnz, min_count, mad_max, cis_only, trans_only, ignore_diags,
+        scale, converged, var, divisive_weights`` (per chromosome when ``cis_only``).
     """
     import scipy.sparse as sp
 
@@ -486,13 +490,13 @@ def ice(b1: np.ndarray, b2: np.ndarray, count: np.ndarray, chrom_offsets: np.nda
     v = np.asarray(count, np.float64)
     keep = v != 0
     if ignore_diags:
-        keep &= np.abs(b1 - b2) >= ignore_diags
+        keep &= (np.abs(b1 - b2) >= ignore_diags) | (chrom_of[b1] != chrom_of[b2])
     if cis_only:
         keep &= chrom_of[b1] == chrom_of[b2]
     r, q, v = b1[keep], b2[keep], v[keep]
     bias = np.ones(n)
     if min_nnz > 0:
-        nnz = np.bincount(r, minlength=n) + np.bincount(q, minlength=n)
+        nnz = np.bincount(r[r != q], minlength=n) + np.bincount(q, minlength=n)
         bias[nnz < min_nnz] = 0
     idx = np.int32 if n < 2**31 and len(v) < 2**31 else np.int64
     if len(r) < 2 or np.all((np.diff(r) > 0) | ((np.diff(r) == 0) & (np.diff(q) > 0))):
@@ -509,44 +513,48 @@ def ice(b1: np.ndarray, b2: np.ndarray, count: np.ndarray, chrom_offsets: np.nda
             marg = S.marginals()
             for lo, hi in zip(offsets[:-1], offsets[1:]):
                 cm = marg[lo:hi]
-                marg[lo:hi] = cm / np.median(cm[cm > 0])
+                if (cm > 0).any():                                              # empty chromosomes stay at 0
+                    marg[lo:hi] = cm / np.median(cm[cm > 0])
             log_marg = np.log(marg[marg > 0])
-            med = np.median(log_marg)
-            cutoff = np.exp(med - mad_max * np.median(np.abs(log_marg - med)))
-            bias[marg < cutoff] = 0
+            if len(log_marg):
+                med = np.median(log_marg)
+                cutoff = np.exp(med - mad_max * np.median(np.abs(log_marg - med)))
+                bias[marg < cutoff] = 0
 
         def solve(M, b):
-            var, nz = np.nan, np.zeros(0)
+            scale = var = np.nan
+            m = np.full(len(b), np.nan)
             for _ in range(int(max_iters)):
                 m = b * (M @ b)
                 nz = m[m != 0]
                 if not len(nz):
-                    b[:] = np.nan
-                    return b, np.nan, 0.0
-                m = m / nz.mean()
-                m[m == 0] = 1
-                b /= m
-                var = nz.var()
+                    break
+                scale, var = nz.mean(), nz.var()
+                f = m / scale
+                f[f == 0] = 1
+                b /= f
                 if var < tol:
                     break
-            return b, nz.mean(), var
+            b[m == 0] = 0                                                       # bins left with no data
+            b[b == 0] = np.nan
+            if np.isfinite(scale):
+                b /= np.sqrt(scale)
+            return b, scale, var
 
         if cis_only:
-            scales = np.ones(len(offsets) - 1)
+            scales = np.full(len(offsets) - 1, np.nan)
             variances = np.full(len(offsets) - 1, np.nan)
             for k, (lo, hi) in enumerate(zip(offsets[:-1], offsets[1:])):
-                b, scale, var = solve(S[lo:hi, lo:hi], bias[lo:hi].copy())
-                b[b == 0] = np.nan
-                bias[lo:hi] = b / np.sqrt(scale)
-                scales[k], variances[k] = scale, var
+                bias[lo:hi], scales[k], variances[k] = solve(S[lo:hi, lo:hi], bias[lo:hi].copy())
+            empty = np.isnan(scales)
+            if max_iters > 0 and not empty.all():                               # nothing to balance: converged
+                variances[empty] = 0.0
             scale, var = scales, variances
         else:
             bias, scale, var = solve(S, bias)
-            bias[bias == 0] = np.nan
-            bias = bias / np.sqrt(scale)
     stats = {"tol": tol, "min_nnz": min_nnz, "min_count": 0, "mad_max": mad_max, "cis_only": bool(cis_only),
-             "ignore_diags": ignore_diags, "scale": scale, "converged": np.asarray(var) < tol, "var": var,
-             "divisive_weights": False}
+             "trans_only": False, "ignore_diags": ignore_diags, "scale": scale, "converged": np.asarray(var) < tol,
+             "var": var, "divisive_weights": False}
     if not cis_only:
         stats["converged"] = bool(stats["converged"])
     return bias, stats
