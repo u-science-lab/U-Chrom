@@ -968,6 +968,17 @@ DATASETS = {
         "description": "Wu 2024 LiMCA, human GM12878, 221 cells: imputed pairs and two 20 kb clean 3dg runs "
                        "(GSE240114)",
     },
+    # scSPRITE (Arrastia et al. 2022, Nat Biotechnol 40:64), GEO GSE154353: the cluster files of 1,000 filtered mESC
+    # (one per cell, mm9); built by apps/atlas/recipes/build_scsprite2021.py
+    "arrastia2021_scsprite": {
+        "files": [(f"arrastia2021_scsprite/raw/{n}", _gse("GSE154353", n))
+                  for n in ("GSE154353_filtered_1000_cells_single_cell_cluster_files.zip.gz",)],
+        "md5": {"arrastia2021_scsprite/raw/GSE154353_filtered_1000_cells_single_cell_cluster_files.zip.gz":
+                "34c7e17ad7d916e4407da02011600625"},
+        "size_mb": 697,
+        "default": False,
+        "description": "Arrastia 2022 scSPRITE: multi-way contact clusters of 1,000 single mouse ES cells (mm9)",
+    },
     "liu2026_hires_xci": {
         "files": lambda: ([(f"liu2026_hires_xci/raw/GSE278310/cells/{n}", _gsm(n)) for n in _geo_filelist(
             "GSE278310", r"_d\d+[A-D]\d+\.(pairs\.gz|clean\.20k\.0\.3dg\.txt\.gz)$")]

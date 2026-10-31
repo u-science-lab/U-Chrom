@@ -145,6 +145,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `tan2021_cortex/`: Tan 2021 Dip-C adult cortex, 510 cells | 13 GB | fetch `tan2021_cortex` | an unpublished benchmark (brain Dip-C baseline) |
 | `tan2018_gm12878/`: Tan 2018 Dip-C GM12878, 17 cells | ~0.7 GB | fetch `tan2018_gm12878` | diploid EMber / NucDynamics validation |
 | `quinodoz2018_sprite/`: Quinodoz 2018 SPRITE mouse ES cells, the authors' clusters | 6.2 GB | fetch `quinodoz2018_sprite` (**cluster**) | multi-way contacts of the store (`ChromData.clusters`, format 2.4): uchrom-reproducibility `extended_data_fig1/g_clusters_sprite.py` |
+| `arrastia2021_scsprite/`: Arrastia 2022 scSPRITE, the authors' clusters of 1,000 single mouse ES cells | 697 MB (1.3 GB decompressed) | fetch `arrastia2021_scsprite`; recipe `build_scsprite2021.py` | atlas store `arrastia2021_scsprite` |
 | `spacea_ma2026/`: Ma 2026 SpaceA, spatial SPRITE of 9 mouse embryo sections, E11.5-E14.5 (5 libraries, 17 runs) | 2.7 TB fastq; C6 run 1 alone: clusters 87 MB, store 550 MB with the derived maps | fetch `ma2026_spacea_<library>` (GSA, academic use); recipe `spacea_ma2026/slurm/` (a compute cluster) | per-spot check of `ChromData.clusters` (U-Chrom PR #153); the browser's cluster track; not in the atlas |
 | `wu2025_scmicroc/`: Wu 2025 scMicro-C GM12878, 12 deepest cells | 3.1 GB (102 GB streamed) | fetch `wu2025_scmicroc` | EMber deep development and test (PREREG §11); Fig. 3a / S8 |
 | `rao2014_imr90/4DNFIR1JDZH7.mcool`: Rao 2014 IMR90, 4DN GRCh38 | 4.6 GB | fetch `rao2014_imr90_4dn` (**cluster only**; laptops read it over HTTP) | an unpublished benchmark; an unpublished benchmark (range reads) |
@@ -463,6 +464,28 @@ datasets (`stevens2017`, `su2020_chr21`, `rao2014_imr90_chr21`) and the atlas (`
   queries in memory, backed and over HTTP; `g_clusters_layout.py` (`slurm/clusters_layout.sbatch`): the locus
   index's chunk and codec.  Not downloaded on laptops.
 
+### `arrastia2021_scsprite/`: scSPRITE clusters of single mouse ES cells (697 MB; fetch `arrastia2021_scsprite`)
+
+- **File**: `arrastia2021_scsprite/raw/GSE154353_filtered_1000_cells_single_cell_cluster_files.zip.gz` (md5
+  `34c7e17ad7d916e4407da02011600625`): a gzipped zip of one cluster file per cell, the 1,000 cells the authors kept.
+- **Format**: Quinodoz 2018's (above): one cluster per line, `barcode<TAB>chrom:pos<TAB>chrom:pos…`, one position per
+  read (mm9).  A file is named by the cell's barcode (`DPM6bot1.Odd2Bo1.Even2Bo61`: the first three split-pool
+  rounds), the barcode of a line adds the rounds that tell the cell's clusters apart.
+- **Content**: multi-way contacts of single mouse ES cells: 22,781,039 clusters of 107,174,850 reads on the primary
+  chromosomes (6,234 reads elsewhere, dropped); per cell a median 6,940 clusters.
+- **Source**: Arrastia et al. 2022, *Nat Biotechnol* 40:64 (doi:10.1038/s41587-021-00998-1), "Single-cell
+  measurement of higher-order 3D genome organization with scSPRITE"; GEO
+  [GSE154353](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE154353) (public, no restriction on use stated):
+  ```
+  https://ftp.ncbi.nlm.nih.gov/geo/series/GSE154nnn/GSE154353/suppl/GSE154353_filtered_1000_cells_single_cell_cluster_files.zip.gz
+  ```
+- **Recipe**: `build_scsprite2021.py` (one job: 64 min, 30 GB of memory, 8 threads): every cluster as
+  `ChromData.clusters["scsprite"]` (a read at `pos` → the fragment `[pos, pos + 1)`, cell = file); the fragment pairs
+  of the clusters of 2-1,000 reads as per-cell 1-Mb maps (`_1mb.scool`, linked `per_cell`; median 3.35 million
+  pairs per cell) and pooled (`_pooled.mcool`, 100 kb - 2 Mb, linked `pooled`), embedded; a scHiCluster embedding of
+  the per-cell maps and its Leiden clusters (resolution 0.5: two clusters, 551 and 449 cells).  Store 2.4 GB.
+- **Used by**: the atlas (`arrastia2021_scsprite`).
+
 ### `spacea_ma2026/`: SpaceA, spatial SPRITE of mouse embryo sections (2.7 TB fastq, 17 runs; fetch `ma2026_spacea_<library>`)
 
 - **Source**: Ma et al. 2026, *Developmental Cell* (doi:10.1016/j.devcel.2026.09.004), SpaceA; Genome Sequence
@@ -627,9 +650,11 @@ brain cells).
 | `liu2025_kras`, `cheng2025_perturb`, `chen2023_sox9`, `patterson2023_chrx`, `sawh2020_celegans`, `gutnik2024_celegans`, `messina2023_him`, `le2024_se`, `fujimori2026_hek293t`, `fujimori2026_k562`, `fujimori2026_mesc`, `tastemel2025_sox2`, `jay2025_thymocytes`, `jensen2025_cargo`, `llimos2022_axin2` | 312 / 55 / 19 / 8 / 2 / 3 / 5 / 169 / 13 / 3 / 9 / 41 / 7 / 6 / 2 | `<name>/<name>.chromdata.zarr` | loaders of the same names (see *4DN chromatin-tracing studies*) | the same names |
 | `tan2018_gm12878` | 394 | `tan2018_gm12878/tan2018_gm12878.chromdata.zarr` | loader `tan2018_gm12878`, `derive_embeddings.py --hic per_cell` | `tan2018_gm12878` |
 | `tan2019_dipc`, `wu2024_limca`, `liu2026_hires_xci` | 1,029 / 1,322 / 1,258 | `<name>/<name>.chromdata.zarr` | `build_dipc_structures.py <name>`, `derive_embeddings.py --hic per_cell --leiden` | the same names |
+| `wu2024_limca_gm12878` | 835 | `wu2024_limca_human/wu2024_limca_gm12878.chromdata.zarr` | `build_dipc_structures.py wu2024_limca_human`, `derive_embeddings.py --hic per_cell --leiden` | `wu2024_limca_human` |
+| `arrastia2021_scsprite` | 2,634 | `arrastia2021_scsprite/arrastia2021_scsprite.chromdata.zarr` | `build_scsprite2021.py` | `arrastia2021_scsprite` |
 | `xu2025_sperm_human`, `xu2025_sperm_mouse` | 1,017 / 704 | `xu2025_sperm/<id>.chromdata.zarr` | `build_dipc_structures.py xu2025_sperm`, `derive_embeddings.py --hic per_cell --leiden` | `xu2025_sperm` |
 | `payne2021_igs_embryo`, `payne2021_igs_pgp1` | 23 / 3 | `payne2021_igs/<id>.chromdata.zarr` | loaders of the same names (see *`payne2021_igs/`*); traces are sets of reads (`trace_kind` `set`), the thumbnails dots | `payne2021_igs` |
-| `beckwith2025_mitosis`, `beckwith2025_looptrace`, `beckwith2025_looptrace_fish` | — | `beckwith2025/<id>.chromdata.zarr` | loaders of the same names (see *`beckwith2025/`*) | `beckwith2025_mitosis`, `beckwith2025_looptrace` |
+| `beckwith2025_mitosis`, `beckwith2025_looptrace`, `beckwith2025_looptrace_fish` | 177 / 186 / 57 | `beckwith2025/<id>.chromdata.zarr` | loaders of the same names (see *`beckwith2025/`*) | `beckwith2025_mitosis`, `beckwith2025_looptrace` |
 | `lando2024_mesc`, `zhou2019_rice` | 71 / 15 | `<name>/<name>.chromdata.zarr` | `build_nuc_structures.py <name>`, `derive_embeddings.py --hic per_cell` (`--leiden` for Lando) | the same names |
 
 Sizes are those of the published stores with their embedded copies (`python -m uchrom.datasets atlas`,
@@ -1139,7 +1164,7 @@ Figure 3 datasets.
 - Not fetched: ChAIR (Nat. Methods 2025; CNCB OMIX009588 / 9589, 120 GB from China), Nagano 2013 (10 Th1
   cells), Ramani 2017 sciHi-C (cell lines, hg19 / mm10 mix).
 
-### Single-cell Hi-C with the authors' structures (`tan2019_dipc/`, `xu2025_sperm/`, `wu2024_limca/`, `liu2026_hires_xci/`, `lando2024_mesc/`, `zhou2019_rice/`)
+### Single-cell Hi-C with the authors' structures (`tan2019_dipc/`, `xu2025_sperm/`, `wu2024_limca/`, `wu2024_limca_human/`, `liu2026_hires_xci/`, `lando2024_mesc/`, `zhou2019_rice/`)
 
 Studies that deposit, per cell, the contacts and the authors' own 3-D structure.  `build_dipc_structures.py STUDY`
 (hickit / Dip-C `.3dg`, 20 kb particles averaged to 100 kb, or 200 kb for HiRES) and `build_nuc_structures.py
@@ -1171,6 +1196,13 @@ labels).
   `p014-bc_001` (mapped; all 410 found); 6.4 GB.  Runs 1 and 2: RMSD median 1.48 particle radii, more than 5 in 131
   cells.  The RNA Leiden clusters follow the authors' cell types (e.g. 83 of cluster 0's 84 cells are mOSN, 41
   of cluster 4's 48 progenitor-1).  Atlas `wu2024_limca`.
+- **Wu 2024 LiMCA, human cells** (the same paper; GEO GSE240114, hg38): 221 GM12878 cells with `impute.pairs`
+  (228.6 M contacts) and 20 kb `clean.3dg` runs 1-3 (runs 1 and 2 read); 4.6 GB fetched (`wu2024_limca_human`; the
+  series also has K562, BJ and haploid eHAP cells, the eHAP ones with structures but HiC-Pro pairs, and no RNA counts
+  for any cell line).  `build_dipc_structures.py wu2024_limca_human` writes `wu2024_limca_gm12878`.  The runs agree
+  less than in the mouse cells: RMSD of run 2 to run 1 after superposition median 5.27 particle radii per cell, but
+  1.99 per chromosome copy superposed on its own (2026-10-31) — the runs place the chromosomes differently more than
+  they fold them differently.  7 Leiden clusters of the Hi-C embedding.  Atlas `wu2024_limca_gm12878`.
 - **Liu 2026 HiRES of X inactivation** (Liu X *et al.*, *Genomics Proteomics Bioinformatics* qzag002, 2026,
   doi:10.1093/gpbjnl/qzag002; GEO GSE278310 + the update GSE310759): female C57BL/6J x CAST/EiJ mESC on day 0,
   0.5, 1, 1.5, 2, 2.5, 3 and 4 of differentiation (`d05`, `d15`, `d25` are half days), 1,741 cells with `.pairs.gz`
