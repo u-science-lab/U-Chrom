@@ -193,7 +193,8 @@ def _chrom_rank(name: str) -> tuple:
 
 def _structure_png(cell_cd, out: Path, size: int, supersample: int = 3) -> Dict[str, Any]:
     """One cell's 3-D structure: each trace (chromosome copy) a polyline coloured by chromosome, the cell turned
-    to its principal axes and projected on the first two; far segments are drawn first and paler."""
+    to its principal axes and projected on the first two; far segments are drawn first and paler.  Traces that
+    are sets of reads or localisations (``uns['trace_kind'] == 'set'``) are drawn as dots."""
     import numpy as np
     from PIL import Image, ImageDraw
 
@@ -211,6 +212,18 @@ def _structure_png(cell_cd, out: Path, size: int, supersample: int = 3) -> Dict[
     depth = (p[:, 2] - p[:, 2].min()) / (np.ptp(p[:, 2]) or 1.0)          # 0 far ... 1 near
     chroms = sorted(s["chrom"].astype(str).unique(), key=_chrom_rank)
     lut = {ch: np.array(_hex(PALETTE[i % len(PALETTE)])[:3], float) for i, ch in enumerate(chroms)}
+    width = max(1, int(round(supersample * size / 480 * 1.6)))
+    img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    names = s["chrom"].astype(str).to_numpy()
+    if isinstance(cell_cd.uns, dict) and cell_cd.uns.get("trace_kind") == "set":
+        r = 1.6 * width
+        for k in np.argsort(depth):                  # far first
+            rgb = tuple(int(v) for v in lut[names[k]])
+            x, y = xy[k]
+            draw.ellipse((x - r, y - r, x + r, y + r), fill=rgb + (int(70 + 185 * depth[k] ** 1.5),))
+        img.resize((size, size), Image.LANCZOS).save(out, quality=90, method=6)
+        return {"n": int(len(xyz)), "categories": len(chroms), "grid": False}
     order = np.lexsort((s["start"].to_numpy(), s["trace_id"].astype(str).to_numpy()))
     tr = s["trace_id"].astype(str).to_numpy()[order]
     same = tr[1:] == tr[:-1]
@@ -220,10 +233,6 @@ def _structure_png(cell_cd, out: Path, size: int, supersample: int = 3) -> Dict[
     i0, i1 = i0[keep], i1[keep]
     d = (depth[i0] + depth[i1]) / 2
     segs = np.argsort(d)                             # far first
-    width = max(1, int(round(supersample * size / 480 * 1.6)))
-    img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    names = s["chrom"].astype(str).to_numpy()
     for k in segs:                                   # depth cue by transparency: works on a light or dark page
         a, b = i0[k], i1[k]
         rgb = tuple(int(v) for v in lut[names[a]])

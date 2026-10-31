@@ -628,6 +628,7 @@ brain cells).
 | `tan2018_gm12878` | 394 | `tan2018_gm12878/tan2018_gm12878.chromdata.zarr` | loader `tan2018_gm12878`, `derive_embeddings.py --hic per_cell` | `tan2018_gm12878` |
 | `tan2019_dipc`, `wu2024_limca`, `liu2026_hires_xci` | 1,029 / 1,322 / 1,258 | `<name>/<name>.chromdata.zarr` | `build_dipc_structures.py <name>`, `derive_embeddings.py --hic per_cell --leiden` | the same names |
 | `xu2025_sperm_human`, `xu2025_sperm_mouse` | 1,017 / 704 | `xu2025_sperm/<id>.chromdata.zarr` | `build_dipc_structures.py xu2025_sperm`, `derive_embeddings.py --hic per_cell --leiden` | `xu2025_sperm` |
+| `payne2021_igs_embryo`, `payne2021_igs_pgp1` | 23 / 3 | `payne2021_igs/<id>.chromdata.zarr` | loaders of the same names (see *`payne2021_igs/`*); traces are sets of reads (`trace_kind` `set`), the thumbnails dots | `payne2021_igs` |
 | `lando2024_mesc`, `zhou2019_rice` | 71 / 15 | `<name>/<name>.chromdata.zarr` | `build_nuc_structures.py <name>`, `derive_embeddings.py --hic per_cell` (`--leiden` for Lando) | the same names |
 
 Sizes are those of the published stores with their embedded copies (`python -m uchrom.datasets atlas`,
@@ -1937,8 +1938,8 @@ Each experiment of a set is a *core* table (spots) with optional companions keye
   (median 0.84 µm under 1 Mb to 2.73 µm over 50 Mb in PGP1, Spearman 0.39; embryos 2.0 to 8.5 µm, 0.45); in
   zygotes the maternal and paternal territories of a chromosome lie a median 24.5 µm apart (472 pairs: the two
   pronuclei).
-- **Used by**: the loaders; test fixtures `packages/uchrom/tests/fixtures/igs/` (one fibroblast, one 4-cell-embryo
-  cell, rows as published).
+- **Used by**: the loaders; the atlas (`payne2021_igs_embryo`, `payne2021_igs_pgp1`, since 2026-10-31); test fixtures
+  `packages/uchrom/tests/fixtures/igs/` (one fibroblast, one 4-cell-embryo cell, rows as published).
 
 ## Pre-staging data (optional)
 

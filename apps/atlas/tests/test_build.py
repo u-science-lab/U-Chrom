@@ -100,3 +100,24 @@ def test_figures_draw_a_cell_structure(tmp_path):
     assert info["layout"] == "structure" and info["layout_key"] == "b"      # the lowest RMSD
     assert info["color_by"] == "chromosome" and info["n"] == 20 and "map" not in info
     assert Image.open(tmp_path / "f" / info["space"]).size == (48, 48)
+
+
+def test_figures_draw_a_set_of_reads_as_dots(tmp_path):
+    import numpy as np
+    import pandas as pd
+    from PIL import Image
+
+    from chromdata import ChromData
+
+    # reads of one territory, two of them in one bin: a set, not a chain
+    spots = pd.DataFrame({"chrom": ["chr1"] * 4 + ["chr2"] * 2, "start": [0, 0, 100, 200, 0, 100],
+                          "end": [100, 100, 200, 300, 100, 200], "trace_id": ["c_chr1"] * 4 + ["c_chr2"] * 2,
+                          "cell_id": ["c"] * 6})
+    xyz = np.array([[0, 0, 0], [9, 0, 0], [0, 9, 0], [9, 9, 1], [4, 4, 4], [5, 5, 2]], float)
+    out = tmp_path / "set.webp"
+    info = build._structure_png(ChromData(xyz, spots, uns={"trace_kind": "set"}), out, 48)
+    assert info["n"] == 6 and info["categories"] == 2
+    lines = tmp_path / "fibre.webp"
+    build._structure_png(ChromData(xyz, spots), lines, 48)
+    a, b = (np.asarray(Image.open(p).convert("RGBA"))[..., 3] > 0 for p in (out, lines))
+    assert a.sum() and not np.array_equal(a, b)                 # dots, not the polyline of a fibre
