@@ -102,6 +102,27 @@ def test_figures_draw_a_cell_structure(tmp_path):
     assert Image.open(tmp_path / "f" / info["space"]).size == (48, 48)
 
 
+def test_figures_colour_one_locus_along_the_genome(tmp_path):
+    import numpy as np
+    import pandas as pd
+    from PIL import Image
+
+    from chromdata import ChromData
+
+    spots = pd.DataFrame({"chrom": "chr5", "start": np.arange(30) * 10_000, "end": np.arange(30) * 10_000 + 10_000,
+                          "trace_id": "t1", "cell_id": "a"})
+    cd = ChromData(np.c_[np.arange(30.0), 4 * np.sin(np.arange(30) / 3), np.cos(np.arange(30) / 5)], spots)
+    cd.write(tmp_path / "locus.chromdata.zarr")
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text(json.dumps({"datasets": [{"id": "locus", "store": "locus.chromdata.zarr", "path": "locus",
+                                             "title": "x", "figure": {"layout": "structure", "trace": "t1"}}]}))
+    info = build.render_figures(cfg, tmp_path, tmp_path / "f", size=240)["locus"]
+    assert info["color_by"] == "genomic position" and info["categories"] == 1
+    px = np.asarray(Image.open(tmp_path / "f" / info["space"]).convert("RGBA")).reshape(-1, 4)
+    drawn = px[px[:, 3] > 0, :3].astype(int)
+    assert len(drawn) and (drawn[:, 0] - drawn[:, 2]).max() > 100 and (drawn[:, 2] - drawn[:, 0]).max() > 100  # red to blue
+
+
 def test_figures_draw_a_set_of_reads_as_dots(tmp_path):
     import numpy as np
     import pandas as pd

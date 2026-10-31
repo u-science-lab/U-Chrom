@@ -1131,5 +1131,38 @@
   "categories": 24,
   "grid": false,
   "space": "payne2021_igs_pgp1.space.webp"
+ },
+ "beckwith2025_mitosis": {
+  "section": null,
+  "color_by": "genomic position",
+  "layout": "structure",
+  "layout_key": "t46638",
+  "caption": "Chromosome 2 at 1-Mb steps, one metaphase cell",
+  "n": 216,
+  "categories": 1,
+  "grid": false,
+  "space": "beckwith2025_mitosis.space.webp"
+ },
+ "beckwith2025_looptrace": {
+  "section": null,
+  "color_by": "genomic position",
+  "layout": "structure",
+  "layout_key": "HKWT.2022-05-21.MEOX1.1639",
+  "caption": "The MEOX1 region at 10 kb, one HeLa trace",
+  "n": 30,
+  "categories": 1,
+  "grid": false,
+  "space": "beckwith2025_looptrace.space.webp"
+ },
+ "beckwith2025_looptrace_fish": {
+  "section": null,
+  "color_by": "genomic position",
+  "layout": "structure",
+  "layout_key": "t36261",
+  "caption": "The MEOX1 region at 10 kb, non-denaturing FISH",
+  "n": 30,
+  "categories": 1,
+  "grid": false,
+  "space": "beckwith2025_looptrace_fish.space.webp"
  }
 }

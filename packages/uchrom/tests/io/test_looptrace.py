@@ -43,13 +43,16 @@ def test_mitotic_traces_with_the_authors_qc():
     for r in located:
         i = at[("t" + r["trace_id"], float(r["g_pos"]))]
         xyz = [float(r["x"]), float(r["y"]), float(r["z"])]
-        assert np.allclose(cd.layers["fit"][i], xyz)
+        placeholder = [float(r[c]) for c in ("A", "BG", "sigma_z", "sigma_xy")] == [-1, -1, -300, -140]
+        assert np.isnan(cd.layers["fit"][i]).all() if placeholder else np.allclose(cd.layers["fit"][i], xyz)
+        assert np.isnan(cd.spot_tracks["A"].iloc[i]) if placeholder else cd.spot_tracks["A"].iloc[i] == float(r["A"])
         assert bool(s["qc_pass"].iloc[i]) == (r["QC"] == "1")
         assert np.allclose(cd.coords[i], xyz) if r["QC"] == "1" else np.isnan(cd.coords[i]).all()
         start, end = s["start"].iloc[i], s["end"].iloc[i]
         assert start <= float(r["g_pos"]) < end and end - start <= size[r["region"]]
         cell = f"{r['exp']}/{r['position'].replace('.zarr', '')}/{r['nuc_label']}"
         assert s["cell_id"].iloc[i] == cell and cd.cells.loc[cell, "phase"] == r["phase"]
+    assert 0 < cd.uns["looptrace"]["spots_not_fitted"] < len(located)
     assert set(cd.traces["region"]) == set(size)
     passed = cd.spots.groupby("trace_id", observed=True)["qc_pass"].sum().reindex(cd.traces.index)
     assert (cd.traces["n_qc_pass"] == passed).all()
@@ -94,7 +97,7 @@ def test_round_trip_and_unknown_input(tmp_path):
     cd.write(tmp_path / "lt.chromdata.zarr")
     back = ChromData.read(tmp_path / "lt.chromdata.zarr", original_order=True)
     assert np.array_equal(back.coords, cd.coords, equal_nan=True)
-    assert np.array_equal(back.layers["fit"], cd.layers["fit"])
+    assert np.array_equal(back.layers["fit"], cd.layers["fit"], equal_nan=True)
     assert back.bins[["start", "end"]].equals(cd.bins[["start", "end"]])
 
     p = tmp_path / "x.csv"

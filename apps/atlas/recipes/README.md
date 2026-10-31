@@ -629,6 +629,7 @@ brain cells).
 | `tan2019_dipc`, `wu2024_limca`, `liu2026_hires_xci` | 1,029 / 1,322 / 1,258 | `<name>/<name>.chromdata.zarr` | `build_dipc_structures.py <name>`, `derive_embeddings.py --hic per_cell --leiden` | the same names |
 | `xu2025_sperm_human`, `xu2025_sperm_mouse` | 1,017 / 704 | `xu2025_sperm/<id>.chromdata.zarr` | `build_dipc_structures.py xu2025_sperm`, `derive_embeddings.py --hic per_cell --leiden` | `xu2025_sperm` |
 | `payne2021_igs_embryo`, `payne2021_igs_pgp1` | 23 / 3 | `payne2021_igs/<id>.chromdata.zarr` | loaders of the same names (see *`payne2021_igs/`*); traces are sets of reads (`trace_kind` `set`), the thumbnails dots | `payne2021_igs` |
+| `beckwith2025_mitosis`, `beckwith2025_looptrace`, `beckwith2025_looptrace_fish` | — | `beckwith2025/<id>.chromdata.zarr` | loaders of the same names (see *`beckwith2025/`*) | `beckwith2025_mitosis`, `beckwith2025_looptrace` |
 | `lando2024_mesc`, `zhou2019_rice` | 71 / 15 | `<name>/<name>.chromdata.zarr` | `build_nuc_structures.py <name>`, `derive_embeddings.py --hic per_cell` (`--leiden` for Lando) | the same names |
 
 Sizes are those of the published stores with their embedded copies (`python -m uchrom.datasets atlas`,
@@ -1940,6 +1941,49 @@ Each experiment of a set is a *core* table (spots) with optional companions keye
   pronuclei).
 - **Used by**: the loaders; the atlas (`payne2021_igs_embryo`, `payne2021_igs_pgp1`, since 2026-10-31); test fixtures
   `packages/uchrom/tests/fixtures/igs/` (one fibroblast, one 4-cell-embryo cell, rows as published).
+
+## `beckwith2025/`: Beckwith 2025 nanoscale DNA tracing, LoopTrace (444 MB; fetch `beckwith2025_mitosis`, `beckwith2025_looptrace`; load `beckwith2025_mitosis`, `beckwith2025_looptrace`, `beckwith2025_looptrace_fish`)
+
+- **Source**: Ellenberg lab, figshare, CC BY 4.0.  Beckwith, Brunner et al. 2025, *Cell* 188:2656,
+  doi:10.1016/j.cell.2025.02.028: `mitofold1_data_code.zip` of figshare 27003022 (165 MB; table
+  `exp_data/mitofold_traces.csv.gz`, the authors' median distance-scaling tables, code).  Beckwith, Ødegård-Fougner et
+  al. 2025, *Nat Commun* 16:6673, doi:10.1038/s41467-025-61689-y: `looptrace_experimental_data.zip` of figshare
+  27613239 (279 MB; two tables).  hg38 (GRCh38 probe design in both papers; the *Cell* probe table, Table S3, matches
+  hg38 and not hg19).
+- **Content**: one row per fitted spot — `x, y, z` (nm), the Gaussian fit (`A`, `BG`, `sigma_xy`, `sigma_z`), the
+  library (`region` / `region_name`) and `g_pos`, the spot's centre in it.  *Cell*: 28,379 traces in 3,930 nuclei
+  (`nuc_label` of the field `position`), HeLa Kyoto WT / SMC4-depleted / TSA-treated, each nucleus staged
+  (interphase, prophase, prometaphase, metaphase), eight libraries (1-Mb regions at 12-kb spots, 10-Mb regions at
+  30-kb spots every 200 kb, chromosome 2 at 100-kb and 14 at 30-kb spots every 1 Mb), the authors' spot `QC` (51 %
+  pass), coordinates in the field of view; 18,879 rows of the region-detection frame have no `g_pos`.  *Nat Commun*,
+  comparison table: 36,277 traces in 4,666 RPE-1 nuclei (`nuc_id`, DAPI `nuc_total_int`), non-denaturing
+  (`RPE1`) and denaturing (`RPE1_HF`) FISH, six regions; combined table: 118,479 traces of ten regions (four
+  300-kb and IRF1 at 10 kb, lncRNA at 4 kb, four 1.3-1.8 Mb regions at 8-kb spots) in RPE-1, HeLa Kyoto WT and HeLa
+  with RAD21, CTCF or WAPL degraded, coordinates in each trace's crop.  Neither *Nat Commun* table has the spot QC
+  of the paper ("empirical thresholds", not given).
+- **Quirks**: the combined table has **no trace column** (its README names one).  Its leading row index runs in
+  blocks of one row per frame of the library in a fixed frame order; every run of consecutive indices in a field
+  is a whole number of such blocks (checked over all 3,007,772 rows), the gaps are traces the authors filtered
+  out — each block is one trace (`<cell type>.<experiment>.<region>.<k>`).  In the *Cell* table 2,930 spots (all QC 0)
+  carry the placeholder fit `A = BG = -1`, `sigma_z = -300`, `sigma_xy = -140` of a spot that was not fitted: their
+  fit values and `layers['fit']` are NaN; the other failed fits keep their (often negative) values.  `g_pos` is the spot centre (the mean probe
+  position; rounded to 1 kb in the *Cell* table), so a locus is a window of the library's spot size around it,
+  clipped halfway to its neighbours (`uchrom.io.looptrace.SPOT_SIZE`, from the papers' Methods; IRF1, which neither
+  describes, at its 10-kb tiling).  Checked against the probe tables (the *Cell* Table S3, *Nat Commun*
+  Supplementary Data 1, which lacks IRF1): every `g_pos` matches one probe window one to one, and in the *Cell* table
+  the windows overlap the probe windows by a median 97 % (minimum 73 %).
+- **Representation** (`uchrom.io.read_looptrace`): a spot per fitted locus, `bins['region']` the library, fit as
+  `spot_tracks`; *Cell*: `coords` = the spots that passed the authors' QC (NaN otherwise), `layers['fit']` every fit,
+  `qc_pass` per spot, cells = nuclei with `phase`; comparison table: cells = nuclei; combined table: no cells.
+- **Checks** (2026-10-31): *Cell* — the median distance at each genomic distance from the QC-passed spots equals the
+  authors' tables (Chr5 1-Mb region: 1,183 of 1,188 points, median relative difference 0, 90th percentile 0.1 %; Chr2
+  10-Mb region: median 0.4 %, 200-kb binning of the genomic distance).  *Nat Commun* — 99.5 % (RPE-1) and 99.7 %
+  (denaturing) of the non-missing pairwise distances of the paper's Fig. 2d source data are found exactly in the
+  comparison table, and 34,991 of the 35,002 distances of Fig. 3g (MEOX1, five pairs of loci, four cell types) in
+  the traces rebuilt from the row blocks of the combined table; the median distances of every deposited fit are
+  15-25 % above the paper's (QC-passed) ones for MEOX1.
+- **Used by**: the loaders; the atlas (`beckwith2025_mitosis`, `beckwith2025_looptrace`,
+  `beckwith2025_looptrace_fish`); test fixtures `packages/uchrom/tests/fixtures/looptrace/`.
 
 ## Pre-staging data (optional)
 

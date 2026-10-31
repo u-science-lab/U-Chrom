@@ -261,7 +261,10 @@
   function colouredBy(f) { return /cell_?type|anno/i.test(f.color_by || '') ? 'cell type' : 'cluster'; }
   // what a figure shows, in words: "spots coloured by cluster" / "cells in rna_umap, coloured by cell type"
   function layoutText(f, d) {
-    if (f.layout === 'structure') return '3-D structure of cell ' + f.layout_key + ', chromosomes coloured';
+    if (f.layout === 'structure') {
+      return f.color_by === 'genomic position' ? '3-D trace ' + f.layout_key + ', coloured from the start to the end of the locus'
+        : '3-D structure of cell ' + f.layout_key + ', chromosomes coloured';
+    }
     var what = f.layout === 'embedding' ? unit(d) + ' in ' + (f.layout_key || 'an embedding') : unit(d);
     return f.color_by ? what + (f.layout === 'embedding' ? ', ' : ' ') + 'coloured by ' + colouredBy(f) : what;
   }

@@ -192,9 +192,10 @@ def _chrom_rank(name: str) -> tuple:
 
 
 def _structure_png(cell_cd, out: Path, size: int, supersample: int = 3) -> Dict[str, Any]:
-    """One cell's 3-D structure: each trace (chromosome copy) a polyline coloured by chromosome, the cell turned
-    to its principal axes and projected on the first two; far segments are drawn first and paler.  Traces that
-    are sets of reads or localisations (``uns['trace_kind'] == 'set'``) are drawn as dots."""
+    """One cell's 3-D structure: each trace (chromosome copy) a polyline coloured by chromosome — one chromosome:
+    coloured along its genomic position —, the cell turned to its principal axes and projected on the first two;
+    far segments are drawn first and paler.  Traces that are sets of reads or localisations
+    (``uns['trace_kind'] == 'set'``) are drawn as dots."""
     import numpy as np
     from PIL import Image, ImageDraw
 
@@ -216,10 +217,18 @@ def _structure_png(cell_cd, out: Path, size: int, supersample: int = 3) -> Dict[
     img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     names = s["chrom"].astype(str).to_numpy()
+    if len(chroms) == 1:                             # one locus or chromosome: a gradient from start to end
+        from matplotlib import colormaps
+        pos = s["start"].to_numpy(dtype=np.float64)
+        f = (pos - pos.min()) / (np.ptp(pos) or 1.0)
+        rgbs = colormaps["turbo"](0.08 + 0.84 * f)[:, :3] * 255
+        colour = lambda k: tuple(int(v) for v in rgbs[k])          # noqa: E731
+    else:
+        colour = lambda k: tuple(int(v) for v in lut[names[k]])    # noqa: E731
     if isinstance(cell_cd.uns, dict) and cell_cd.uns.get("trace_kind") == "set":
         r = 1.6 * width
         for k in np.argsort(depth):                  # far first
-            rgb = tuple(int(v) for v in lut[names[k]])
+            rgb = colour(k)
             x, y = xy[k]
             draw.ellipse((x - r, y - r, x + r, y + r), fill=rgb + (int(70 + 185 * depth[k] ** 1.5),))
         img.resize((size, size), Image.LANCZOS).save(out, quality=90, method=6)
@@ -235,7 +244,7 @@ def _structure_png(cell_cd, out: Path, size: int, supersample: int = 3) -> Dict[
     segs = np.argsort(d)                             # far first
     for k in segs:                                   # depth cue by transparency: works on a light or dark page
         a, b = i0[k], i1[k]
-        rgb = tuple(int(v) for v in lut[names[a]])
+        rgb = colour(a)
         draw.line((xy[a, 0], xy[a, 1], xy[b, 0], xy[b, 1]), fill=rgb + (int(70 + 185 * d[k] ** 1.5),), width=width)
     img.resize((size, size), Image.LANCZOS).save(out, quality=90, method=6)
     return {"n": int(len(xyz)), "categories": len(chroms), "grid": False}
@@ -319,7 +328,7 @@ def render_figures(config: PathLike, root: PathLike, out: PathLike, *, size: int
                 name = f"{d['id']}.{tag}space.webp"
                 info.update(_structure_png(structure, out / name, px))
                 info[f"{tag}space"] = name
-                info["color_by"] = "chromosome"
+                info["color_by"] = "chromosome" if info["categories"] > 1 else "genomic position"
             elif pos is not None and len(pos):
                 name = f"{d['id']}.{tag}space.webp"
                 info.update(_spatial_png(pos, labels, out / name, px))

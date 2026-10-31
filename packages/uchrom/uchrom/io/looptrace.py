@@ -99,9 +99,10 @@ def read_looptrace(path, *, spot_size: dict | None = None):
         One spot per fitted locus (rows without a genomic position — the region-detection frame — are left out),
         coordinates in nm; bins = windows of the library's spot size centred on ``g_pos`` (clipped halfway to the
         neighbours), ``bins['region']`` the library.  The fit (``A``, ``BG``, ``sigma_xy``, ``sigma_z``) is in
-        ``spot_tracks``; ``g_pos``, the frame and the field ``position`` are spot columns.  Mitotic table: the
+        ``spot_tracks`` (NaN for the authors' placeholder of a spot that was not fitted, ``A = BG = -1``,
+        ``sigma_z = -300``, ``sigma_xy = -140``); ``g_pos``, the frame and the field ``position`` are spot columns.  Mitotic table: the
         authors' ``QC`` is the spot column ``qc_pass``, ``coords`` hold the spots that passed it (NaN otherwise) and
-        ``layers['fit']`` every fit; cells = nuclei (``<exp>/<position>/<nuc_label>``) with ``cell_type`` and
+        ``layers['fit']`` every fit (NaN where none was made); cells = nuclei (``<exp>/<position>/<nuc_label>``) with ``cell_type`` and
         ``phase``.  Comparison table: cells = nuclei with ``nuc_total_int``.  Combined table: traces numbered per
         (cell type, experiment, region) from the row blocks, no cells (coordinates in each trace's crop).
         ``traces`` hold ``region``, ``chrom``, ``cell_type``, ``exp``, ``position`` (and ``cell_id`` / ``phase``).
@@ -158,13 +159,18 @@ def read_looptrace(path, *, spot_size: dict | None = None):
         if c in raw.columns:
             spots[c] = raw[c].to_numpy()
     xyz = raw[["x", "y", "z"]].to_numpy(dtype=np.float64)
+    tracks = pd.DataFrame({c: raw[c].to_numpy(dtype=np.float64) for c in _FIT if c in raw.columns})
+    no_fit = np.zeros(len(raw), dtype=bool)
+    if set(_FIT) <= set(tracks.columns):          # the placeholder of a spot that was not fitted
+        no_fit = ((tracks["A"] == -1) & (tracks["BG"] == -1) & (tracks["sigma_z"] == -300)
+                  & (tracks["sigma_xy"] == -140)).to_numpy()
+        tracks.loc[no_fit, :] = np.nan
     layers = None
     if kind == "mitosis":
         qc = raw["QC"].to_numpy() == 1
         spots["qc_pass"] = qc
-        layers = {"fit": xyz.copy()}
+        layers = {"fit": np.where(no_fit[:, None], np.nan, xyz)}
         xyz[~qc] = np.nan
-    tracks = pd.DataFrame({c: raw[c].to_numpy(dtype=np.float64) for c in _FIT if c in raw.columns})
 
     meta = pd.DataFrame({"trace_id": trace.to_numpy(), "region": lib.to_numpy(), "chrom": chrom.to_numpy(),
                          "cell_type": raw["cell_type"].astype(str).to_numpy(), "exp": raw["exp"].astype(str).to_numpy(),
@@ -193,6 +199,7 @@ def read_looptrace(path, *, spot_size: dict | None = None):
     uns = {"xyz_unit": "nm", "genome_assembly": "hg38",
            "source": f"LoopTrace table {name} (Beckwith et al. 2025)",
            "looptrace": {"table": kind, "rows": int(n_rows), "rows_without_locus": int(n_rows - len(raw)),
+                         "spots_not_fitted": int(no_fit.sum()),
                          "loci": "a window of the library's spot size centred on g_pos (the spot centre), clipped "
                                  "halfway to its neighbours",
                          "spot_size": {k: int(sizes[k]) for k in sorted(set(lib))}}}
