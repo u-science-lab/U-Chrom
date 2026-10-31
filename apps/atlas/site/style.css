@@ -137,6 +137,9 @@ figcaption { margin-top: 14px; color: var(--muted); font-size: 13px; line-height
 .summary { margin: 12px 0 0; color: var(--muted); font-size: 14px; }
 .links { margin: 14px 0 0; color: var(--muted); font-size: 13px; }
 
+.more { margin-top: 30px; padding: 7px 16px; border: 1px solid var(--rule-2); border-radius: 999px; background: transparent;
+  color: var(--ink-2); font: inherit; font-size: 13.5px; cursor: pointer; transition: border-color .15s, color .15s; }
+.more:hover { border-color: var(--ink-2); color: var(--ink); }
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 34px 28px; }
 .card { display: flex; flex-direction: column; min-width: 0; }
 .fig-link { display: block; }

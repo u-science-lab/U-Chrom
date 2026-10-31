@@ -7,8 +7,11 @@
   var HOSTED = (CFG.hosted || '').replace(/\/+$/, '');
   var FIG = 'figures/';
   var $ = function (id) { return document.getElementById(id); };
-  var state = { cat: null, q: '', on: {}, page: 0, sort: 'newest' };   // on: {group: Set(values)}; page: 0-based
-  var PAGE = 10;         // datasets per page, about: a study is never split, a page holds studies up to this many
+  var state = { cat: null, q: '', on: {}, page: 0, sort: 'newest', open: {} };   // on: {group: Set(values)}; page: 0-based;
+                                                                              // open: {study id: true} = unfolded
+  var PAGE = 10;         // datasets per page, about: a study is never split; a page takes the next study while it holds
+                         // fewer than PAGE datasets and stays under 1.5 PAGE (a big study does not leave a page to itself)
+  var FOLD = 4;          // a study that would hide 2+ datasets shows its first FOLD until unfolded; pages count the folded size
 
   // what the catalog's modality names are called on the page, and their colour (the U-Chrom logo palette)
   var MODS = {
@@ -115,6 +118,22 @@
     return el('article', { class: 'card', id: d.id }, kids);
   }
 
+  function foldable(ds) { return ds.length > FOLD + 1; }
+  function folded(s, ds) { return foldable(ds) && !state.open[s.id]; }
+  function foldButton(s, ds) {
+    if (!foldable(ds)) return null;
+    var open = !!state.open[s.id];
+    var b = el('button', { type: 'button', class: 'more', 'aria-expanded': open ? 'true' : 'false',
+                           text: open ? 'Show fewer' : 'Show all ' + ds.length + ' datasets' });
+    b.addEventListener('click', function () {
+      if (open) delete state.open[s.id]; else state.open[s.id] = true;
+      render();
+      var sec = $('study-' + s.id);
+      if (open && sec && sec.getBoundingClientRect().top < 0) sec.scrollIntoView();   // folding: back to the study's top
+    });
+    return b;
+  }
+
   function studyBlock(s, ds) {
     var links = el('p', { class: 'links' });
     var add = function (node) { if (links.childNodes.length) links.appendChild(document.createTextNode(' · ')); links.appendChild(node); };
@@ -129,7 +148,10 @@
         s.summary ? el('p', { class: 'summary', text: s.summary }) : null,
         links
       ]),
-      el('div', { class: 'cards' }, ds.map(card))
+      el('div', { class: 'study-body' }, [
+        el('div', { class: 'cards' }, (folded(s, ds) ? ds.slice(0, FOLD) : ds).map(card)),
+        foldButton(s, ds)
+      ])
     ]);
   }
 
@@ -168,8 +190,9 @@
   function paginate(gs) {
     var pages = [], cur = [], n = 0;
     gs.forEach(function (g) {
-      if (cur.length && n + g.ds.length > PAGE) { pages.push(cur); cur = []; n = 0; }
-      cur.push(g); n += g.ds.length;
+      var k = foldable(g.ds) ? FOLD : g.ds.length;
+      if (cur.length && (n >= PAGE || n + k > 1.5 * PAGE)) { pages.push(cur); cur = []; n = 0; }
+      cur.push(g); n += k;
     });
     if (cur.length) pages.push(cur);
     return pages;
@@ -252,6 +275,7 @@
     (cat.studies || []).forEach(function (s) { state.studies[s.id] = s; state.order.push(s.id); });
     cat.datasets.forEach(function (d) { var k = d.study || ''; if (state.order.indexOf(k) < 0) state.order.push(k); });
     var hash = location.hash.slice(1), at = hash ? pageOf(hash) : -1;
+    cat.datasets.forEach(function (d) { if (d.id === hash && d.study) state.open[d.study] = true; });
     if (at > 0) state.page = at;
     stats(cat); render();
     $('hint').hidden = !HOSTED;
