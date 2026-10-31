@@ -467,6 +467,7 @@ class Dataset:
             "n_cells": int(self.cd.n_cells),
             "xyz_unit": None if unit is None else str(unit),
             "trace_mode": bool(self.cd.n_traces > len(chroms)),
+            "trace_kind": "set" if isinstance(self.cd.uns, dict) and self.cd.uns.get("trace_kind") == "set" else "fibre",
             "chroms": chroms,
             "genome": self.genome_layout(),
             "has_coords": bool(self.cd.n_spots > 0),

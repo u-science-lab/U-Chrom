@@ -88,6 +88,15 @@ describe('store', () => {
     expect(s.selectedLayerId).toBeNull()
   })
 
+  it('draws imaging traces as tubes and sets of reads or localisations as points', () => {
+    const st = useStore.getState()
+    st.addDataset({ ...ds, id: 'fibres', trace_mode: true })
+    st.addDataset({ ...ds, id: 'reads', trace_mode: true, trace_kind: 'set' })
+    const mode = (id: string) => useStore.getState().layers.find((l) => l.datasetId === id)!.style.mode
+    expect(mode('fibres')).toBe('tube')
+    expect(mode('reads')).toBe('points')
+  })
+
   it('style updates are per layer and immutable', () => {
     const st = useStore.getState()
     st.addDataset(ds)

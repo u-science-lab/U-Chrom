@@ -41,6 +41,7 @@ List loaded datasets.
     "n_cells": 1,
     "xyz_unit": "um",              // from uns, may be null
     "trace_mode": false,            // n_traces > n_chroms → imaging-style data
+    "trace_kind": "fibre",          // uns["trace_kind"]: "set" = traces are unordered reads / localisations (drawn as points)
     "chroms": [
       {"name": "chr1", "start": 3000000, "end": 195000000,
        "n_spots": 9500, "n_traces": 1}

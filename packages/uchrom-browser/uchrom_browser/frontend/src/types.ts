@@ -19,6 +19,8 @@ export interface DatasetSummary {
   n_cells: number
   xyz_unit: string | null
   trace_mode: boolean
+  /** 'set': a trace is an unordered set of reads / localisations (uns['trace_kind']), drawn as points */
+  trace_kind?: 'fibre' | 'set'
   chroms: ChromInfo[]
   /** chromosomes end to end for the whole-genome view (absent from older servers) */
   genome?: GenomeChrom[]

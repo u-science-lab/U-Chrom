@@ -21,6 +21,8 @@ _GSE305439 = "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE305nnn/GSE305439/suppl"
 _GEMFISH = ("https://raw.githubusercontent.com/ahmedabbas81/GEM-FISH/"
             "e83fdb46183586bcaecd6f13927283efb02dd646")
 _BINTU = "https://raw.githubusercontent.com/BogdanBintu/ChromatinImaging/master/Data"
+_IGS = ("https://raw.githubusercontent.com/zchiang/in_situ_genome_sequencing_analysis/"
+        "e1279b04440a36d410cca5fd71d7a018825a58bd")
 _SU2020 = "https://zenodo.org/records/3928890/files"
 # Stevens et al. 2017 (GEO GSE80280): Cell 1-8 = GSM2219497-GSM2219504
 _STEVENS = [(n, f"GSM{2219496 + n}") for n in range(1, 9)]
@@ -303,6 +305,21 @@ DATASETS = {
         "default": True,
         "size_mb": 144,
         "description": "Takei 2021 raw seqFISH+ spot detections",
+    },
+    # Payne et al. 2021 (Science 371:eaay3446), in situ genome sequencing: the authors' read tables (MIT licence)
+    "payne2021_igs": {
+        "files": [
+            (f"payne2021_igs/raw/{name}", f"{_IGS}/data/{name}")
+            for name in ("Table_S1_pgp1_data_table.csv", "Table_S2_embryo_data_table.csv",
+                         "Table_S3_description_of_data.xlsx")
+        ],
+        "md5": {
+            "payne2021_igs/raw/Table_S1_pgp1_data_table.csv": "37b11a887b9f7f66bb4c6256d55f9805",
+            "payne2021_igs/raw/Table_S2_embryo_data_table.csv": "d4e7833bc308b8c4f1c5483c295032d0",
+            "payne2021_igs/raw/Table_S3_description_of_data.xlsx": "f0114d1389f1b8897b26d6094d4d0894",
+        },
+        "size_mb": 79,
+        "description": "Payne 2021 IGS: in situ sequenced reads of PGP1 fibroblasts (hg38) and mouse embryos (mm10)",
     },
     "bintu_imr90": {
         "filename": "IMR90_chr21-18-20Mb.csv",
