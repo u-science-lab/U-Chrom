@@ -27,12 +27,13 @@ import pandas as pd
 #: genome assembly of each table (detected from its columns)
 ASSEMBLY = {"pgp1": "hg38", "embryo": "mm10"}
 
-# column roles: the read's keys and position, kept as spot columns (labels), dropped (folded into others)
+# column roles: the read's keys and position, kept as spot columns (labels and ids — umi_rol / umi_cs are UMI
+# sequences written as numbers), dropped (folded into others)
 _KEYS = {
     "pgp1": dict(cell="cell_id", x="x_um", y="y_um", z="z_um", chrom="hg38_chr", pos="hg38_pos"),
     "embryo": dict(cell="cell_index", x="x_um_abs", y="y_um_abs", z="z_um_abs", chrom="chr_name", pos="pos"),
 }
-_LABELS = ("amp_ind", "cluster", "mle_cluster", "hap_assignment", "cluster_hap", "cluster_hap_imputed",
+_LABELS = ("amp_ind", "umi_rol", "umi_cs", "cluster", "mle_cluster", "hap_assignment", "cluster_hap", "cluster_hap_imputed",
            "inlier", "npb_ind", "cen_ind", "hg38_ind", "umi_ind", "ab_comp", "lads", "compartment_ind",
            "lads_both", "lads_mat", "lads_pat")
 _DROP = {"pgp1": (), "embryo": ("embryo_id", "cell_id", "stage", "chr", "rel_chr_pos")}

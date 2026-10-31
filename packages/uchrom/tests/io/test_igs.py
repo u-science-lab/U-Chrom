@@ -44,6 +44,7 @@ def test_pgp1_reads():
     assert cd.cells.loc[cell, "n_reads"] == len(rows) and cd.cells.loc[cell, "n_reads_primary"] == len(on)
     assert sorted(cd.points["other_reads"]["chrom_label"]) == sorted(r["hg38_chr"] for r in off)
     assert "purity_score" in cd.spot_tracks.columns and "mle_cluster" in cd.spots.columns
+    assert {"umi_rol", "umi_cs"} <= set(cd.spots.columns) and "umi_rol" not in cd.spot_tracks.columns
 
 
 def test_embryo_territories_by_parent():
