@@ -1109,5 +1109,27 @@
   "resolution": 100000,
   "fill": 1.0,
   "map": "spacea_e145_f6.map.webp"
+ },
+ "payne2021_igs_embryo": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "e8.1",
+  "caption": "One zygote, its reads coloured by chromosome",
+  "n": 7667,
+  "categories": 21,
+  "grid": false,
+  "space": "payne2021_igs_embryo.space.webp"
+ },
+ "payne2021_igs_pgp1": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "85",
+  "caption": "One fibroblast, its reads coloured by chromosome",
+  "n": 601,
+  "categories": 24,
+  "grid": false,
+  "space": "payne2021_igs_pgp1.space.webp"
  }
 }
