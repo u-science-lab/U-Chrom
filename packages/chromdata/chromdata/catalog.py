@@ -10,8 +10,9 @@ Layout of an atlas root (an ``s3://`` / ``https://`` URL or a directory)::
     {"version": 1, "title": "...", "updated": "<utc>", "hero": [<id>, ...],
      "featured": [<id>, ...] (optional: the examples the web browser's start page offers first),
      "figures_url": "https://.../figures/" (optional: the datasets' thumbnails, ``<figures_url><id>.space.webp``),
-     "studies": [{"id", "citation", "journal", "title", "kind", "category", "summary", "doi", "source",
-                  "source_url", "license"}],
+     "studies": [{"id", "citation", "journal", "published" (date of first publication, YYYY-MM[-DD]: the atlas page
+                  lists the newest first), "title", "kind", "category", "summary", "doi", "source", "source_url",
+                  "license"}],
      "datasets": [
        {"id", "path" (relative to the root), "study", "name", "title", "description", "paper", "doi", "source_url",
         "license", "organism", "assembly", "tissue", "n_cells", "n_bins", "sections": [...],

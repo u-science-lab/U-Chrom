@@ -45,7 +45,17 @@
   <section class="wrap catalog" id="datasets">
     <div class="toolbar">
       <h2 class="section-title">Datasets</h2>
-      <input id="q" type="search" placeholder="Search by tissue, species, method…" aria-label="Search datasets">
+      <div class="tools">
+        <label class="sort"><span>Sort</span>
+          <select id="sort" aria-label="Sort the studies">
+            <option value="newest" selected>Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="author">First author, A–Z</option>
+            <option value="cells">Most cells</option>
+          </select>
+        </label>
+        <input id="q" type="search" placeholder="Search by tissue, species, method…" aria-label="Search datasets">
+      </div>
     </div>
     <div class="chips" id="chips" role="group" aria-label="Filters"></div>
     <p class="hint" id="hint" hidden>Datasets open in the U-Chrom browser hosted for this atlas. After a quiet spell the first one takes a few seconds to start.</p>

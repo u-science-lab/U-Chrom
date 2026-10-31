@@ -7,7 +7,7 @@
   var HOSTED = (CFG.hosted || '').replace(/\/+$/, '');
   var FIG = 'figures/';
   var $ = function (id) { return document.getElementById(id); };
-  var state = { cat: null, q: '', on: {}, page: 0 };   // on: {group: Set(values)}; page: 0-based
+  var state = { cat: null, q: '', on: {}, page: 0, sort: 'newest' };   // on: {group: Set(values)}; page: 0-based
   var PAGE = 10;         // datasets per page, about: a study is never split, a page holds studies up to this many
 
   // what the catalog's modality names are called on the page, and their colour (the U-Chrom logo palette)
@@ -38,6 +38,18 @@
   function unit(d) { var s = study(d); return s && /spatial/i.test(s.category || s.kind || '') ? 'spots' : 'cells'; }
   function study(d) { return state.studies[d.study] || null; }
   function nameOf(d) { return d.name || d.title; }
+
+  // the order of the studies: by date of publication (``published`` of the study, YYYY-MM[-DD], else the year of its
+  // citation), first author, or the number of cells shown; ties keep the catalogue's order (Array.sort is stable)
+  function dateOf(s) { return s.published || ((s.citation || '').match(/\b(19|20)\d\d\b/) || [''])[0]; }
+  function cellsOf(g) { return g.ds.reduce(function (a, d) { return a + (d.n_cells || 0); }, 0); }
+  function cmp(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
+  var SORTS = {
+    newest: function (a, b) { return cmp(dateOf(b.s), dateOf(a.s)); },
+    oldest: function (a, b) { return cmp(dateOf(a.s) || '9999', dateOf(b.s) || '9999'); },
+    author: function (a, b) { return (a.s.citation || a.s.id).localeCompare(b.s.citation || b.s.id); },
+    cells: function (a, b) { return cellsOf(b) - cellsOf(a); }
+  };
 
   var GROUPS = [
     ['Type', function (d) { var s = study(d); return s && s.category ? [s.category] : []; }],
@@ -143,13 +155,14 @@
     });
   }
 
-  // the studies that have datasets to show, with those datasets, in the catalogue's order; then cut into pages
+  // the studies that have datasets to show, with those datasets (in the catalogue's order), sorted; then cut into pages
   function groups() {
     var shown = state.cat.datasets.filter(matches), out = [];
     state.order.forEach(function (sid) {
       var ds = shown.filter(function (d) { return (d.study || '') === sid; });
       if (ds.length) out.push({ s: state.studies[sid] || { id: sid, citation: ds[0].paper }, ds: ds });
     });
+    out.sort(SORTS[state.sort] || SORTS.newest);
     return { shown: shown, groups: out };
   }
   function paginate(gs) {
@@ -246,6 +259,7 @@
   }
 
   $('q').addEventListener('input', function (e) { state.q = e.target.value.trim().toLowerCase(); if (state.cat) refilter(); });
+  $('sort').addEventListener('change', function (e) { state.sort = e.target.value; if (state.cat) refilter(); });
   $('reset').addEventListener('click', function () { state.q = ''; state.on = {}; $('q').value = ''; refilter(); });
   fetch('catalog.json', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(start).catch(function (e) {
     var m = $('err'); m.hidden = false; m.textContent = 'Could not read the catalogue: ' + e.message;
