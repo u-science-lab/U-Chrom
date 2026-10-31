@@ -321,6 +321,21 @@ DATASETS = {
         "size_mb": 79,
         "description": "Payne 2021 IGS: in situ sequenced reads of PGP1 fibroblasts (hg38) and mouse embryos (mm10)",
     },
+    # Beckwith et al. 2025 (Ellenberg lab), LoopTrace: nanoscale DNA tracing, figshare (CC BY 4.0).
+    "beckwith2025_mitosis": {
+        "files": [("beckwith2025/raw/mitofold1_data_code.zip", "https://ndownloader.figshare.com/files/49146478")],
+        "md5": {"beckwith2025/raw/mitofold1_data_code.zip": "db43decb193533bb7bd65cb6bad3cc4d"},
+        "size_mb": 165,
+        "description": "Beckwith 2025 (Cell) mitotic chromosome tracing, HeLa Kyoto WT / SMC4-depleted / TSA "
+                       "(figshare 27003022: traces, code)",
+    },
+    "beckwith2025_looptrace": {
+        "files": [("beckwith2025/raw/looptrace_experimental_data.zip", "https://ndownloader.figshare.com/files/50221866")],
+        "md5": {"beckwith2025/raw/looptrace_experimental_data.zip": "1ecbb593a878c345fd6489b0435f7449"},
+        "size_mb": 279,
+        "description": "Beckwith 2025 (Nat Commun) LoopTrace: RPE-1 / HeLa Kyoto with RAD21, CTCF or WAPL depleted, "
+                       "and denaturing vs non-denaturing FISH (figshare 27613239)",
+    },
     "bintu_imr90": {
         "filename": "IMR90_chr21-18-20Mb.csv",
         "url": (
@@ -939,6 +954,19 @@ DATASETS = {
         "parallel": 4,
         "description": "Wu 2024 LiMCA mouse olfactory epithelium, 411 cells: imputed pairs, two 20 kb clean 3dg "
                        "runs, RNA counts (GSE239969)",
+    },
+    # the human half of LiMCA (GSE240114): GM12878 cells with imputed pairs and three 20 kb structure runs (no RNA
+    # counts deposited for the cell lines)
+    "wu2024_limca_human": {
+        "files": lambda: ([(f"wu2024_limca_human/raw/GSE240114/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE240114", r"_GM12878_cell_\d+(\.impute\.pairs\.gz|_20Kb_[12]\.clean\.3dg\.txt\.gz)$")]
+            + [(f"wu2024_limca_human/raw/GSE240114/{n}", _gse_matrix("GSE240114", n))
+               for n in ("GSE240114_series_matrix.txt.gz",)]),
+        "size_mb": 5100,
+        "default": False,
+        "parallel": 4,
+        "description": "Wu 2024 LiMCA, human GM12878, 221 cells: imputed pairs and two 20 kb clean 3dg runs "
+                       "(GSE240114)",
     },
     "liu2026_hires_xci": {
         "files": lambda: ([(f"liu2026_hires_xci/raw/GSE278310/cells/{n}", _gsm(n)) for n in _geo_filelist(

@@ -9,6 +9,7 @@
 | SnapFISH / SnapFISH-IMPUTE coordinate + annotation tables | `uchrom.io.read_snapfish(coor, ann)` |
 | raw DNA seqFISH+ detections (not yet traced) | `uchrom.io.read_seqfish_detections` → [from detections to traces](traces) |
 | in situ genome sequencing reads (Payne et al. 2021): a trace per chromosome territory, its reads an unordered set (`uns['trace_kind'] = 'set'`) | `uchrom.io.read_igs`; `uchrom.datasets.load("payne2021_igs_embryo")` |
+| LoopTrace tables (Beckwith et al. 2025): fitted spots of nanoscale DNA tracing, loci from each library's spot centres | `uchrom.io.read_looptrace`; `uchrom.datasets.load("beckwith2025_mitosis")` |
 | several spots of one trace on one locus | `uchrom.im.merge_duplicate_spots` (`uc.pp.merge_duplicate_spots`) |
 | published datasets, ready as `ChromData` | `uchrom.datasets.load("takei2021_mesc")`, `load("bintu_imr90")`, ... ([datasets](../datasets/index)) |
 
