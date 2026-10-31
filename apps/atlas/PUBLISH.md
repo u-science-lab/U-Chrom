@@ -18,7 +18,8 @@ kept in the repository: put an R2 API token (Object Read & Write, this bucket on
            --cache-control "public, max-age=3600"
 
 3. **Describe it** in `apps/atlas/datasets.json` (its `study` — one entry of `studies` with the citation, doi, source,
-   licence —, `name`, title, organism, tissue; counts are read from the store), then build and upload the catalog:
+   licence and `published`, the date of first publication as Crossref's `issued` gives it, `YYYY-MM[-DD]`, which orders
+   the page —, `name`, title, organism, tissue; counts are read from the store), then build and upload the catalog:
 
        python -m chromdata.catalog build apps/atlas/datasets.json --root $UCHROM_DATA --out catalog.json
        aws s3 cp catalog.json s3://u-chrom-atlas/catalog.json --endpoint-url $R2_ENDPOINT --content-type application/json

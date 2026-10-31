@@ -121,3 +121,18 @@ def test_figures_draw_a_set_of_reads_as_dots(tmp_path):
     build._structure_png(ChromData(xyz, spots), lines, 48)
     a, b = (np.asarray(Image.open(p).convert("RGBA"))[..., 3] > 0 for p in (out, lines))
     assert a.sum() and not np.array_equal(a, b)                 # dots, not the polyline of a fibre
+
+
+def test_every_study_has_a_publication_date():
+    """The page lists the studies newest first by ``published`` (YYYY-MM[-DD]); the year agrees with the citation's
+    or comes before it (online ahead of print)."""
+    import datetime
+    import re
+
+    cfg = json.loads((HERE.parent / "datasets.json").read_text())
+    for s in cfg["studies"]:
+        date = s.get("published", "")
+        assert re.fullmatch(r"\d{4}-\d{2}(-\d{2})?", date), (s["id"], date)
+        datetime.date.fromisoformat(date if len(date) == 10 else date + "-01")
+        year = int(re.search(r"\b(?:19|20)\d\d\b", s["citation"]).group())
+        assert year - 1 <= int(date[:4]) <= year, (s["id"], date, s["citation"])
