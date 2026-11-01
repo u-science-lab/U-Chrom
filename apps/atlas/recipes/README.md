@@ -486,6 +486,25 @@ datasets (`stevens2017`, `su2020_chr21`, `rao2014_imr90_chr21`) and the atlas (`
   the per-cell maps and its Leiden clusters (resolution 0.5: two clusters, 551 and 449 cells).  Store 2.4 GB.
 - **Used by**: the atlas (`arrastia2021_scsprite`).
 
+### `li2023_scnanohic/`: scNanoHi-C, multi-way contacts of single GM12878 cells (818 MB; fetch `li2023_scnanohic`)
+
+- **File**: `li2023_scnanohic/raw/GSM6706395_GM12878_high_clean_parquet.tar.gz` (md5
+  `e28d6b3d6d93085662757deb8ec421cf`): one parquet table per cell (`GM12878_high_MboI_<barcode>_GRCh38_PG.contacts.clean.parquet`),
+  24 cells.
+- **Format**: one row per contact the authors kept, a pair of alignments of one nanopore read (`read_idx`;
+  `align1_*` / `align2_*`: chrom, start, end, haplotype 1 / 2 or -1, ...; `contact_is_direct`: adjacent in the read);
+  GRCh38.  The rows are fewer than all alignment pairs of the reads (243,671 of 857,213 in one cell).
+- **Source**: Li W *et al.* 2023, *Nat Methods* 20:1493 (doi:10.1038/s41592-023-01978-w), "scNanoHi-C: a single-cell
+  long-read concatemer sequencing method to reveal high-order chromatin structures within individual cells"; GEO
+  [GSE217189](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE217189) (GSM6706395; the series also has K562,
+  COLO320DM, HG002 and mESC cells and GM12878 at lower depth).
+- **Recipe**: `build_scnanohic2023.py` (3 min): every read as a cluster of its alignments that take part in a kept
+  contact (`ChromData.clusters["scnanohic"]`, member column `haplotype`): 1.10 M reads, 10.4 M alignments; the
+  authors' contacts (10.9 M, an alignment at its midpoint; median 462,000 per cell, 79 % cis, 26 % of alignments
+  phased) per cell at 1 Mb (linked `per_cell`) and pooled (`bulk`), embedded; a scHiCluster embedding and its Leiden
+  clusters (three).
+- **Used by**: the atlas (`li2023_scnanohic_gm12878`).
+
 ### `spacea_ma2026/`: SpaceA, spatial SPRITE of mouse embryo sections (2.7 TB fastq, 17 runs; fetch `ma2026_spacea_<library>`)
 
 - **Source**: Ma et al. 2026, *Developmental Cell* (doi:10.1016/j.devcel.2026.09.004), SpaceA; Genome Sequence
@@ -1220,6 +1239,43 @@ labels).
   Check: contacting 100-kb bins more than 200 kb apart lie 0.17-0.40 times as far apart as random pairs at the
   same separation in 13 cells; in Shoot_cell_3 and Sperm_2 0.79-0.90 (no other chain fits their contacts better).
   No map figure (too few contacts); its 15 cells form one Leiden cluster, so none is kept.  Atlas `zhou2019_rice`.
+
+### Single-cell Hi-C without structures (`flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `tan2023_cerebellum/`, `ulianov2021_snhic/`)
+
+Studies that deposit one contact table per cell and no structure.  `build_schic_pairs.py STUDY` bins each cell's
+contacts (both homologs together, alleles ignored; autosomes, X and Y) into a per-cell 1-Mb `.scool` (linked
+`per_cell`) and an all-cells `.mcool` (50 kb - 1 Mb, ICE-balanced, linked `bulk`), counts `n_contacts`, `n_cis`,
+`frac_cis` per cell and adds a scHiCluster embedding of the per-cell maps with its Leiden clusters (`hic_leiden`);
+cells without a contact on those chromosomes are dropped.  The GEO files of these series arrived empty at times
+(HTTP 200 with no body, 2026-11-01): `uchrom.datasets.fetch` now refuses a body shorter than its
+`Content-Length` or an empty one.
+
+- **Flyamer 2017** (Flyamer IM *et al.*, *Nature* 544:110, 2017, doi:10.1038/nature21711; GEO GSE80006): one
+  `-reads.csv.gz` per nucleus, the authors' filtered contacts (`chr1,chr2,pos1,pos2,strand1,strand2`, chromosomes
+  without `chr`; duplicates and repeated 500 bp bin pairs removed); 490 MB (`flyamer2017_snhic`).  Mouse (mm9): 120
+  oocytes (NSN, SN, intermediate; some stained with Hoechst) and 88 zygote samples (maternal or paternal pronucleus,
+  both, or parent not identified; the labels as deposited, e.g. `pronucleus-w-o_nucl_extr-male`), 51.3 M contacts,
+  median 136,000 per nucleus, 90 % cis.  The Leiden clusters of the embedding follow the types: 28 of 34 maternal
+  pronuclei in one cluster, paternal ones in two others, oocytes in the rest.  Atlas `flyamer2017_oocyte_zygote`.
+  The 34 K562 nuclei (hg19, store `flyamer2017_k562`) have a median of 1,400 contacts, 30 % cis: not in the atlas.
+- **Collombet 2020** (Collombet S *et al.*, *Nature* 580:142, 2020, doi:10.1038/s41586-020-2125-z; GEO GSE129029):
+  HiC-Pro allele-specific `allValidPairs` (mm10, both reads MAPQ > 30; C57BL/6J x CAST/EiJ, the allele in column 13,
+  ignored) of 1,015 nuclei: 183 oocytes (`EHP`), 99 1-cell (`1CSE`), 128 2-cell, 146 4-cell, 135 8-cell, 242 64-cell
+  and 82 "1-cell stage or oocyte" (`unk`); 8.1 GB (`collombet2020_snhic`).  272 M contacts, median 224,000 per
+  nucleus, 92 % cis.  The Leiden clusters follow the stages: 186 of 242 64-cell nuclei in one, 102 of 128 2-cell
+  nuclei in another, the 4- and 8-cell nuclei mostly in a third, oocytes and 1-cell nuclei in others.  Atlas
+  `collombet2020_embryo`.
+- **Zhou 2024** (Zhou Y *et al.*, *Nat Commun* 15:8310, 2024, doi:10.1038/s41467-024-52440-0; GEO GSE194308):
+  HiC-Pro `allValidPairs` (hg19) of 293 cells of MCF7 and of the derived lines MCF7TR and MCF7M1 (the source names
+  of the deposit); 2.4 GB (`zhou2024_mcf7`).  128.4 M contacts, median 213,000 per cell; 89 MCF7, 91 MCF7M1, 113
+  MCF7TR.  Many cells have few cis contacts (median cis fraction 0.46 in MCF7, 0.73-0.74 in the derived lines; 104
+  cells below 0.5, 59 of them MCF7); the Leiden clusters follow the lines, and the low-cis cells cluster apart.
+  Atlas `zhou2024_mcf7`.
+- **Ulianov 2021** (Ulianov SV *et al.*, *Nat Commun* 12:41, 2021, doi:10.1038/s41467-020-20292-z; GEO GSE131811):
+  the authors' 10 kb `.cool` of their 20 best Drosophila BG3 nuclei (chimeric reads across DpnII sites, one contact
+  per pair of restriction fragments; dm3, arms 2L, 2R, 3L, 3R and 4) and of the population; 7 MB
+  (`ulianov2021_snhic`).  Taken as deposited (`build_schic_pairs.py ulianov2021_snhic`: one `.scool` of the 20 maps,
+  the population map zoomed to 20 - 100 kb and balanced), 664,404 contacts; no embedding.  Atlas `ulianov2021_bg3`.
 
 ## Figure 3 datasets — bridges between contacts and geometry
 

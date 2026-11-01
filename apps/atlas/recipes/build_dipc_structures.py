@@ -1,6 +1,6 @@
 """Atlas stores of single-cell Hi-C with the authors' 3-D structure of every cell (hickit / Dip-C ``.3dg``).
 
-Four studies deposit, per cell, the contact pairs and 20 kb structures (``python -m uchrom.datasets fetch NAME``):
+These studies deposit, per cell, the contact pairs and 20 kb structures (``python -m uchrom.datasets fetch NAME``):
 
   tan2019_dipc        Tan et al. 2019, Nat Struct Mol Biol 26:297 (GEO GSE121791): Dip-C of mouse retina and main
                       olfactory epithelium, 409 cells, three runs per cell (runs 1 and 2 read)
@@ -12,6 +12,9 @@ Four studies deposit, per cell, the contact pairs and 20 kb structures (``python
                       (runs 1 and 2 read); store wu2024_limca_gm12878 (hg38), no RNA deposited
   liu2026_hires_xci   Liu et al. 2026, Genomics Proteomics Bioinformatics qzag002 (GEO GSE278310 + GSE310759):
                       HiRES of female hybrid mESC over the first days of random X inactivation, with RNA
+  tan2023_cerebellum  Tan et al. 2023, Science 381:1112 (GEO GSE246785): Dip-C of the mouse cerebellum; the cells
+                      of the F1-hybrid and Purkinje-enriched samples with a structure (one run, the model of the
+                      cell's sex) and an RMSD of at most 1.5 (``TAN2023_MAX_RMSD``); store tan2023_cerebellum_3d
 
 Every store (``<data>/<name>/<store>.chromdata.zarr``) has
 
@@ -196,8 +199,75 @@ def liu2026(raw: Path) -> dict:
                       "contact pairs, the authors' 20 kb clean structures, metadata and RNA UMI counts of each cell"}
 
 
+#: Tan 2023 cells kept with a structure: the authors' RMSD between runs at most this (particle radii)
+TAN2023_MAX_RMSD = 1.5
+
+
+def _tar_texts(path: Path) -> dict:
+    """cell -> the words of each small file of a tarball (per-cell info files)."""
+    import tarfile
+    out = {}
+    with tarfile.open(path) as t:
+        for mem in t:
+            if mem.isfile():
+                out[Path(mem.name).name.split(".")[0]] = t.extractfile(mem).read().decode().split()
+    return out
+
+
+def tan2023(raw: Path) -> dict:
+    """Tan 2023 cerebellum: the cells with a structure of the sex their X-to-autosome ratio gives (female above 0.7,
+    male below 0.6) and an RMSD of at most ``TAN2023_MAX_RMSD``; their structure and imputed pairs of that sex are
+    taken out of the tarballs into ``raw/cells`` once."""
+    import tarfile
+    x2a = {c: float(w[1]) for c, w in _tar_texts(raw / "GSE246785_mouse.x2a.txt.tar.gz").items() if len(w) > 1}
+    rows = []
+    for sex in ("female", "male"):
+        rmsd = _tar_texts(raw / f"GSE246785_mouse.3d_model_{sex}_clean.20k.rmsd.info.tar.gz")
+        for cell, w in rmsd.items():
+            r = x2a.get(cell, np.nan)
+            if w and (r > 0.7 if sex == "female" else r < 0.6):
+                rows.append({"cell_id": cell, "sex": sex, "x_to_autosome": r, "rmsd_published": float(w[0])})
+    cells = pd.DataFrame(rows).set_index("cell_id").sort_index()
+    n_all = len(cells)
+    cells = cells[cells["rmsd_published"] <= TAN2023_MAX_RMSD]
+    sample = cells.index.str.rsplit("_", n=1).str[0]
+    cells.insert(0, "sample", sample.str.removeprefix("dipc-mouse-cerebellum-"))
+    cells.insert(1, "age", sample.str.extract(r"-p(\d+)", expand=False).astype(int).map(lambda d: f"P{d}"))
+    cells["f1_hybrid"] = sample.str.endswith("-f1hybrid")
+    cells["purkinje_enriched"] = sample.str.endswith("-purkinje")
+    cells["age"] = pd.Categorical(cells["age"], categories=sorted(cells["age"].unique(), key=lambda a: int(a[1:])))
+    cells["cell_type"] = cells["age"]
+    out = raw / "cells"
+    out.mkdir(exist_ok=True)
+    files = {}
+    for sex in ("female", "male"):
+        want = set(cells.index[cells["sex"] == sex])
+        for role, name, ext in (("pairs", f"contacts_{sex}_with_imputed_haplotypes.pairs.gz", ".pairs.gz"),
+                                ("3dg", f"3d_model_{sex}_clean.20k", ".3dg.gz")):
+            got = {c: out / f"{c}{ext}" for c in want if (out / f"{c}{ext}").exists()}
+            if len(got) < len(want):
+                with tarfile.open(raw / f"GSE246785_mouse.{name}.tar.gz", "r|gz") as t:
+                    for mem in t:
+                        cell = Path(mem.name).name.split(".")[0]
+                        if mem.isfile() and cell in want and cell not in got and mem.size:
+                            data = t.extractfile(mem).read()
+                            got[cell] = out / f"{cell}{ext}"
+                            got[cell].write_bytes(data if ext == ".pairs.gz" else gzip.compress(data, 1))
+            for c, p in got.items():
+                files.setdefault(c, {})[role] = p
+    files = {c: (f["pairs"], f["3dg"], None) for c, f in files.items() if len(f) == 2}
+    log(f"tan2023: {len(cells):,} of {n_all:,} sex-matched structures with RMSD <= {TAN2023_MAX_RMSD}, "
+        f"{len(files):,} with both files")
+    return {"stores": {"tan2023_cerebellum_3d": cells.reindex(sorted(files))}, "files": files, "assembly": "mm10",
+            "res_3d": 100_000,
+            "source": "Tan et al. 2023, Science 381:1112 (Dip-C of the mouse cerebellum; GEO GSE246785): the cells of the "
+                      "F1-hybrid and Purkinje-enriched samples with the authors' 20 kb clean structure of their sex "
+                      f"(X-to-autosome ratio) and an RMSD between runs of at most {TAN2023_MAX_RMSD} particle radii, "
+                      "with their imputed haplotype contact pairs"}
+
+
 STUDIES = {"tan2019_dipc": tan2019, "xu2025_sperm": xu2025, "wu2024_limca": wu2024, "wu2024_limca_human": wu2024h,
-           "liu2026_hires_xci": liu2026}
+           "liu2026_hires_xci": liu2026, "tan2023_cerebellum": tan2023}
 
 
 # -- workers -----------------------------------------------------------------------------------------------------
