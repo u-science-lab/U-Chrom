@@ -979,6 +979,86 @@ DATASETS = {
         "default": False,
         "description": "Arrastia 2022 scSPRITE: multi-way contact clusters of 1,000 single mouse ES cells (mm9)",
     },
+    # Single-cell Hi-C without structures, read by apps/atlas/recipes/build_schic_pairs.py: Flyamer et al. 2017 (Nature
+    # 544:110; snHi-C of mouse oocytes and zygote pronuclei, mm9, and K562 cells, hg19), Collombet et al. 2020 (Nature
+    # 580:142; snHi-C of mouse oocytes and embryos to the 64-cell stage, mm10, HiC-Pro allele-specific valid pairs),
+    # Zhou et al. 2024 (Nat Commun 15:8310; MCF7 and two drug-tolerant derivatives, hg19, HiC-Pro valid pairs),
+    # Ulianov et al. 2021 (Nat Commun 12:41; 20 Drosophila BG3 nuclei as 10 kb .cool, dm3)
+    "flyamer2017_snhic": {
+        "files": lambda: ([(f"flyamer2017_snhic/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE80006", r"^GSM\d+_\d+_[^/]*-reads\.csv\.gz$")]
+            + [(f"flyamer2017_snhic/raw/{n}", _gse_matrix("GSE80006", n))
+               for n in ("GSE80006-GPL13112_series_matrix.txt.gz", "GSE80006-GPL16791_series_matrix.txt.gz",
+                         "GSE80006-GPL17021_series_matrix.txt.gz")]),
+        "size_mb": 495,
+        "default": False,
+        "parallel": 4,
+        "description": "Flyamer 2017 snHi-C: contacts of single mouse oocytes and zygote pronuclei (mm9) and K562 "
+                       "cells (hg19), GSE80006",
+    },
+    "collombet2020_snhic": {
+        "files": lambda: ([(f"collombet2020_snhic/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE129029", r"\.allValidPairs\.txt\.gz$")]
+            + [(f"collombet2020_snhic/raw/{n}", _gse_matrix("GSE129029", n))
+               for n in ("GSE129029_series_matrix.txt.gz",)]),
+        "size_mb": 8120,
+        "default": False,
+        "parallel": 4,
+        "description": "Collombet 2020 snHi-C of mouse oocytes and early embryos (1- to 64-cell), HiC-Pro valid "
+                       "pairs, mm10, GSE129029",
+    },
+    "zhou2024_mcf7": {
+        "files": lambda: ([(f"zhou2024_mcf7/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE194308", r"\.allValidPairs\.txt\.gz$")]
+            + [(f"zhou2024_mcf7/raw/{n}", _gse_matrix("GSE194308", n)) for n in ("GSE194308_series_matrix.txt.gz",)]),
+        "size_mb": 2390,
+        "default": False,
+        "parallel": 4,
+        "description": "Zhou 2024 scHi-C of MCF7 and drug-tolerant MCF7 cells, HiC-Pro valid pairs, hg19, GSE194308",
+    },
+    "ulianov2021_snhic": {
+        "files": lambda: ([(f"ulianov2021_snhic/raw/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE131811", r"\.10000\.cool\.gz$")]
+            + [(f"ulianov2021_snhic/raw/{n}", _gse_matrix("GSE131811", n)) for n in ("GSE131811_series_matrix.txt.gz",)]),
+        "size_mb": 8,
+        "default": False,
+        "description": "Ulianov 2021 snHi-C of 20 Drosophila BG3 nuclei and the population, 10 kb .cool, dm3, "
+                       "GSE131811",
+    },
+    # Tan et al. 2023 (Science 381:1112), GEO GSE246785: Dip-C of the mouse cerebellum from birth to old age (6,432
+    # cells; per-cell files in tarballs), the authors' 20 kb structures of the F1-hybrid and Purkinje-enriched cells,
+    # read by apps/atlas/recipes/build_schic_pairs.py (all cells) and build_dipc_structures.py (structures)
+    "tan2023_cerebellum": {
+        "files": [(f"tan2023_cerebellum/raw/{n}", _gse("GSE246785", n)) for n in (
+            "GSE246785_README_sample_annotations.txt", "GSE246785_mouse.contacts_unisex.info.tar.gz",
+            "GSE246785_mouse.x2a.txt.tar.gz", "GSE246785_mouse.contacts_unisex.pairs.gz.tar.gz")],
+        "size_mb": 27700,
+        "default": False,
+        "description": "Tan 2023 Dip-C of the mouse cerebellum, P0 to P637: per-cell contact pairs (unisex), "
+                       "contact stats and X-to-autosome ratios, sample annotations (GSE246785)",
+    },
+    "tan2023_cerebellum_3d": {
+        "files": [(f"tan2023_cerebellum/raw/{n}", _gse("GSE246785", n)) for n in (
+            "GSE246785_mouse.x2a.txt.tar.gz",
+            "GSE246785_mouse.contacts_female_with_imputed_haplotypes.pairs.gz.tar.gz",
+            "GSE246785_mouse.contacts_male_with_imputed_haplotypes.pairs.gz.tar.gz",
+            "GSE246785_mouse.3d_model_female_clean.20k.tar.gz", "GSE246785_mouse.3d_model_male_clean.20k.tar.gz",
+            "GSE246785_mouse.3d_model_female_clean.20k.rmsd.info.tar.gz",
+            "GSE246785_mouse.3d_model_male_clean.20k.rmsd.info.tar.gz")],
+        "size_mb": 13300,
+        "default": False,
+        "description": "Tan 2023 Dip-C of the mouse cerebellum: imputed haplotype pairs and the authors' 20 kb clean "
+                       "structures (female and male models) of the F1-hybrid and Purkinje-enriched cells (GSE246785)",
+    },
+    # scNanoHi-C (Li et al. 2023, Nat Methods 20:1493), GEO GSE217189: the clean contact tables of the GM12878 high-depth
+    # cells (one parquet per cell, GRCh38); built by apps/atlas/recipes/build_scnanohic2023.py
+    "li2023_scnanohic": {
+        "files": [(f"li2023_scnanohic/raw/{n}", _gsm(n)) for n in ("GSM6706395_GM12878_high_clean_parquet.tar.gz",)],
+        "md5": {"li2023_scnanohic/raw/GSM6706395_GM12878_high_clean_parquet.tar.gz": "e28d6b3d6d93085662757deb8ec421cf"},
+        "size_mb": 818,
+        "default": False,
+        "description": "Li 2023 scNanoHi-C: concatemer contacts of 24 high-depth GM12878 cells (hg38), GSE217189",
+    },
     "liu2026_hires_xci": {
         "files": lambda: ([(f"liu2026_hires_xci/raw/GSE278310/cells/{n}", _gsm(n)) for n in _geo_filelist(
             "GSE278310", r"_d\d+[A-D]\d+\.(pairs\.gz|clean\.20k\.0\.3dg\.txt\.gz)$")]

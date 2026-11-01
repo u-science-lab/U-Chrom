@@ -49,6 +49,20 @@ def test_fetch_downloads_once_and_checks_md5(monkeypatch, tmp_path):
         ds.fetch("bad", root=root, verbose=False)
 
 
+def test_an_empty_or_short_body_is_not_kept(tmp_path):
+    from uchrom.datasets._fetch import download
+    empty = tmp_path / "empty.txt"
+    empty.write_bytes(b"")                                     # a server answering 200 with no body
+    dest = tmp_path / "got" / "a.txt"
+    with pytest.raises(ConnectionError, match="0 bytes"):
+        download(empty.as_uri(), dest, tries=1, verbose=False)
+    assert not dest.exists() and not list(dest.parent.glob("*.part*"))
+    dest.write_bytes(b"")                                      # an empty file of an earlier run is fetched again
+    full = tmp_path / "full.txt"
+    full.write_text("chr1\t0\t100\n")
+    assert download(full.as_uri(), dest, verbose=False).read_text() == "chr1\t0\t100\n"
+
+
 def test_unknown_dataset_names_the_known_ones():
     with pytest.raises(KeyError, match="takei"):
         ds.files("no_such_dataset")
