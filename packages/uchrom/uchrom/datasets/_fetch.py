@@ -13,8 +13,10 @@ from pathlib import Path
 def download(url: str, dest: Path, description: str = "", size_mb: float = 0, tries: int = 7,
              verbose: bool = True) -> Path:
     """Fetch ``url`` to ``dest`` (via a per-process ``dest.part<pid>``, replaced atomically; skipped when ``dest`` exists).  A refused / throttled
-    request (NCBI answers 403 / 429 / 503 when hit too often) is retried after 30 s, 60 s, 120 s, ..."""
-    if dest.exists():
+    request (NCBI answers 403 / 429 / 503 when hit too often) is retried after 30 s, 60 s, 120 s, ...; so is a body
+    shorter than its ``Content-Length`` or an empty one (NCBI also answers 200 with nothing).  An empty ``dest`` left
+    by an earlier run is fetched again."""
+    if dest.exists() and dest.stat().st_size:
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + f".part{os.getpid()}")
@@ -24,8 +26,12 @@ def download(url: str, dest: Path, description: str = "", size_mb: float = 0, tr
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "u-chrom datasets"})
             with urllib.request.urlopen(req, timeout=300) as r, open(tmp, "wb") as out:
+                length = r.headers.get("Content-Length")
                 while chunk := r.read(1 << 22):
                     out.write(chunk)
+            got = tmp.stat().st_size
+            if not got or (length is not None and got != int(length)):
+                raise ConnectionError(f"{got} bytes received, {length or 'some'} expected")
             os.replace(tmp, dest)
             return dest
         except Exception as exc:
