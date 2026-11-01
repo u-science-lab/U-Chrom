@@ -1293,5 +1293,24 @@
   "resolution": 100000,
   "fill": 0.911,
   "map": "collombet2020_embryo.map.webp"
+ },
+ "tan2023_cerebellum_3d": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "dipc-mouse-cerebellum-p021-f1hybrid_cell0078",
+  "caption": "One P21 cell, Dip-C structure",
+  "n": 49684,
+  "categories": 20,
+  "grid": false,
+  "space": "tan2023_cerebellum_3d.space.webp",
+  "map_key": "bulk",
+  "map_label": "All 242 cells (merged)",
+  "chrom": "chr2",
+  "start": 27300000,
+  "end": 67400000,
+  "resolution": 100000,
+  "fill": 0.655,
+  "map": "tan2023_cerebellum_3d.map.webp"
  }
 }

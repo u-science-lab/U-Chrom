@@ -146,6 +146,9 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `tan2018_gm12878/`: Tan 2018 Dip-C GM12878, 17 cells | ~0.7 GB | fetch `tan2018_gm12878` | diploid EMber / NucDynamics validation |
 | `quinodoz2018_sprite/`: Quinodoz 2018 SPRITE mouse ES cells, the authors' clusters | 6.2 GB | fetch `quinodoz2018_sprite` (**cluster**) | multi-way contacts of the store (`ChromData.clusters`, format 2.4): uchrom-reproducibility `extended_data_fig1/g_clusters_sprite.py` |
 | `arrastia2021_scsprite/`: Arrastia 2022 scSPRITE, the authors' clusters of 1,000 single mouse ES cells | 697 MB (1.3 GB decompressed) | fetch `arrastia2021_scsprite`; recipe `build_scsprite2021.py` | atlas store `arrastia2021_scsprite` |
+| `li2023_scnanohic/`: Li 2023 scNanoHi-C, the authors' contact tables of 24 GM12878 cells | 818 MB | fetch `li2023_scnanohic`; recipe `build_scnanohic2023.py` | atlas store `li2023_scnanohic_gm12878` |
+| `flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `ulianov2021_snhic/`: single-nucleus / single-cell Hi-C contact tables (oocytes and zygotes, early embryos, MCF7 lines, Drosophila BG3) | 490 MB / 8.1 GB / 2.4 GB / 7 MB | fetch the same names; recipe `build_schic_pairs.py` | atlas stores `flyamer2017_oocyte_zygote`, `collombet2020_embryo`, `zhou2024_mcf7`, `ulianov2021_bg3` |
+| `tan2023_cerebellum/`: Tan 2023 Dip-C of the mouse cerebellum, P0-P637 (6,432 cells; structures of 675) | 27.7 GB (all-cell pairs) + 13.3 GB (structures and their pairs) | fetch `tan2023_cerebellum`, `tan2023_cerebellum_3d`; recipes `build_schic_pairs.py`, `build_dipc_structures.py` | atlas store `tan2023_cerebellum_3d` |
 | `spacea_ma2026/`: Ma 2026 SpaceA, spatial SPRITE of 9 mouse embryo sections, E11.5-E14.5 (5 libraries, 17 runs) | 2.7 TB fastq; C6 run 1 alone: clusters 87 MB, store 550 MB with the derived maps | fetch `ma2026_spacea_<library>` (GSA, academic use); recipe `spacea_ma2026/slurm/` (a compute cluster) | per-spot check of `ChromData.clusters` (U-Chrom PR #153); the browser's cluster track; not in the atlas |
 | `wu2025_scmicroc/`: Wu 2025 scMicro-C GM12878, 12 deepest cells | 3.1 GB (102 GB streamed) | fetch `wu2025_scmicroc` | EMber deep development and test (PREREG §11); Fig. 3a / S8 |
 | `rao2014_imr90/4DNFIR1JDZH7.mcool`: Rao 2014 IMR90, 4DN GRCh38 | 4.6 GB | fetch `rao2014_imr90_4dn` (**cluster only**; laptops read it over HTTP) | an unpublished benchmark; an unpublished benchmark (range reads) |
@@ -671,6 +674,9 @@ brain cells).
 | `tan2019_dipc`, `wu2024_limca`, `liu2026_hires_xci` | 1,029 / 1,322 / 1,258 | `<name>/<name>.chromdata.zarr` | `build_dipc_structures.py <name>`, `derive_embeddings.py --hic per_cell --leiden` | the same names |
 | `wu2024_limca_gm12878` | 835 | `wu2024_limca_human/wu2024_limca_gm12878.chromdata.zarr` | `build_dipc_structures.py wu2024_limca_human`, `derive_embeddings.py --hic per_cell --leiden` | `wu2024_limca_human` |
 | `arrastia2021_scsprite` | 2,634 | `arrastia2021_scsprite/arrastia2021_scsprite.chromdata.zarr` | `build_scsprite2021.py` | `arrastia2021_scsprite` |
+| `tan2023_cerebellum_3d` | 400 | `tan2023_cerebellum/tan2023_cerebellum_3d.chromdata.zarr` | `build_dipc_structures.py tan2023_cerebellum`, `derive_embeddings.py --hic per_cell --leiden` | `tan2023_cerebellum_3d` |
+| `flyamer2017_oocyte_zygote`, `collombet2020_embryo`, `zhou2024_mcf7`, `ulianov2021_bg3` | 52 / 171 / 43 / 6 | `flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `ulianov2021_snhic/` + `<id>.chromdata.zarr` | `build_schic_pairs.py <folder name>` | the folder names |
+| `li2023_scnanohic_gm12878` | 265 | `li2023_scnanohic/li2023_scnanohic_gm12878.chromdata.zarr` | `build_scnanohic2023.py` | `li2023_scnanohic` |
 | `xu2025_sperm_human`, `xu2025_sperm_mouse` | 1,017 / 704 | `xu2025_sperm/<id>.chromdata.zarr` | `build_dipc_structures.py xu2025_sperm`, `derive_embeddings.py --hic per_cell --leiden` | `xu2025_sperm` |
 | `payne2021_igs_embryo`, `payne2021_igs_pgp1` | 23 / 3 | `payne2021_igs/<id>.chromdata.zarr` | loaders of the same names (see *`payne2021_igs/`*); traces are sets of reads (`trace_kind` `set`), the thumbnails dots | `payne2021_igs` |
 | `beckwith2025_mitosis`, `beckwith2025_looptrace`, `beckwith2025_looptrace_fish` | 177 / 186 / 57 | `beckwith2025/<id>.chromdata.zarr` | loaders of the same names (see *`beckwith2025/`*) | `beckwith2025_mitosis`, `beckwith2025_looptrace` |
@@ -1183,7 +1189,7 @@ Figure 3 datasets.
 - Not fetched: ChAIR (Nat. Methods 2025; CNCB OMIX009588 / 9589, 120 GB from China), Nagano 2013 (10 Th1
   cells), Ramani 2017 sciHi-C (cell lines, hg19 / mm10 mix).
 
-### Single-cell Hi-C with the authors' structures (`tan2019_dipc/`, `xu2025_sperm/`, `wu2024_limca/`, `wu2024_limca_human/`, `liu2026_hires_xci/`, `lando2024_mesc/`, `zhou2019_rice/`)
+### Single-cell Hi-C with the authors' structures (`tan2019_dipc/`, `tan2023_cerebellum/`, `xu2025_sperm/`, `wu2024_limca/`, `wu2024_limca_human/`, `liu2026_hires_xci/`, `lando2024_mesc/`, `zhou2019_rice/`)
 
 Studies that deposit, per cell, the contacts and the authors' own 3-D structure.  `build_dipc_structures.py STUDY`
 (hickit / Dip-C `.3dg`, 20 kb particles averaged to 100 kb, or 200 kb for HiRES) and `build_nuc_structures.py
@@ -1239,6 +1245,18 @@ labels).
   Check: contacting 100-kb bins more than 200 kb apart lie 0.17-0.40 times as far apart as random pairs at the
   same separation in 13 cells; in Shoot_cell_3 and Sperm_2 0.79-0.90 (no other chain fits their contacts better).
   No map figure (too few contacts); its 15 cells form one Leiden cluster, so none is kept.  Atlas `zhou2019_rice`.
+- **Tan 2023 cerebellum** (Tan L *et al.*, *Science* 381:1112, 2023, doi:10.1126/science.adh3253; GEO GSE246785,
+  per-cell files in tarballs): the authors modelled the cells of the F1-hybrid (P0, P14, P21, P56) and
+  Purkinje-enriched (P56) samples twice, with a female and a male genome (`3d_model_{female,male}_clean.20k`, one
+  run per cell, some empty), with an RMSD between runs per model (`rmsd.info`) and an X-to-autosome ratio per cell
+  (`x2a.txt`: 0.47-0.49 or 0.86-0.91).  `build_dipc_structures.py tan2023_cerebellum` takes the model of the cell's
+  sex (ratio above 0.7 female, below 0.6 male) when its RMSD is at most 1.5 particle radii (`TAN2023_MAX_RMSD`;
+  242 of 675 sex-matched models, median 0.57 — many are far worse, the Purkinje-enriched ones above all) and the
+  imputed-haplotype pairs of that sex (114.9 M contacts), out of the tarballs once (`raw/cells`); 13.3 GB fetched
+  (`tan2023_cerebellum_3d`).  Chromosome Y is left out (the chromosomes are those of the first cell's pairs).
+  Check (2026-11-01): contacting 100-kb bins more than 2 Mb apart lie 0.29 times as far apart as random pairs at
+  the same separation (closer copy pair; 0.27-0.33 over 60 cells).  The Hi-C Leiden clusters follow age: P0 in one,
+  most P14 / P21 cells in a second, most P56 cells in a third.  Atlas `tan2023_cerebellum_3d`.
 
 ### Single-cell Hi-C without structures (`flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `tan2023_cerebellum/`, `ulianov2021_snhic/`)
 
