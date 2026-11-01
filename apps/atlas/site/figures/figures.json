@@ -1312,5 +1312,24 @@
   "resolution": 100000,
   "fill": 0.655,
   "map": "tan2023_cerebellum_3d.map.webp"
+ },
+ "tan2023_cerebellum": {
+  "section": null,
+  "color_by": "age",
+  "layout": "embedding",
+  "layout_key": "hic_umap",
+  "caption": "Cells on the contact embedding, by age",
+  "n": 6432,
+  "categories": 14,
+  "grid": false,
+  "space": "tan2023_cerebellum.space.webp",
+  "map_key": "bulk",
+  "map_label": "All 6,432 cells (merged)",
+  "chrom": "chr2",
+  "start": 27300000,
+  "end": 67400000,
+  "resolution": 100000,
+  "fill": 0.994,
+  "map": "tan2023_cerebellum.map.webp"
  }
 }
