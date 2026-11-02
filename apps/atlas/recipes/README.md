@@ -148,6 +148,8 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `arrastia2021_scsprite/`: Arrastia 2022 scSPRITE, the authors' clusters of 1,000 single mouse ES cells | 697 MB (1.3 GB decompressed) | fetch `arrastia2021_scsprite`; recipe `build_scsprite2021.py` | atlas store `arrastia2021_scsprite` |
 | `li2023_scnanohic/`: Li 2023 scNanoHi-C, the authors' contact tables of 24 GM12878 cells | 818 MB | fetch `li2023_scnanohic`; recipe `build_scnanohic2023.py` | atlas store `li2023_scnanohic_gm12878` |
 | `flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `ulianov2021_snhic/`: single-nucleus / single-cell Hi-C contact tables (oocytes and zygotes, early embryos, MCF7 lines, Drosophila BG3) | 490 MB / 8.1 GB / 2.4 GB / 7 MB | fetch the same names; recipe `build_schic_pairs.py` | atlas stores `flyamer2017_oocyte_zygote`, `collombet2020_embryo`, `zhou2024_mcf7`, `ulianov2021_bg3` |
+| `gassler2017_snhic/`, `nagano2013_th1/`: single-nucleus / single-cell Hi-C (zygote pronuclei of Scc1 / Wapl knockouts; the first single-cell Hi-C, Th1 cells) | 345 MB / 2 MB | fetch the same names; recipe `build_schic_pairs.py` | atlas stores `gassler2017_zygote`, `nagano2013_th1` |
+| `lu2025_scnanohic2/`: Lu 2025 scNanoHi-C2 of mouse fetal germ cells, E11.5-E18.5 (2,150 cells passing the authors' filter; structures of 468) | 21.4 GB (per-cell .mcool per library, cell table, structures; the per-read parquet files, 88 GB, not fetched) | fetch `lu2025_scnanohic2`; recipes `build_schic_pairs.py`, `build_dipc_structures.py` | atlas stores `lu2025_egc`, `lu2025_egc_3d` |
 | `tan2023_cerebellum/`: Tan 2023 Dip-C of the mouse cerebellum, P0-P637 (6,432 cells; structures of 675) | 27.7 GB (all-cell pairs) + 13.3 GB (structures and their pairs) | fetch `tan2023_cerebellum`, `tan2023_cerebellum_3d`; recipes `build_schic_pairs.py`, `build_dipc_structures.py` | atlas stores `tan2023_cerebellum`, `tan2023_cerebellum_3d` |
 | `spacea_ma2026/`: Ma 2026 SpaceA, spatial SPRITE of 9 mouse embryo sections, E11.5-E14.5 (5 libraries, 17 runs) | 2.7 TB fastq; C6 run 1 alone: clusters 87 MB, store 550 MB with the derived maps | fetch `ma2026_spacea_<library>` (GSA, academic use); recipe `spacea_ma2026/slurm/` (a compute cluster) | per-spot check of `ChromData.clusters` (U-Chrom PR #153); the browser's cluster track; not in the atlas |
 | `wu2025_scmicroc/`: Wu 2025 scMicro-C GM12878, 12 deepest cells | 3.1 GB (102 GB streamed) | fetch `wu2025_scmicroc` | EMber deep development and test (PREREG §11); Fig. 3a / S8 |
@@ -675,8 +677,11 @@ brain cells).
 | `wu2024_limca_gm12878` | 835 | `wu2024_limca_human/wu2024_limca_gm12878.chromdata.zarr` | `build_dipc_structures.py wu2024_limca_human`, `derive_embeddings.py --hic per_cell --leiden` | `wu2024_limca_human` |
 | `arrastia2021_scsprite` | 2,634 | `arrastia2021_scsprite/arrastia2021_scsprite.chromdata.zarr` | `build_scsprite2021.py` | `arrastia2021_scsprite` |
 | `tan2023_cerebellum_3d` | 400 | `tan2023_cerebellum/tan2023_cerebellum_3d.chromdata.zarr` | `build_dipc_structures.py tan2023_cerebellum`, `derive_embeddings.py --hic per_cell --leiden` | `tan2023_cerebellum_3d` |
+| `lu2025_egc_3d` | 778 | `lu2025_scnanohic2/lu2025_egc_3d.chromdata.zarr` | `build_dipc_structures.py lu2025_scnanohic2`, `derive_embeddings.py --hic per_cell --leiden` | `lu2025_scnanohic2` |
+| `lu2025_egc` | 468 | `lu2025_scnanohic2/lu2025_egc.chromdata.zarr` | `build_schic_pairs.py lu2025_scnanohic2` | `lu2025_scnanohic2` |
 | `tan2023_cerebellum` | 1,610 | `tan2023_cerebellum/tan2023_cerebellum.chromdata.zarr` | `build_schic_pairs.py tan2023_cerebellum` | `tan2023_cerebellum` |
 | `flyamer2017_oocyte_zygote`, `collombet2020_embryo`, `zhou2024_mcf7`, `ulianov2021_bg3` | 52 / 171 / 43 / 6 | `flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `ulianov2021_snhic/` + `<id>.chromdata.zarr` | `build_schic_pairs.py <folder name>` | the folder names |
+| `gassler2017_zygote`, `nagano2013_th1` | 27 / 6 | `gassler2017_snhic/gassler2017_zygote.chromdata.zarr`, `nagano2013_th1/nagano2013_th1.chromdata.zarr` | `build_schic_pairs.py gassler2017_snhic`, `... nagano2013_th1` | `gassler2017_snhic`, `nagano2013_th1` |
 | `li2023_scnanohic_gm12878` | 265 | `li2023_scnanohic/li2023_scnanohic_gm12878.chromdata.zarr` | `build_scnanohic2023.py` | `li2023_scnanohic` |
 | `xu2025_sperm_human`, `xu2025_sperm_mouse` | 1,017 / 704 | `xu2025_sperm/<id>.chromdata.zarr` | `build_dipc_structures.py xu2025_sperm`, `derive_embeddings.py --hic per_cell --leiden` | `xu2025_sperm` |
 | `payne2021_igs_embryo`, `payne2021_igs_pgp1` | 23 / 3 | `payne2021_igs/<id>.chromdata.zarr` | loaders of the same names (see *`payne2021_igs/`*); traces are sets of reads (`trace_kind` `set`), the thumbnails dots | `payne2021_igs` |
@@ -1190,7 +1195,7 @@ Figure 3 datasets.
 - Not fetched: ChAIR (Nat. Methods 2025; CNCB OMIX009588 / 9589, 120 GB from China), Nagano 2013 (10 Th1
   cells), Ramani 2017 sciHi-C (cell lines, hg19 / mm10 mix).
 
-### Single-cell Hi-C with the authors' structures (`tan2019_dipc/`, `tan2023_cerebellum/`, `xu2025_sperm/`, `wu2024_limca/`, `wu2024_limca_human/`, `liu2026_hires_xci/`, `lando2024_mesc/`, `zhou2019_rice/`)
+### Single-cell Hi-C with the authors' structures (`tan2019_dipc/`, `tan2023_cerebellum/`, `lu2025_scnanohic2/`, `xu2025_sperm/`, `wu2024_limca/`, `wu2024_limca_human/`, `liu2026_hires_xci/`, `lando2024_mesc/`, `zhou2019_rice/`)
 
 Studies that deposit, per cell, the contacts and the authors' own 3-D structure.  `build_dipc_structures.py STUDY`
 (hickit / Dip-C `.3dg`, 20 kb particles averaged to 100 kb, or 200 kb for HiRES) and `build_nuc_structures.py
@@ -1258,8 +1263,24 @@ labels).
   Check (2026-11-01): contacting 100-kb bins more than 2 Mb apart lie 0.29 times as far apart as random pairs at
   the same separation (closer copy pair; 0.27-0.33 over 60 cells).  The Hi-C Leiden clusters follow age: P0 in one,
   most P14 / P21 cells in a second, most P56 cells in a third.  Atlas `tan2023_cerebellum_3d`.
+- **Lu 2025 fetal germ cells** (Lu J *et al.*, *Nat Struct Mol Biol* 32:2112, 2025, doi:10.1038/s41594-025-01604-7;
+  GEO GSE269496): scNanoHi-C2 (long-read single-cell Hi-C) of mouse fetal germ cells, E11.5 to E18.5.  The deposit
+  has one `.mcool` tarball per library (23; a 10 kb to 2.5 Mb `.mcool` per cell, haplotypes merged), the cell table
+  (`GSE269496_scNano-HiC2_EGC_allcells_metadata.xlsx`, sheet FGC: 2,888 cells, 2,150 passing the authors' filter;
+  stage, sex, batch, trans ratio, contact count) and one 50 kb diploid structure per cell for 468 of them
+  (`GSE269496_FGC_models_50k.tar.gz`, named `rep1` / `rep2` / `rep3`, one file per cell); 21.4 GB
+  (`lu2025_scnanohic2`; the per-read parquet files, 88 GB, are not fetched).  The cells are `EGC_*` in the table
+  and `FGC_*` in the files.  `build_schic_pairs.py lu2025_scnanohic2` reads the 10 kb level of each passing cell's
+  `.mcool` (out of the tarballs once, `raw/cells`), a pixel of count *n* giving *n* contacts at the bin centres:
+  1.16 billion, each cell's count within 0.3 % of the table's.  Its contact embedding's clusters follow stage and
+  sex (stage ARI 0.19, sex 0.12, batch 0.03): one holds 453 of the 711 female cells of E16.5-E18.5 and no male
+  cell, another 259 of the 506 male cells.  Atlas `lu2025_egc`.  `build_dipc_structures.py lu2025_scnanohic2`
+  takes the 468 structures (all of passing cells; 50 kb averaged to 100 kb, `res_model`) with the same contacts.
+  Check (2026-11-01): contacting 100-kb bins more than 2 Mb apart lie 0.39 times as far apart as random pairs at
+  the same separation (closer copy pair; 0.32-0.62 over 60 cells).  Leiden clusters follow stage (50 of the 55
+  E11.5 cells in one).  Atlas `lu2025_egc_3d`.
 
-### Single-cell Hi-C without structures (`flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `tan2023_cerebellum/`, `ulianov2021_snhic/`)
+### Single-cell Hi-C without structures (`flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `tan2023_cerebellum/`, `ulianov2021_snhic/`, `gassler2017_snhic/`, `nagano2013_th1/`)
 
 Studies that deposit one contact table per cell and no structure.  `build_schic_pairs.py STUDY` bins each cell's
 contacts (both homologs together, alleles ignored; autosomes, X and Y) into a per-cell 1-Mb `.scool` (linked
@@ -1303,6 +1324,18 @@ cells without a contact on those chromosomes are dropped.  The GEO files of thes
   per pair of restriction fragments; dm3, arms 2L, 2R, 3L, 3R and 4) and of the population; 7 MB
   (`ulianov2021_snhic`).  Taken as deposited (`build_schic_pairs.py ulianov2021_snhic`: one `.scool` of the 20 maps,
   the population map zoomed to 20 - 100 kb and balanced), 664,404 contacts; no embedding.  Atlas `ulianov2021_bg3`.
+- **Gassler 2017** (Gassler J *et al.*, *EMBO J* 36:3600, 2017, doi:10.15252/embj.201798083; GEO GSE100569): the
+  authors' maps of 144 zygote pronuclei (filtered as in Flyamer 2017, read starts binned; 1, 10, 40 and 100 kb, the
+  10 kb `.cool` fetched; mm9), 345 MB (`gassler2017_snhic`): Scc1 maternal knockouts (`Scc1delta(m)/+(p)`, 45) and
+  controls (31), Wapl maternal knockouts (18) and controls (18), wild-type G2 zygotes (32); the parent as deposited
+  (`sex/reassigned-sex`: maternal, paternal, both, `bad` = not identified).  Each pixel is taken as `count` contacts at
+  its bin midpoints.  26.9 M contacts, median 178,000 per pronucleus, 93 % cis.  The Leiden clusters split the parents
+  (53 of 60 paternal pronuclei in two clusters, 62 of 74 maternal ones in two others); one cluster holds 25 of the 45
+  Scc1 knockouts, whose maternal pronuclei lose loops and domains in the paper.  Atlas `gassler2017_zygote`.
+- **Nagano 2013** (Nagano T *et al.*, *Nature* 502:59, 2013, doi:10.1038/nature12593; GEO GSE48262): the first
+  single-cell Hi-C, the unique fragment-end pairs (`chrom1 coord1 chrom2 coord2`, chromosomes without `chr`; mm9) of
+  the 10 deposited CD4+ Th1 cells, 2 MB (`nagano2013_th1`); the ensemble Hi-C of the series is not fetched.  11,156 to
+  30,665 contacts per cell, 74-93 % cis.  No embedding (`"embed": False`: too few cells).  Atlas `nagano2013_th1`.
 
 ## Figure 3 datasets — bridges between contacts and geometry
 

@@ -15,11 +15,15 @@ These studies deposit, per cell, the contact pairs and 20 kb structures (``pytho
   tan2023_cerebellum  Tan et al. 2023, Science 381:1112 (GEO GSE246785): Dip-C of the mouse cerebellum; the cells
                       of the F1-hybrid and Purkinje-enriched samples with a structure (one run, the model of the
                       cell's sex) and an RMSD of at most 1.5 (``TAN2023_MAX_RMSD``); store tan2023_cerebellum_3d
+  lu2025_scnanohic2   Lu et al. 2025, Nat Struct Mol Biol 32:2112 (GEO GSE269496): scNanoHi-C2 of mouse embryonic
+                      germ cells; the cells passing the authors' filter with a 50 kb structure (one per cell),
+                      contacts from their per-cell .mcool (``build_schic_pairs.py``); store lu2025_egc_3d
 
 Every store (``<data>/<name>/<store>.chromdata.zarr``) has
 
 * 3-D coordinates: the authors' first structure of each cell coarse-grained to ``res_3d`` (the mean of its 20 kb
-  particles in each bin of each copy), one trace per cell, chromosome and copy (``<cell>_<chrom>[_<mat|pat>]``);
+  particles, 50 kb for Lu 2025 (``res_model``), in each bin of each copy), one trace per cell, chromosome and copy
+  (``<cell>_<chrom>[_<mat|pat>]``);
 * where a second run of the cell is deposited, that run as layer ``run_2`` on the same particles, its deviation
   after superposition per cell (``cells``: ``rmsd_run_2``, ``median_dev_run_2``; rotation + translation, mirror
   allowed) and per particle (``spot_tracks['run_deviation']``, marked in ``uns['derived_spot_tracks']``);
@@ -52,7 +56,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sc_hic_common import (HG38, MM10, ContactBinner, balance_mcool, bin_table, chromsizes,  # noqa: E402
-                           empty_spots, hvg_zscores, log, rna_h5ad)
+                           cool_contacts, empty_spots, extract_members, hvg_zscores, log, rna_h5ad)
 
 RES_MAP = 100_000                       # per-cell maps and the finest level of the bulk map
 
@@ -266,8 +270,35 @@ def tan2023(raw: Path) -> dict:
                       "with their imputed haplotype contact pairs"}
 
 
+def lu2025(raw: Path) -> dict:
+    """Lu 2025 embryonic germ cells (scNanoHi-C2): the cells passing the authors' filter with a 50 kb structure (one
+    per cell, named rep1, rep2 or rep3; taken out of the tarball into ``raw/cells`` once); their contacts are the
+    per-cell maps of ``build_schic_pairs.py lu2025_scnanohic2`` (10 kb pixels)."""
+    import tarfile
+    from build_schic_pairs import lu2025 as lu2025_maps
+
+    maps = lu2025_maps(raw)
+    tar = raw / "GSE269496_FGC_models_50k.tar.gz"
+    with tarfile.open(tar) as t:
+        names = [Path(n).name for n in t.getnames()]
+    models = {}
+    for n in names:
+        m = re.match(r"^(FGC_.+?)_mm10_MGP\.rep[123]\.50k\.clean\.3dg\.gz$", n)
+        if m:
+            models[m[1].replace("FGC_", "EGC_", 1)] = n
+    extract_members([tar], list(models.values()), raw / "cells")
+    files = {c: (maps["files"][c], raw / "cells" / n, None) for c, n in models.items() if c in maps["files"]}
+    cells = maps["stores"]["lu2025_egc"]
+    log(f"lu2025: {len(models):,} cells with a structure, {len(files):,} of them passing the filter with a map")
+    return {"stores": {"lu2025_egc_3d": cells.reindex(sorted(files))}, "files": files, "assembly": "mm10",
+            "res_3d": 100_000, "res_model": 50_000, "runs": "one per cell",
+            "source": "Lu et al. 2025, Nat Struct Mol Biol 32:2112 (scNanoHi-C2 of mouse embryonic germ cells; GEO "
+                      "GSE269496): the authors' 50 kb diploid structure of each cell passing "
+                      "their filter, with the cells' contacts (10 kb level of their .mcool, haplotypes merged)"}
+
+
 STUDIES = {"tan2019_dipc": tan2019, "xu2025_sperm": xu2025, "wu2024_limca": wu2024, "wu2024_limca_human": wu2024h,
-           "liu2026_hires_xci": liu2026, "tan2023_cerebellum": tan2023}
+           "liu2026_hires_xci": liu2026, "tan2023_cerebellum": tan2023, "lu2025_scnanohic2": lu2025}
 
 
 # -- workers -----------------------------------------------------------------------------------------------------
@@ -281,9 +312,13 @@ def _init(km):
 
 
 def _bin_pairs(args):
+    """One cell's contacts: a .pairs file, or a cooler URI (``...mcool::/resolutions/N``: pixels as contacts)."""
     ci, path = args
-    df = pd.read_csv(path, sep="\t", comment="#", header=None, usecols=[1, 2, 3, 4],
-                     names=["chr1", "pos1", "chr2", "pos2"], dtype={"chr1": str, "chr2": str})
+    if "::" in str(path):
+        df = cool_contacts(path).rename(columns={"chrom1": "chr1", "chrom2": "chr2"})
+    else:
+        df = pd.read_csv(path, sep="\t", comment="#", header=None, usecols=[1, 2, 3, 4],
+                         names=["chr1", "pos1", "chr2", "pos2"], dtype={"chr1": str, "chr2": str})
     ck, bk = _KM.keys(_KM.chrom_codes(df["chr1"]), df["pos1"].to_numpy(), _KM.chrom_codes(df["chr2"]),
                       df["pos2"].to_numpy())
     return ci, ck, bk, len(df)
@@ -395,7 +430,8 @@ def build_store(name: str, cells: pd.DataFrame, study: dict, out_dir: Path, work
 
     meta = ChromData(np.zeros((0, 3)), empty_spots(), cells=cells)
     uns = {"genome_assembly": assembly, "source": study["source"], "xyz_unit": "particle radius",
-           "coordinate_status": f"the authors' 20 kb structures (hickit / Dip-C .3dg; the first run of each cell) "
+           "coordinate_status": f"the authors' {study.get('res_model', 20_000) // 1000} kb structures (hickit / Dip-C "
+                                f".3dg; {study.get('runs', 'the first run of each cell')}) "
                                 f"coarse-grained to {res // 1000} kb by averaging the particles of each bin of "
                                 f"each copy"}
     if "rna" in study:

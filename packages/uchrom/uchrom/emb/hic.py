@@ -127,7 +127,8 @@ def schicluster_impute(mats: np.ndarray, *, pad: int = 1, rp: float = 0.5, log: 
 
 def schicluster_features(per_chrom, *, pad: int = 1, rp: float = 0.5, log: bool = True,
                          top_pct: float = 20.0, n_per_chrom: Optional[int] = None, batch: int = 256,
-                         random_state: int = 0, n_threads: int = 0) -> Tuple[np.ndarray, List[str]]:
+                         random_state: int = 0, n_threads: int = 0,
+                         pca: str = "full") -> Tuple[np.ndarray, List[str]]:
     """scHiCluster features, per chromosome (module docstring, step 4).
 
     ``per_chrom`` maps chrom → either an ``(n_cells, n, n)`` array of raw counts or a callable
@@ -135,12 +136,18 @@ def schicluster_features(per_chrom, *, pad: int = 1, rp: float = 0.5, log: bool 
     together with ``n_cells`` — pass ``(callable, n_cells, n)`` tuples for that.  ``n_per_chrom``: PCs per
     chromosome (None: the authors' ``int(0.2 · min(cells, n²)) − 1``); ``top_pct`` the share set to 1
     (``top_pct < 0``: the imputed values, not binarised, as the authors' ``prct=-1``); ``n_threads`` as
-    :func:`schicluster_impute`.
+    :func:`schicluster_impute`.  ``pca="incremental"`` (needs ``n_per_chrom``) fits each chromosome's PCA in
+    batches of cells (scikit-learn's ``IncrementalPCA``, float32) instead of on a float64 copy of all cells' features:
+    for 10⁵ cells; the components agree with the full PCA up to sign and rounding.
 
     Returns ``(features, column_names)`` — the PCs of all chromosomes, concatenated (``chr1_PC1``, …).
     """
-    from sklearn.decomposition import PCA
+    from sklearn.decomposition import PCA, IncrementalPCA
 
+    if pca not in ("full", "incremental"):
+        raise ValueError(f"pca must be 'full' or 'incremental', not {pca!r}")
+    if pca == "incremental" and n_per_chrom is None:
+        raise ValueError("pca='incremental' needs n_per_chrom (the authors' rule gives thousands of components)")
     blocks, names = [], []
     for chrom, spec in per_chrom.items():
         if isinstance(spec, tuple):
@@ -166,7 +173,16 @@ def schicluster_features(per_chrom, *, pad: int = 1, rp: float = 0.5, log: bool 
         k = int(min(vec.shape) * 0.2) - 1 if n_per_chrom is None else int(min(n_per_chrom, min(vec.shape) - 1))
         if k < 1:
             continue
-        pcs = PCA(n_components=k, random_state=random_state).fit_transform(vec.astype(np.float64))
+        if pca == "full":
+            pcs = PCA(n_components=k, random_state=random_state).fit_transform(vec.astype(np.float64))
+        else:
+            step = max(10 * k, 4096)
+            ipca = IncrementalPCA(n_components=k)
+            for s in range(0, n_cells, step):
+                part = vec[s:s + step]
+                if len(part) >= k:                     # partial_fit needs at least k rows
+                    ipca.partial_fit(part.astype(np.float32))
+            pcs = np.vstack([ipca.transform(vec[s:s + step].astype(np.float32)) for s in range(0, n_cells, step)])
         blocks.append(pcs.astype(np.float32))
         names += [f"{chrom}_PC{i + 1}" for i in range(k)]
     return np.hstack(blocks), names
@@ -174,7 +190,8 @@ def schicluster_features(per_chrom, *, pad: int = 1, rp: float = 0.5, log: bool 
 
 def scool_cell_features(scool: str, cell_names: Sequence[str], *, chroms: Optional[Sequence[str]] = None,
                         pad: int = 1, rp: float = 0.5, top_pct: float = 20.0, n_per_chrom: Optional[int] = None,
-                        random_state: int = 0, n_threads: int = 0) -> Tuple[np.ndarray, List[str], np.ndarray]:
+                        random_state: int = 0, n_threads: int = 0,
+                        pca: str = "full") -> Tuple[np.ndarray, List[str], np.ndarray]:
     """Read one contact map per cell from a ``.scool`` and compute
     :func:`schicluster_features`.
 
@@ -186,13 +203,15 @@ def scool_cell_features(scool: str, cell_names: Sequence[str], *, chroms: Option
     """
     feats, cols, depth, _ = _scool_cell_features(scool, cell_names, chroms=chroms, pad=pad, rp=rp, top_pct=top_pct,
                                                  n_per_chrom=n_per_chrom, random_state=random_state,
-                                                 n_threads=n_threads)
+                                                 n_threads=n_threads, pca=pca)
     return feats, cols, depth
 
 
-def _scool_cell_features(scool, cell_names, *, chroms, pad, rp, top_pct, n_per_chrom, random_state, n_threads=0):
+def _scool_cell_features(scool, cell_names, *, chroms, pad, rp, top_pct, n_per_chrom, random_state, n_threads=0,
+                         pca="full"):
     """:func:`scool_cell_features`, also returning each cell's intra-chromosomal contacts of ``chroms``."""
     import cooler
+    import h5py
 
     names_in_file = set(cooler.fileops.list_scool_cells(scool))
     first = next(iter(sorted(names_in_file)))
@@ -202,45 +221,53 @@ def _scool_cell_features(scool, cell_names, *, chroms, pad, rp, top_pct, n_per_c
     chrom_of_bin = bins["chrom"].astype(str).to_numpy()
     offs = {c: int(np.flatnonzero(chrom_of_bin == c)[0]) for c in chroms if (chrom_of_bin == c).any()}
     sizes = {c: int((chrom_of_bin == c).sum()) for c in offs}
-    # keep each cell's intra-chromosomal pixels sparse; densify per batch
-    pix: Dict[str, List[Tuple[np.ndarray, np.ndarray, np.ndarray]]] = {c: [] for c in offs}
-    empty = (np.zeros(0, np.int64), np.zeros(0, np.int64), np.zeros(0, np.float32))
+    # each chromosome's pixels are read per batch of cells, straight from the file (bounded memory)
+    f = h5py.File(scool, "r")
+    starts = np.array([offs[c] for c in offs] + [0], dtype=np.int64)
+    ends = np.array([offs[c] + sizes[c] for c in offs] + [0], dtype=np.int64)
     depth = np.zeros(len(cell_names), dtype=np.int64)
     cis = np.zeros(len(cell_names), dtype=np.int64)
+    # per cell: the pixel range of each chromosome's rows ((-1, -1): not in the file)
+    lo_px = np.full((len(cell_names), len(offs)), -1, dtype=np.int64)
+    hi_px = np.full((len(cell_names), len(offs)), -1, dtype=np.int64)
     for i, name in enumerate(cell_names):
-        path = f"/cells/{name}"
-        if path not in names_in_file:
-            for c in offs:
-                pix[c].append(empty)
+        if f"/cells/{name}" not in names_in_file:
             continue
-        px = cooler.Cooler(f"{scool}::{path}").pixels()[:]
-        b1 = px["bin1_id"].to_numpy()
-        b2 = px["bin2_id"].to_numpy()
-        raw = px["count"].to_numpy()
-        cnt = raw.astype(np.float32)
-        depth[i] = int(cnt.sum())
-        c1, c2 = chrom_of_bin[b1], chrom_of_bin[b2]
-        for c, o in offs.items():
-            sel = (c1 == c) & (c2 == c)
-            pix[c].append((b1[sel] - o, b2[sel] - o, cnt[sel]))
-            cis[i] += int(raw[sel].sum())
+        g = f["cells"][name]
+        raw = g["pixels/count"][:]
+        depth[i] = int(raw.sum())
+        c1, c2 = chrom_of_bin[g["pixels/bin1_id"][:]], chrom_of_bin[g["pixels/bin2_id"][:]]
+        cis[i] = int(raw[(c1 == c2) & np.isin(c1, list(offs))].sum())
+        b1_off = g["indexes/bin1_offset"][:]
+        lo_px[i], hi_px[i] = b1_off[starts[:-1]], b1_off[ends[:-1]]
 
-    def getter(c: str):
-        n = sizes[c]
+    def getter(k: int, c: str):
+        n, o = sizes[c], offs[c]
 
         def get(lo: int, hi: int) -> np.ndarray:
             m = np.zeros((hi - lo, n * n), dtype=np.float64)
             for j in range(lo, hi):
-                r, q, v = pix[c][j]
+                a, b = lo_px[j, k], hi_px[j, k]
+                if a < 0 or a == b:
+                    continue
+                g = f["cells"][cell_names[j]]["pixels"]
+                b2 = g["bin2_id"][a:b]
+                sel = b2 < o + n                      # rows of this chromosome, columns too
+                r = g["bin1_id"][a:b][sel] - o
+                q = b2[sel] - o
+                v = g["count"][a:b][sel].astype(np.float32)
                 off = r != q
                 idx = np.concatenate([r * n + q, (q * n + r)[off]])
                 m[j - lo] = np.bincount(idx, weights=np.concatenate([v, v[off]]), minlength=n * n)
             return m.reshape(hi - lo, n, n)
         return get
 
-    spec = {c: (getter(c), len(cell_names), sizes[c]) for c in offs}
-    feats, cols = schicluster_features(spec, pad=pad, rp=rp, top_pct=top_pct, n_per_chrom=n_per_chrom,
-                                       random_state=random_state, n_threads=n_threads)
+    spec = {c: (getter(k, c), len(cell_names), sizes[c]) for k, c in enumerate(offs)}
+    try:
+        feats, cols = schicluster_features(spec, pad=pad, rp=rp, top_pct=top_pct, n_per_chrom=n_per_chrom,
+                                           random_state=random_state, n_threads=n_threads, pca=pca)
+    finally:
+        f.close()
     return feats, cols, depth, cis
 
 
@@ -258,6 +285,7 @@ def embed_contacts(
     rp: float = 0.5,
     top_pct: float = 20.0,
     n_per_chrom: Optional[int] = None,
+    pca: str = "full",
     methods: Sequence[str] = ("pca", "tsne", "umap"),
     n_pcs: int = 20,
     random_state: int = 0,
@@ -293,6 +321,9 @@ def embed_contacts(
     pad, rp, top_pct, n_per_chrom
         scHiCluster's filter half-width, walk weight (``Q ← (1 − rp) I + rp Q P``; 0.5), share of entries kept,
         PCs per chromosome (None: the authors' rule; see :func:`schicluster_features`).
+    pca : ``"full"`` or ``"incremental"``
+        How each chromosome's PCA is fitted (:func:`schicluster_features`); ``"incremental"`` (with ``n_per_chrom``)
+        for 10⁵ cells.
     methods, n_pcs, random_state
         Passed to :func:`uchrom.emb.embed_cells` (``random_state`` also seeds the per-chromosome PCAs).
     key_added : str
@@ -337,11 +368,12 @@ def embed_contacts(
     resolution = int(first.binsize)
     feats, cols, _, depth = _scool_cell_features(scool, ids, chroms=chroms, pad=pad, rp=rp, top_pct=top_pct,
                                                  n_per_chrom=n_per_chrom, random_state=random_state,
-                                                 n_threads=n_threads)
+                                                 n_threads=n_threads, pca=pca)
     used = sorted({c.rsplit("_PC", 1)[0] for c in cols}, key=chroms.index)
     text = (f"scHiCluster: {_size(resolution)} maps of {len(used)} chromosomes ({used[0]}–{used[-1]}); "
             f"log2, {2 * pad + 1}x{2 * pad + 1} mean filter, random walk (rp={rp}), top {top_pct:g}% binarised, "
-            f"{'int(0.2 min(cells, bins^2)) - 1' if n_per_chrom is None else n_per_chrom} PCs per chromosome")
+            f"{'int(0.2 min(cells, bins^2)) - 1' if n_per_chrom is None else n_per_chrom} PCs per chromosome"
+            f"{' (incremental PCA)' if pca == 'incremental' else ''}")
     subset = None if ids == all_ids else ids
     out = embed_cells(cd, source=key_added, matrix=feats, cells=subset, normalization="none", methods=methods,
                       n_pcs=n_pcs, random_state=random_state, modality="Hi-C", features=text)
@@ -357,6 +389,7 @@ def embed_contacts(
     on_cells[pos] = feats
     settings = {"method": method, "contacts": contacts, "chroms": used, "resolution": resolution, "pad": int(pad),
                 "rp": float(rp), "top_pct": float(top_pct), "n_per_chrom": None if n_per_chrom is None else int(n_per_chrom),
+                "pca": pca,
                 "n_features": int(feats.shape[1]), "n_pcs": int(n_pcs), "random_state": int(random_state),
                 "n_cells": len(ids), "embeddings": sorted(out)}
     cd.uns[key_added] = settings

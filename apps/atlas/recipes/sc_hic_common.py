@@ -33,10 +33,13 @@ def log(msg: str) -> None:
 
 
 def chromsizes(path: Optional[Path] = None, assembly: str = "mm10", keep: Optional[Sequence[str]] = None) -> Dict[str, int]:
-    """Chromosome sizes from a pairs header (``#chromosome:`` / ``#chromsize:`` / ``#samheader: @SQ``) or, without
-    one, UCSC's table for ``assembly``; only the ``keep`` chromosomes (default: autosomes, X, Y), in that order."""
+    """Chromosome sizes from a pairs header (``#chromosome:`` / ``#chromsize:`` / ``#samheader: @SQ``), a cooler (URI)
+    or, without one, UCSC's table for ``assembly``; only the ``keep`` chromosomes (default: autosomes, X, Y), in that order."""
     sizes: Dict[str, int] = {}
-    if path is not None:
+    if path is not None and ("::" in str(path) or str(path).endswith((".cool", ".mcool"))):
+        import cooler
+        sizes = {str(k): int(v) for k, v in cooler.Cooler(str(path)).chromsizes.items()}
+    elif path is not None:
         opener = gzip.open if str(path).endswith(".gz") else open
         with opener(path, "rt") as fh:
             for line in fh:
@@ -102,6 +105,41 @@ def stream_pairs(path: Path, columns: Dict[str, int], *, block_mb: int = 256,
         proc.wait()
         if skipped[0]:
             log(f"  {path}: skipped {skipped[0]:,} malformed rows")
+
+
+def cool_contacts(uri: str) -> pd.DataFrame:
+    """The contacts of a single-cell map (a ``.cool`` or ``.mcool::/resolutions/N`` URI): each pixel repeated
+    ``count`` times at the midpoints of its bins; columns chrom1, pos1, chrom2, pos2."""
+    import cooler
+
+    clr = cooler.Cooler(str(uri))
+    bins, px = clr.bins()[["chrom", "start", "end"]][:], clr.pixels()[:]
+    mid = ((bins["start"] + bins["end"]) // 2).to_numpy()
+    b1, b2 = (np.repeat(px[c].to_numpy(), px["count"].to_numpy().astype(np.int64)) for c in ("bin1_id", "bin2_id"))
+    chrom = bins["chrom"].astype(str).to_numpy()
+    return pd.DataFrame({"chrom1": chrom[b1], "pos1": mid[b1], "chrom2": chrom[b2], "pos2": mid[b2]})
+
+
+def extract_members(tars: Iterable[Path], names: Iterable[str], out: Path) -> None:
+    """Write the members of ``tars`` whose file name is in ``names`` to ``out/<name>`` (those not there yet)."""
+    import tarfile
+
+    out.mkdir(parents=True, exist_ok=True)
+    want = {n for n in names if not (out / n).exists()}
+    for tar in tars if want else []:
+        with tarfile.open(tar, "r|gz") as t:
+            for mem in t:
+                base = Path(mem.name).name
+                if mem.isfile() and base in want:
+                    tmp = out / f"{base}.part"
+                    tmp.write_bytes(t.extractfile(mem).read())
+                    tmp.replace(out / base)
+
+
+def lu2025_map_name(cell: str) -> str:
+    """Lu 2025 (scNanoHi-C2): the file of a cell's map in the library tarballs ('EGC_E11.5_0513.P37B1' ->
+    'FGC_E11.5_0513.P37B1_mm10_MGP_chronly_sort.mcool')."""
+    return cell.replace("EGC_", "FGC_", 1) + "_mm10_MGP_chronly_sort.mcool"
 
 
 def bin_table(sizes: Dict[str, int], res: int) -> pd.DataFrame:
