@@ -1,6 +1,6 @@
 """Atlas stores of single-cell Hi-C deposited as one contact table per cell, without structures.
 
-Five studies (``python -m uchrom.datasets fetch NAME``; the raw files under ``<data>/<NAME>/raw``):
+Eight studies (``python -m uchrom.datasets fetch NAME``; the raw files under ``<data>/<NAME>/raw``):
 
   flyamer2017_snhic    Flyamer et al. 2017, Nature 544:110 (GEO GSE80006): snHi-C of single mouse oocytes (NSN, SN)
                        and zygote pronuclei (mm9) and of K562 cells (hg19); one ``-reads.csv.gz`` per nucleus (the
@@ -11,6 +11,14 @@ Five studies (``python -m uchrom.datasets fetch NAME``; the raw files under ``<d
                        derived lines of the deposit, MCF7TR and MCF7M1, HiC-Pro valid pairs (hg19)
   tan2023_cerebellum   Tan et al. 2023, Science 381:1112 (GEO GSE246785): Dip-C of the mouse cerebellum from birth
                        (P0) to P637, one tarball of every cell's contact pairs (``contacts_unisex``, mm10)
+  gassler2017_snhic    Gassler et al. 2017, EMBO J 36:3600 (GEO GSE100569): snHi-C of zygote pronuclei of Scc1 and
+                       Wapl knockout mice, their controls and wild-type G2 zygotes; the authors' 10 kb ``.cool`` of each
+                       pronucleus (mm9), pixels taken as contacts at the bin midpoints
+  nagano2013_th1       Nagano et al. 2013, Nature 502:59 (GEO GSE48262): single-cell Hi-C of 10 mouse Th1 cells, the
+                       unique fragment-end pairs of each (mm9); no embedding (too few cells)
+  lu2025_scnanohic2    Lu et al. 2025, Nat Struct Mol Biol 32:2112 (GEO GSE269496): scNanoHi-C2 of mouse embryonic
+                       germ cells, E11.5 to E18.5; the cells passing the authors' filter, the 10 kb level of their
+                       per-cell ``.mcool`` (in one tarball per library); store lu2025_egc
   ulianov2021_snhic    Ulianov et al. 2021, Nat Commun 12:41 (GEO GSE131811): the authors' 10 kb maps of their 20
                        best Drosophila BG3 nuclei and of the population (dm3); the maps are taken as deposited
 
@@ -45,14 +53,18 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_dipc_structures import _series_matrix  # noqa: E402
-from sc_hic_common import (HG38, MM10, ContactBinner, balance_mcool, chromsizes, empty_spots, log)  # noqa: E402
+from sc_hic_common import (HG38, MM10, ContactBinner, balance_mcool, chromsizes, cool_contacts,  # noqa: E402
+                           empty_spots, extract_members, log, lu2025_map_name)  # noqa: E402
 
 CELL_RES = 1_000_000
+YUAN2026_MIN_CONTACTS = 100_000      # wells kept (the deposit holds every well, empty ones too)
 
 #: how each deposit writes a contact: (separator, header row?, 0-based columns of chrom1, pos1, chrom2, pos2)
 FORMATS = {"flyamer": (",", True, (0, 2, 1, 3)),        # chr1,chr2,pos1,pos2,strand1,strand2 (chromosomes "1".."X")
            "hicpro": ("\t", False, (1, 2, 4, 5)),       # readID chr1 pos1 strand1 chr2 pos2 strand2 ...
-           "pairs": ("\t", False, (1, 2, 3, 4))}        # 4DN .pairs / hickit: readID chr1 pos1 chr2 pos2 ...
+           "pairs": ("\t", False, (1, 2, 3, 4)),       # 4DN .pairs / hickit: readID chr1 pos1 chr2 pos2 ...
+           "nagano": ("\t", True, (0, 1, 2, 3)),        # chrom1 coord1 chrom2 coord2 (chromosomes "1".."X")
+           "juicer": ("\t", False, (1, 2, 5, 6))}      # juicer short: str1 chr1 pos1 frag1 str2 chr2 pos2 frag2
 
 
 # -- the studies -------------------------------------------------------------------------------------------------
@@ -157,8 +169,151 @@ def tan2023(raw: Path) -> dict:
                       "ratios (sex: female above 0.7, male below 0.6)"}
 
 
+#: Gassler 2017 sample groups (the title after the number) -> genotype group
+_GASSLER_GROUPS = {"Scc1_KO": "Scc1 knockout", "Scc1-KO": "Scc1 knockout", "Scc1_flox": "Scc1 control",
+                   "Scc1-control": "Scc1 control", "Wapl_KO": "Wapl knockout", "Wapl-KO": "Wapl knockout",
+                   "Wapl_flox": "Wapl control", "Wapl-control": "Wapl control", "G2": "wild type, G2"}
+
+
+def gassler2017(raw: Path) -> dict:
+    """The authors' 10 kb maps of each pronucleus (``.cool``; decompressed next to the ``.cool.gz`` once)."""
+    files = {}
+    for p in sorted((raw / "cells").glob("GSM*.10000.cool.gz")):
+        dest = p.with_suffix("")
+        if not dest.exists():
+            tmp = dest.with_suffix(".part")
+            tmp.write_bytes(gzip.decompress(p.read_bytes()))
+            tmp.replace(dest)
+        files[re.match(r"^(GSM\d+)_", p.name)[1]] = dest
+    m = _series_matrix(sorted(raw.glob("GSE100569*_series_matrix.txt.gz")))
+    num, group = m["title"].str.extract(r"^(\d+)_(.+)$").T.to_numpy()
+    if not set(group) <= set(_GASSLER_GROUPS):
+        raise ValueError(f"gassler2017: unknown groups {sorted(set(group) - set(_GASSLER_GROUPS))}")
+    parent = m["sex/reassigned-sex"].replace({"bad": "not identified", "both": "both pronuclei"})
+    cells = pd.DataFrame({"gsm": m["geo_accession"].to_numpy(), "label": m["title"].to_numpy(),
+                          "group": [_GASSLER_GROUPS[g] for g in group], "genotype": m["genotype/variation"].to_numpy(),
+                          "pronucleus": parent.to_numpy(), "strain": m["strain background"].to_numpy()},
+                         index=[f"{int(n):03d}_{g}" for n, g in zip(num, group)])
+    cells["cell_type"] = cells["group"] + ", " + cells["pronucleus"]
+    files = {c: files[g] for c, g in cells["gsm"].items() if g in files}
+    return {"stores": {"gassler2017_zygote": cells.sort_index()}, "files": files, "format": "cool", "assembly": "mm9",
+            "source": "Gassler et al. 2017, EMBO J 36:3600 (snHi-C of zygote pronuclei of Scc1 and Wapl knockout "
+                      "mice and controls and of wild-type G2 zygotes; GEO GSE100569): the authors' 10 kb maps of each "
+                      "pronucleus (filtered as in Flyamer 2017, read starts), each pixel taken as count contacts at "
+                      "the bin midpoints"}
+
+
+def nagano2013(raw: Path) -> dict:
+    files = {f"cell-{int(re.search(r'_cell-(\d+)', p.name)[1]):02d}": p
+             for p in sorted((raw / "cells").glob("GSM*_cell-*.txt.gz"))}
+    cells = pd.DataFrame({"cell_type": "Th1"}, index=pd.Index(sorted(files), name="cell_id"))
+    return {"stores": {"nagano2013_th1": cells}, "files": files, "format": "nagano", "assembly": "mm9",
+            "embed": False,
+            "source": "Nagano et al. 2013, Nature 502:59 (single-cell Hi-C of mouse CD4+ Th1 cells; GEO GSE48262): the "
+                      "unique fragment-end pairs of each of the 10 deposited cells"}
+
+
+def lu2025(raw: Path) -> dict:
+    """The cells that pass the authors' filter (``filtration``), their per-cell ``.mcool`` taken out of the library
+    tarballs into ``raw/cells`` once and read at 10 kb."""
+    meta = pd.read_excel(raw / "GSE269496_scNano-HiC2_EGC_allcells_metadata.xlsx", sheet_name="FGC")
+    meta = meta[meta["filtration"] == "pass"].set_index("cell_id")
+    out = raw / "cells"
+    extract_members(sorted(raw.glob("GSM*_FGC_*.mcool.tar.gz")), [lu2025_map_name(c) for c in meta.index], out)
+    files = {c: f"{out / lu2025_map_name(c)}::/resolutions/10000" for c in meta.index
+             if (out / lu2025_map_name(c)).exists()}
+    stages = sorted(meta["stage"].unique(), key=lambda s: float(s[1:]))
+    cells = pd.DataFrame({"library": meta["library"], "stage": pd.Categorical(meta["stage"], categories=stages),
+                          "sex": meta["sex"].replace({"none": "not determined"}), "batch": meta["batch"],
+                          "trans_ratio_published": meta["filtered_trans_ratio"] / 100,
+                          "n_contacts_published": meta["filtered_pass_count"]}, index=meta.index)
+    cells["cell_type"] = np.where(cells["sex"] == "not determined", cells["stage"].astype(str),
+                                  cells["stage"].astype(str) + " " + cells["sex"])
+    log(f"lu2025: {len(meta):,} cells pass the authors' filter, {len(files):,} with a map")
+    return {"stores": {"lu2025_egc": cells.sort_index()}, "files": files, "format": "cool", "assembly": "mm10",
+            "source": "Lu et al. 2025, Nat Struct Mol Biol 32:2112 (scNanoHi-C2 of mouse embryonic germ cells, E11.5 "
+                      "to E18.5; GEO GSE269496): the cells passing the authors' filter, their per-cell maps (10 kb "
+                      "level of the deposited .mcool, pixels taken as contacts at the bin midpoints; haplotypes "
+                      "merged)"}
+
+
+#: Lee 2019 file names: <date>_snm3Cseq_hs_<age>_BA10_<donor>_<n>_<donor>_<plate>_<well>_<index>
+_LEE_RX = re.compile(r"^(GSM\d+)_(\d+)_snm3Cseq_hs_(\w+?)_BA10_(UMB\d+)_\d+_UMB\d+_(\d+)_([A-P]\d+)_(AD\d+)"
+                     r"_indexed_contacts\.txt\.gz$")
+
+
+def lee2019(raw: Path) -> dict:
+    """Lee 2019 prefrontal cortex: every deposited cell, with the cell type of BandNorm's table of this dataset (the
+    deposit has none; BandNorm's names are <date>_<age>_<plate>_<well>_<index>_<type>.txt)."""
+    files, rows = {}, []
+    for p in sorted((raw / "cells").glob("GSM*_indexed_contacts.txt.gz")):
+        gsm, date, age, donor, plate, well, index = _LEE_RX.match(p.name).groups()
+        cell = f"{date}_{age}_{plate}_{well}_{index}"
+        files[cell] = p
+        rows.append({"cell_id": cell, "gsm": gsm, "donor": donor, "age": age.replace("yr", " years"),
+                     "batch": f"{date}_{age}"})
+    cells = pd.DataFrame(rows).set_index("cell_id")
+    band = pd.read_csv(raw / "Lee2019_Summary.txt", sep="\t")
+    band.index = band["name"].str.replace(r"_[^_]+\.txt$", "", regex=True)
+    cells["cell_type"] = band["cell_type"].reindex(cells.index)
+    if cells["cell_type"].isna().any():
+        raise ValueError(f"lee2019: {int(cells['cell_type'].isna().sum())} cells without a type in BandNorm's table")
+    return {"stores": {"lee2019_pfc": cells}, "files": files, "format": "pairs", "assembly": "hg19",
+            "source": "Lee et al. 2019, Nat Methods 16:999 (snm3C-seq of human prefrontal cortex; GEO GSE130711): "
+                      "the contacts of each cell (indexed_contacts), cell types from BandNorm's table of this dataset "
+                      "(Zheng et al. 2022, Genome Biol 23:222)"}
+
+
+def yuan2026(raw: Path) -> dict:
+    """Yuan 2026 eye: every well of the 36 plates (the deposit is unfiltered and has no cell types), with the tissue
+    and donor of its library; wells with fewer than ``min_contacts`` contacts are dropped after counting."""
+    files, rows = {}, []
+    for p in sorted((raw / "cells").glob("GSM*.3C.contact.tsv.gz")):
+        gsm, lib, well = re.match(r"^(GSM\d+)_(.+?_deep)_(.+)\.3C\.contact\.tsv\.gz$", p.name).groups()
+        tissue, donor = re.match(r"^(Macula|Retina|RPE)_?[Dd]onor(\d)", lib).groups()
+        cell = f"{lib}_{well}"
+        files[cell] = p
+        rows.append({"cell_id": cell, "gsm": gsm, "library": lib,
+                     "tissue": {"Retina": "peripheral retina"}.get(tissue, tissue), "donor": f"donor {donor}"})
+    cells = pd.DataFrame(rows).set_index("cell_id")
+    cells["cell_type"] = cells["tissue"]
+    return {"stores": {"yuan2026_eye": cells}, "files": files, "format": "juicer", "assembly": "hg38",
+            "min_contacts": YUAN2026_MIN_CONTACTS,
+            "source": "Yuan et al. 2026, Sci Adv 12:eadv9162 (snm3C-seq of human macula, peripheral retina and retinal "
+                      "pigment epithelium of four donors; GEO GSE277361): the contacts of every well with at least "
+                      f"{YUAN2026_MIN_CONTACTS:,} contacts; the cell types of the paper are not deposited per cell"}
+
+
+def tian2023(raw: Path) -> dict:
+    """Tian 2023 human brain: the 143,760 snm3C nuclei of the authors' cell table (those that passed their QC), with
+    region, donor, sub-type, major type and class; one .tar per nucleus holding its contacts."""
+    meta = pd.read_csv(raw / "table-S5-cell-meta.csv.gz", index_col=0, low_memory=False)
+    meta = meta[meta["tech"] == "m3C"]
+    tax = pd.read_csv(raw / "table-S4-cell-type-taxonomy.tsv.gz", sep="\t", index_col=0)
+    donors = pd.read_excel(raw / "table-S3-donor-info.xlsx")
+    sub = meta["SubType"].astype(int)
+    cells = pd.DataFrame({"region": meta["Region"], "donor": meta["Donor #"].map(lambda d: f"donor {d}"),
+                          "pool": meta["pool"].astype(str), "sub_type": tax["SubType"].reindex(sub).to_numpy(),
+                          "major_type": tax["MajorType"].reindex(sub).to_numpy(),
+                          "cell_class": tax["CellClass"].reindex(sub).to_numpy(),
+                          "mCG": meta["mCGFrac"], "mCH": meta["mCHFrac"]}, index=meta.index)
+    cells["cell_type"] = cells["major_type"]
+    cells.index.name = "cell_id"
+    files = {c: raw / "cells" / f"{c}.3C.contact.tsv.tar" for c in cells.index}
+    files = {c: p for c, p in files.items() if p.exists()}
+    log(f"tian2023: {len(cells):,} nuclei in the cell table, {len(files):,} with contacts; donors "
+        f"{donors.shape[0]} in table S3")
+    return {"stores": {"tian2023_brain": cells}, "files": files, "format": "juicer", "assembly": "hg38",
+            "embed_kw": {"n_per_chrom": 20, "pca": "incremental", "n_threads": 32},
+            "source": "Tian et al. 2023, Science 382:eadf5357 (snm3C-seq of the adult human brain, 46 regions of three "
+                      "donors; NeMO dat-jx4eu3g, GEO GSE215353): the contacts of the 143,760 nuclei of the authors' "
+                      "cell table with their region, donor and cell type (tables S3-S5)"}
+
+
 STUDIES = {"flyamer2017_snhic": flyamer2017, "collombet2020_snhic": collombet2020, "zhou2024_mcf7": zhou2024,
-           "tan2023_cerebellum": tan2023}
+           "tan2023_cerebellum": tan2023, "gassler2017_snhic": gassler2017, "nagano2013_th1": nagano2013,
+           "lu2025_scnanohic2": lu2025, "lee2019_snm3c": lee2019, "yuan2026_retina": yuan2026,
+           "tian2023_snm3c": tian2023}
 
 
 # -- binning -----------------------------------------------------------------------------------------------------
@@ -181,21 +336,49 @@ def _codes(col: pd.Series) -> np.ndarray:
 
 
 def _bin_cell(args):
-    """One cell's contacts (a path or the bytes of a gzipped file) -> (cell, cell keys, bulk keys, n read, n cis)."""
+    """One cell's contacts (a path, the bytes of a gzipped file or a cooler URI) -> (cell, cell keys, bulk keys,
+    n read, n cis)."""
     ci, src = args
-    sep, header, cols = FORMATS[_FMT]
-    fh = io.BytesIO(gzip.decompress(src)) if isinstance(src, bytes) else src
-    dtype = {cols[0]: str, cols[1]: np.int64, cols[2]: str, cols[3]: np.int64}
-    try:
-        df = pd.read_csv(fh, sep=sep, comment=None if header else "#", header=None, skiprows=1 if header else 0,
-                         usecols=list(cols), dtype=dtype, compression=None if isinstance(src, bytes) else "gzip")
-    except pd.errors.EmptyDataError:                    # a cell without contacts (an empty file)
-        df = pd.DataFrame({c: pd.Series(dtype=t) for c, t in dtype.items()})
+    if isinstance(src, Path) and src.suffix == ".tar":  # Tian: one tarball per nucleus holding its .tsv.gz
+        src = _tar_member(src)
+    if _FMT == "cool":                                  # the authors' per-cell maps: pixels as contacts
+        df, cols = cool_contacts(src), ("chrom1", "pos1", "chrom2", "pos2")
+    else:
+        sep, header, cols = FORMATS[_FMT]
+        fh = io.BytesIO(gzip.decompress(src)) if isinstance(src, bytes) else src
+        dtype = {cols[0]: str, cols[1]: np.int64, cols[2]: str, cols[3]: np.int64}
+        try:
+            df = pd.read_csv(fh, sep=sep, comment=None if header else "#", header=None, skiprows=1 if header else 0,
+                             usecols=list(cols), dtype=dtype, compression=None if isinstance(src, bytes) else "gzip")
+        except pd.errors.EmptyDataError:                # a cell without contacts (an empty file)
+            df = pd.DataFrame({c: pd.Series(dtype=t) for c, t in dtype.items()})
     c1, c2 = _codes(df[cols[0]]), _codes(df[cols[2]])
     p1, p2 = df[cols[1]].to_numpy(), df[cols[3]].to_numpy()
     ck, bk = _KM.keys(c1, p1, c2, p2)
     ok = (c1 >= 0) & (c2 >= 0)
     return ci, ck, bk, len(df), int((c1[ok] == c2[ok]).sum())
+
+
+def _tar_member(path: Path) -> bytes:
+    """The bytes of the one file of a tarball."""
+    with tarfile.open(path) as t:
+        return next(t.extractfile(m).read() for m in t if m.isfile())
+
+
+def _count(path: Path) -> int:
+    """Contact rows of a gzipped table (lines not starting with '#')."""
+    with gzip.open(path, "rb") as fh:
+        return sum(1 for line in fh if not line.startswith(b"#"))
+
+
+def keep_deep(cells: pd.DataFrame, files: dict, min_contacts: int, workers: int) -> pd.DataFrame:
+    """The cells whose table has at least ``min_contacts`` rows (counted before binning)."""
+    with Pool(workers) as pool:
+        n = pd.Series(pool.map(_count, [files[c] for c in cells.index], chunksize=16), index=cells.index)
+    q = n.quantile([0.1, 0.25, 0.5, 0.75, 0.9]).astype(int).to_dict()
+    log(f"rows per cell (quantiles) {q}; {int((n >= min_contacts).sum()):,} of {len(n):,} with at least "
+        f"{min_contacts:,}")
+    return cells[n >= min_contacts]
 
 
 def _tar_cells(tar: Path, index: pd.Index):
@@ -233,10 +416,10 @@ def bin_contacts(cells: pd.DataFrame, study: dict, stem: Path, sizes: dict, work
     return scool, mcool, stats, names
 
 
-def embed(cd, scool: Path, key: str = "per_cell") -> None:
+def embed(cd, scool: Path, key: str = "per_cell", **kw) -> None:
     from uchrom.emb import cluster_cells, embed_contacts
 
-    embed_contacts(cd, contacts=key, key_added="hic", methods=("pca", "umap"))
+    embed_contacts(cd, contacts=key, key_added="hic", methods=("pca", "umap"), **kw)
     labels = cluster_cells(cd, use="hic_pca", resolution=1.0, key_added="hic_leiden")
     log(f"hic_leiden: {labels.value_counts().to_dict()}")
 
@@ -247,6 +430,8 @@ def build_store(name: str, cells: pd.DataFrame, study: dict, out_dir: Path, work
     assembly = study["assembly"][name] if isinstance(study["assembly"], dict) else study["assembly"]
     sizes = chromsizes(None, assembly, keep=HG38 if assembly.startswith("hg") else MM10)
     stem = out_dir / name
+    if study.get("min_contacts"):
+        cells = keep_deep(cells, study["files"], study["min_contacts"], workers)
     log(f"{name}: {len(cells):,} cells, {assembly}, {len(sizes)} chromosomes")
     scool, mcool, stats, names = bin_contacts(cells, study, stem, sizes, workers)
     log(f"balanced {balance_mcool(mcool)} of {mcool.name}")
@@ -266,7 +451,8 @@ def build_store(name: str, cells: pd.DataFrame, study: dict, out_dir: Path, work
     for kind in ("linked_scool", "linked_cool"):             # absolute while embedding, relative in the store
         for rec in cd.uns[kind].values():
             rec["path"] = str(out_dir / Path(rec["path"]).name)
-    embed(cd, scool)
+    if study.get("embed", True):
+        embed(cd, scool, **study.get("embed_kw", {}))
     for kind in ("linked_scool", "linked_cool"):
         for rec in cd.uns[kind].values():
             rec["path"] = Path(rec["path"]).name

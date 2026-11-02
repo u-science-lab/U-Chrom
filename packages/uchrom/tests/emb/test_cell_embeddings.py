@@ -224,6 +224,55 @@ def test_scool_cell_features_roundtrip(tmp_path):
     assert depth[-1] == 0 and depth[0] == 20
 
 
+
+def test_scool_features_read_per_chromosome_equal_dense_maps(tmp_path):
+    """The maps read per chromosome from the file (trans pixels left out) give the features of the dense maps."""
+    cooler = pytest.importorskip("cooler")
+    from uchrom.emb.hic import _scool_cell_features
+
+    bins = pd.DataFrame({"chrom": ["chr1"] * 5 + ["chr2"] * 4, "start": [0, 1, 2, 3, 4, 0, 1, 2, 3],
+                         "end": [1, 2, 3, 4, 5, 1, 2, 3, 4]})
+    rng = np.random.default_rng(7)
+    cells, dense = {}, {"chr1": np.zeros((8, 5, 5)), "chr2": np.zeros((8, 4, 4))}
+    for i in range(8):
+        b1, b2 = rng.integers(0, 9, 40), rng.integers(0, 9, 40)
+        lo, hi = np.minimum(b1, b2), np.maximum(b1, b2)
+        px = pd.DataFrame({"bin1_id": lo, "bin2_id": hi, "count": 1}).groupby(
+            ["bin1_id", "bin2_id"], as_index=False)["count"].sum()
+        cells[f"c{i}"] = px
+        for c, o, n in (("chr1", 0, 5), ("chr2", 5, 4)):
+            m = px[(px.bin1_id >= o) & (px.bin2_id < o + n)]
+            dense[c][i, m.bin1_id - o, m.bin2_id - o] += m["count"]
+            dense[c][i, m.bin2_id - o, m.bin1_id - o] += np.where(m.bin1_id != m.bin2_id, m["count"], 0)
+    path = str(tmp_path / "c.scool")
+    cooler.create_scool(path, bins, cells, ordered=True)
+    names = [f"c{i}" for i in range(8)]
+    feats, cols, depth, cis = _scool_cell_features(path, names, chroms=None, pad=1, rp=0.5, top_pct=20.0,
+                                                   n_per_chrom=2, random_state=0)
+    want, want_cols = schicluster_features(dense, n_per_chrom=2)
+    assert cols == want_cols
+    np.testing.assert_allclose(feats, want, rtol=1e-5, atol=1e-5)
+    assert (depth == [int(cells[n]["count"].sum()) for n in names]).all()
+    # each intra-chromosomal pixel once: the upper triangle of the symmetric maps
+    assert (cis == [int(sum((d[i].sum() + np.trace(d[i])) / 2 for d in dense.values())) for i in range(8)]).all()
+
+
+def test_incremental_pca_matches_full():
+    from uchrom.emb import schicluster_features
+
+    rng = np.random.default_rng(3)
+    n_cells, n = 9000, 6
+    kind = rng.integers(0, 3, n_cells)
+    base = rng.poisson(3, size=(3, n, n)).astype(float)
+    maps = np.array([base[k] * (rng.random((n, n)) < 0.6) for k in kind])
+    maps = np.triu(maps) + np.transpose(np.triu(maps, 1), (0, 2, 1))
+    full, _ = schicluster_features({"chr1": maps}, n_per_chrom=3)
+    inc, _ = schicluster_features({"chr1": maps}, n_per_chrom=3, pca="incremental")
+    for k in range(2):                                   # the leading components, up to sign
+        assert abs(np.corrcoef(full[:, k], inc[:, k])[0, 1]) > 0.99
+    with pytest.raises(ValueError, match="needs n_per_chrom"):
+        schicluster_features({"chr1": maps[:10]}, pca="incremental")
+
 def test_cluster_cells_and_markers():
     pytest.importorskip("leidenalg")
     pytest.importorskip("sklearn")

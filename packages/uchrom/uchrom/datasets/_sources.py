@@ -53,6 +53,26 @@ def _geo_filelist(gse: str, pattern: str = "", cache: Path | None = None) -> lis
     return [row[1] for row in rows if len(row) > 1 and row[1].startswith("GSM") and re.search(pattern, row[1])]
 
 
+def _nemo_bag_files(bag: str, pattern: str = "", cache: Path | None = None) -> list:
+    """(name, URL) of the remote files of a NeMO BDBag (its ``fetch.txt``; the bag ``.tgz`` fetched once and the
+    listing cached), those whose name matches ``pattern``."""
+    import re
+    import tarfile
+    cache = cache or data_dir() / ".nemo_bags"
+    path = cache / (Path(bag).name.removesuffix(".tgz") + "_fetch.txt")
+    if not path.is_file():
+        req = urllib.request.Request(bag, headers={"User-Agent": "u-chrom datasets"})
+        with urllib.request.urlopen(req, timeout=600) as r, tarfile.open(fileobj=r, mode="r|gz") as t:
+            for mem in t:
+                if mem.isfile() and Path(mem.name).name == "fetch.txt":
+                    text = t.extractfile(mem).read().decode()
+                    break
+        cache.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+    rows = [line.split("\t") for line in path.read_text().splitlines()]
+    return [(Path(row[0]).name, row[0]) for row in rows if len(row) == 3 and re.search(pattern, row[0])]
+
+
 def _gse(gse: str, name: str) -> str:
     return f"https://ftp.ncbi.nlm.nih.gov/geo/series/{gse[:-3]}nnn/{gse}/suppl/{name}"
 
@@ -1024,6 +1044,80 @@ DATASETS = {
         "default": False,
         "description": "Ulianov 2021 snHi-C of 20 Drosophila BG3 nuclei and the population, 10 kb .cool, dm3, "
                        "GSE131811",
+    },
+    "gassler2017_snhic": {
+        "files": lambda: ([(f"gassler2017_snhic/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE100569", r"\.10000\.cool\.gz$")]
+            + [(f"gassler2017_snhic/raw/{n}", _gse_matrix("GSE100569", n))
+               for n in ("GSE100569-GPL17021_series_matrix.txt.gz", "GSE100569-GPL21626_series_matrix.txt.gz")]),
+        "size_mb": 345,
+        "default": False,
+        "parallel": 4,
+        "description": "Gassler 2017 snHi-C of zygote pronuclei (Scc1 / Wapl knockouts, controls, wild-type G2), "
+                       "the authors' 10 kb .cool per pronucleus, mm9, GSE100569",
+    },
+    "nagano2013_th1": {
+        "files": lambda: [(f"nagano2013_th1/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE48262", r"_cell-\d+\.txt\.gz$")],
+        "size_mb": 2,
+        "default": False,
+        "description": "Nagano 2013 single-cell Hi-C of 10 mouse Th1 cells: unique fragment-end pairs, mm9, GSE48262",
+    },
+    # Lu et al. 2025 (Nat Struct Mol Biol 32:2112), GEO GSE269496: scNanoHi-C2 of mouse embryonic germ cells, E11.5 to
+    # E18.5; one tarball of per-cell .mcool per library, the authors' cell table and their 50 kb / 1 Mb diploid
+    # structures; read by apps/atlas/recipes/build_schic_pairs.py and build_dipc_structures.py.  The per-read parquet
+    # files of the same libraries (88 GB) are not fetched.
+    "lu2025_scnanohic2": {
+        "files": lambda: ([(f"lu2025_scnanohic2/raw/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE269496", r"^GSM\d+_FGC_.*\.mcool\.tar\.gz$")]
+            + [(f"lu2025_scnanohic2/raw/{n}", _gse("GSE269496", n)) for n in (
+                "GSE269496_scNano-HiC2_EGC_allcells_metadata.xlsx", "GSE269496_FGC_models_50k.tar.gz")]),
+        "size_mb": 21400,
+        "default": False,
+        "parallel": 4,
+        "description": "Lu 2025 scNanoHi-C2 of mouse embryonic germ cells (E11.5-E18.5): per-cell .mcool per library, "
+                       "cell table, 50 kb diploid structures (GSE269496)",
+    },
+    # snm3C-seq (contacts and DNA methylation of the same nucleus; only the contacts are fetched).  Lee et al. 2019
+    # (Nat Methods 16:999), GEO GSE130711: 4,238 cells of human prefrontal cortex; the deposit has no cell types, the
+    # 14 types per cell are BandNorm's table of this dataset (Zheng et al. 2022, Genome Biol 23:222).
+    "lee2019_snm3c": {
+        "files": lambda: ([(f"lee2019_snm3c/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE130711", r"_indexed_contacts\.txt\.gz$")]
+            + [("lee2019_snm3c/raw/Lee2019_Summary.txt",
+                "https://pages.stat.wisc.edu/~sshen82/bandnorm/Summary/Lee2019_Summary.txt")]),
+        "size_mb": 46400,
+        "default": False,
+        "parallel": 4,
+        "description": "Lee 2019 snm3C-seq of human prefrontal cortex: contacts of 4,238 cells (hg19, GSE130711) and "
+                       "their cell types (BandNorm's table)",
+    },
+    # Tian et al. 2023 (Science 382:eadf5357), the snm3C-seq half of the human brain atlas (GEO GSE215353, 54
+    # sub-series; NeMO dat-jx4eu3g): one .tar per nucleus holding its contacts (.3C.contact.tsv.gz, juicer short,
+    # hg38), 145,070 nuclei, 556 GB, listed by the NeMO bag of the publication; the authors' cell table (S5: region,
+    # donor, sub-type of the 143,760 cells that passed their QC), taxonomy (S4) and donors (S3) from their portal
+    "tian2023_snm3c": {
+        "files": lambda: ([(f"tian2023_snm3c/raw/cells/{n}", u) for n, u in _nemo_bag_files(
+            "https://data.nemoarchive.org/publication_release/Ecker_Human_Methylome_2023-bag-2025-03-12/"
+            "Analysis_bag_2_Ecker_Human_Methylome_2023_Analysis_Counts.tgz", r"\.3C\.contact\.tsv\.tar$")]
+            + [(f"tian2023_snm3c/raw/{n}", f"http://neomorph.salk.edu/hba/tables/{n}") for n in (
+                "table-S5-cell-meta.csv.gz", "table-S4-cell-type-taxonomy.tsv.gz", "table-S3-donor-info.xlsx")]),
+        "size_mb": 556000,
+        "default": False,
+        "parallel": 12,
+        "description": "Tian 2023 snm3C-seq of the adult human brain: contacts of 145,070 nuclei (hg38, NeMO) and the "
+                       "authors' cell table, taxonomy and donors",
+    },
+    # Yuan et al. 2026 (Sci Adv 12:eadv9162), GEO GSE277361: snm3C-seq of human macula, peripheral retina and RPE from four
+    # donors; every well of the 36 plates is deposited (13,824; no per-cell cell types)
+    "yuan2026_retina": {
+        "files": lambda: [(f"yuan2026_retina/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE277361", r"\.3C\.contact\.tsv\.gz$")],
+        "size_mb": 11300,
+        "default": False,
+        "parallel": 4,
+        "description": "Yuan 2026 snm3C-seq of human macula, peripheral retina and RPE: contacts of every well "
+                       "(13,824; hg38, GSE277361)",
     },
     # Tan et al. 2023 (Science 381:1112), GEO GSE246785: Dip-C of the mouse cerebellum from birth to old age (6,432
     # cells; per-cell files in tarballs), the authors' 20 kb structures of the F1-hybrid and Purkinje-enriched cells,
