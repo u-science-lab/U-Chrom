@@ -42,6 +42,27 @@ def test_pixels_are_exact(stores):
         zip(*(np.concatenate([g[j] for g in got]) for j in range(3))))
 
 
+def test_per_cell_maps_written_in_many_shards(tmp_path, monkeypatch):
+    """Partitions are written and summed one shard at a time (a big .scool stays out of memory): same pixels and
+    all-cell sums as in one shard."""
+    _, emb = _store(tmp_path)
+
+    def flat(blocks):
+        blocks = list(blocks)
+        return [np.concatenate([b[j] for b in blocks]).tolist() for j in range(3)]
+
+    embedded.embed_scool(emb, "one", tmp_path / "cells.scool")
+    monkeypatch.setattr(embedded, "CHUNK", 2)
+    monkeypatch.setattr(embedded, "SHARD", 4)
+    embedded.embed_scool(emb, "many", tmp_path / "cells.scool")
+    one, many = (embedded.EmbeddedContacts(str(emb), key) for key in ("one", "many"))
+    trans = many.g[f"r{RES}/trans/pix"]
+    assert trans.shards == (3, 4) and trans.shape[1] > 4
+    for k in range(len(one.cells)):
+        assert flat(one.iter_pixels(cell_idx=[k])) == flat(many.iter_pixels(cell_idx=[k]))
+    assert flat(one.iter_sum_pixels()) == flat(many.iter_sum_pixels())
+
+
 def test_trans_only_from_the_minimum_resolution(tmp_path):
     linked, emb = _store(tmp_path)
     embedded.embed_cool(emb, "bulk", tmp_path / "bulk.mcool", trans_min_resolution=2 * RES)

@@ -44,6 +44,7 @@ import io
 import re
 import sys
 import tarfile
+import threading
 import time
 from multiprocessing import Pool
 from pathlib import Path
@@ -399,10 +400,18 @@ def bin_contacts(cells: pd.DataFrame, study: dict, stem: Path, sizes: dict, work
     else:
         jobs = [(int(binner.cell_index.get_loc(c)), study["files"][c]) for c in cells.index]
     n_cis = np.zeros(len(binner.cells), np.int64)
+    gate = threading.BoundedSemaphore(8 * workers)     # cells in flight: the workers would run ahead of the writer
     t0 = time.time()
+
+    def gated(jobs):
+        for job in jobs:
+            gate.acquire()
+            yield job
+
     with Pool(workers, initializer=_init, initargs=(binner.keymaker(), study["format"])) as pool:
-        for k, (ci, ck, bk, n, cis) in enumerate(pool.imap_unordered(_bin_cell, jobs, chunksize=2)):
+        for k, (ci, ck, bk, n, cis) in enumerate(pool.imap_unordered(_bin_cell, gated(jobs), chunksize=2)):
             binner.add_keys(ci, ck, bk, n)
+            gate.release()
             n_cis[ci] += cis
             if (k + 1) % 200 == 0:
                 log(f"  contacts of {k + 1:,} / {len(cells):,} cells ({time.time() - t0:.0f} s)")

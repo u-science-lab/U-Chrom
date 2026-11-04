@@ -85,8 +85,8 @@ def _pix_array(group, name: str, arr: np.ndarray, dtype) -> None:
     sh = max(ch, min(SHARD, -(-n // ch) * ch))
     z = group.create_array(name, shape=(3, n), chunks=(3, ch), shards=(3, sh), dtype=dtype,
                            compressors=zarr.codecs.ZstdCodec(level=ZSTD_LEVEL))
-    if n:
-        z[:] = np.asarray(arr).T.astype(dtype)
+    for s in range(0, n, sh):                   # one shard at a time: ``arr`` may be a memory map of any size
+        z[:, s:s + sh] = np.asarray(arr[s:s + sh]).T.astype(dtype)
 
 
 def _small(group, name: str, arr: np.ndarray) -> None:
@@ -119,6 +119,22 @@ def _sum_pixels(data: np.ndarray, width: int) -> np.ndarray:
     uk, inv = np.unique(key, return_inverse=True)
     tot = np.bincount(inv, weights=data[:, 2].astype(np.float64), minlength=len(uk))
     return np.column_stack([uk // width, uk % width, tot]).astype(np.int64)
+
+
+def _sum_blocks(blocks, width: int, max_dense: int = 20_000) -> np.ndarray:
+    """:func:`_sum_pixels` of the pixels of an iterable of (n, 3) blocks, in memory one block plus the result: a
+    dense accumulator when the map is at most ``max_dense`` bins wide, else the blocks' partial sums merged."""
+    if width <= max_dense:
+        acc = np.zeros(width * width, np.float64)
+        for d in blocks:
+            acc += np.bincount(d[:, 0].astype(np.int64) * width + d[:, 1].astype(np.int64),
+                               weights=d[:, 2].astype(np.float64), minlength=width * width)
+        nz = np.flatnonzero(acc)
+        return np.column_stack([nz // width, nz % width, acc[nz]]).astype(np.int64)
+    data = np.zeros((0, 3), np.int64)
+    for d in blocks:
+        data = _sum_pixels(np.concatenate([data, _sum_pixels(d, width)]), width)
+    return data
 
 
 def _check_uniform(bins_start: np.ndarray, bins_chrom: np.ndarray, binsize: int) -> None:
@@ -209,17 +225,7 @@ def add_sums(store_path: PathLike, name: str, *, max_dense: int = 20_000) -> Non
     for part, width in parts:
         if part not in e.g[f"r{r}"]:
             continue
-        if width <= max_dense:                                   # dense accumulator, block by block
-            acc = np.zeros(width * width, np.float64)
-            for d in e.cell_pixel_blocks(part, idx, r):
-                acc += np.bincount(d[:, 0] * width + d[:, 1], weights=d[:, 2], minlength=width * width)
-            nz = np.flatnonzero(acc)
-            data = np.column_stack([nz // width, nz % width, acc[nz]]).astype(np.int64)
-        else:                                                    # too wide: sum the blocks' partial sums
-            data = np.zeros((0, 3), np.int64)
-            for d in e.cell_pixel_blocks(part, idx, r):
-                data = _sum_pixels(np.concatenate([data, _sum_pixels(d, width)]), width)
-        _pix_array(gw[part], SUM, data, np.uint32)
+        _pix_array(gw[part], SUM, _sum_blocks(e.cell_pixel_blocks(part, idx, r), width, max_dense), np.uint32)
     meta = dict(e.meta)
     meta["has_sum"] = True
     gm = zarr.open_group(str(store_path), path=f"{GROUP}/{name}", mode="r+", zarr_format=3, use_consolidated=False)
@@ -309,18 +315,23 @@ def embed_scool(store_path: PathLike, key: str, scool: PathLike, *, label: Optio
         _small(bg, "end", end.astype(np.int64 if end.max() >= 2**31 else np.int32))
         root.create_array("cells", data=np.asarray(names, dtype=str))
         npix = {}
-        for p in range(n_c + 1):
-            data = np.fromfile(stage / f"{p}.bin", dtype=np.uint32).reshape(-1, 3)
-            os.remove(stage / f"{p}.bin")
-            if len(data) == 0:
+        for p in range(n_c + 1):             # a partition is read from its memory-mapped file one block at a time
+            fn = stage / f"{p}.bin"
+            if fn.stat().st_size == 0:
+                os.remove(fn)
                 continue
+            data = np.memmap(fn, dtype=np.uint32, mode="r").reshape(-1, 3)
             part = g.create_group("trans" if p == n_c else f"cis/{chroms[p]}")
             _pix_array(part, "pix", data, dt)
-            _pix_array(part, SUM, _sum_pixels(data, nbins), np.uint32)     # every cell added: the "all spots" map
+            width = nbins if p == n_c else int((chrom == p).sum())
+            blocks = (data[s:s + SHARD] for s in range(0, len(data), SHARD))
+            _pix_array(part, SUM, _sum_blocks(blocks, width), np.uint32)   # every cell added: the "all spots" map
             off = np.zeros(n_cells + 1, np.int64)
             off[1:] = np.cumsum(counts[p])
             _small(part, "cell_offset", off)
             npix["trans" if p == n_c else chroms[p]] = int(len(data))
+            del data
+            os.remove(fn)
         meta = {"key": key, "kind": "per_cell", "label": label or key, "source": Path(scool).name,
                 "resolutions": [binsize], "chroms": chroms, "chrom_first_bin": {str(binsize): first.tolist()},
                 "n_cells": n_cells, "n_pixels": npix, "count_max": cmax,
