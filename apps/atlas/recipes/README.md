@@ -150,6 +150,9 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `ulianov2021_snhic/`: single-nucleus / single-cell Hi-C contact tables (oocytes and zygotes, early embryos, MCF7 lines, Drosophila BG3) | 490 MB / 8.1 GB / 2.4 GB / 7 MB | fetch the same names; recipe `build_schic_pairs.py` | atlas stores `flyamer2017_oocyte_zygote`, `collombet2020_embryo`, `zhou2024_mcf7`, `ulianov2021_bg3` |
 | `gassler2017_snhic/`, `nagano2013_th1/`: single-nucleus / single-cell Hi-C (zygote pronuclei of Scc1 / Wapl knockouts; the first single-cell Hi-C, Th1 cells) | 345 MB / 2 MB | fetch the same names; recipe `build_schic_pairs.py` | atlas stores `gassler2017_zygote`, `nagano2013_th1` |
 | `lu2025_scnanohic2/`: Lu 2025 scNanoHi-C2 of mouse fetal germ cells, E11.5-E18.5 (2,150 cells passing the authors' filter; structures of 468) | 21.4 GB (per-cell .mcool per library, cell table, structures; the per-read parquet files, 88 GB, not fetched) | fetch `lu2025_scnanohic2`; recipes `build_schic_pairs.py`, `build_dipc_structures.py` | atlas stores `lu2025_egc`, `lu2025_egc_3d` |
+| `lee2019_snm3c/`: Lee 2019 snm3C-seq contacts of the human prefrontal cortex (4,238 nuclei of two donors) | 44 GB (contacts only; the methylation files are not fetched) | fetch `lee2019_snm3c`; recipe `build_schic_pairs.py` | atlas store `lee2019_pfc` |
+| `tian2023_snm3c/`: Tian 2023 snm3C-seq contacts of the adult human brain (145,070 nuclei; the 143,760 of the authors' cell table are used) | 556 GB (contacts only; the methylation files are not fetched) | fetch `tian2023_snm3c` (NeMO, a compute cluster); recipe `build_schic_pairs.py` | atlas store `tian2023_brain` |
+| `yuan2026_retina/`: Yuan 2026 snm3C-seq contacts of human macula, peripheral retina and RPE (every well of 36 plates, 13,824) | 11.3 GB (contacts only; the methylation files are not fetched) | fetch `yuan2026_retina`; recipe `build_schic_pairs.py` | atlas store `yuan2026_eye` |
 | `tan2023_cerebellum/`: Tan 2023 Dip-C of the mouse cerebellum, P0-P637 (6,432 cells; structures of 675) | 27.7 GB (all-cell pairs) + 13.3 GB (structures and their pairs) | fetch `tan2023_cerebellum`, `tan2023_cerebellum_3d`; recipes `build_schic_pairs.py`, `build_dipc_structures.py` | atlas stores `tan2023_cerebellum`, `tan2023_cerebellum_3d` |
 | `spacea_ma2026/`: Ma 2026 SpaceA, spatial SPRITE of 9 mouse embryo sections, E11.5-E14.5 (5 libraries, 17 runs) | 2.7 TB fastq; C6 run 1 alone: clusters 87 MB, store 550 MB with the derived maps | fetch `ma2026_spacea_<library>` (GSA, academic use); recipe `spacea_ma2026/slurm/` (a compute cluster) | per-spot check of `ChromData.clusters` (U-Chrom PR #153); the browser's cluster track; not in the atlas |
 | `wu2025_scmicroc/`: Wu 2025 scMicro-C GM12878, 12 deepest cells | 3.1 GB (102 GB streamed) | fetch `wu2025_scmicroc` | EMber deep development and test (PREREG §11); Fig. 3a / S8 |
@@ -679,6 +682,9 @@ brain cells).
 | `tan2023_cerebellum_3d` | 400 | `tan2023_cerebellum/tan2023_cerebellum_3d.chromdata.zarr` | `build_dipc_structures.py tan2023_cerebellum`, `derive_embeddings.py --hic per_cell --leiden` | `tan2023_cerebellum_3d` |
 | `lu2025_egc_3d` | 778 | `lu2025_scnanohic2/lu2025_egc_3d.chromdata.zarr` | `build_dipc_structures.py lu2025_scnanohic2`, `derive_embeddings.py --hic per_cell --leiden` | `lu2025_scnanohic2` |
 | `lu2025_egc` | 468 | `lu2025_scnanohic2/lu2025_egc.chromdata.zarr` | `build_schic_pairs.py lu2025_scnanohic2` | `lu2025_scnanohic2` |
+| `lee2019_pfc` | 1,538 | `lee2019_snm3c/lee2019_pfc.chromdata.zarr` | `build_schic_pairs.py lee2019_snm3c` | `lee2019_snm3c` |
+| `tian2023_brain` | 34,915 | `tian2023_snm3c/tian2023_brain.chromdata.zarr` | `build_schic_pairs.py tian2023_snm3c` | `tian2023_snm3c` |
+| `yuan2026_eye` | 1,216 | `yuan2026_retina/yuan2026_eye.chromdata.zarr` | `build_schic_pairs.py yuan2026_retina` | `yuan2026_retina` |
 | `tan2023_cerebellum` | 1,610 | `tan2023_cerebellum/tan2023_cerebellum.chromdata.zarr` | `build_schic_pairs.py tan2023_cerebellum` | `tan2023_cerebellum` |
 | `flyamer2017_oocyte_zygote`, `collombet2020_embryo`, `zhou2024_mcf7`, `ulianov2021_bg3` | 52 / 171 / 43 / 6 | `flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `ulianov2021_snhic/` + `<id>.chromdata.zarr` | `build_schic_pairs.py <folder name>` | the folder names |
 | `gassler2017_zygote`, `nagano2013_th1` | 27 / 6 | `gassler2017_snhic/gassler2017_zygote.chromdata.zarr`, `nagano2013_th1/nagano2013_th1.chromdata.zarr` | `build_schic_pairs.py gassler2017_snhic`, `... nagano2013_th1` | `gassler2017_snhic`, `nagano2013_th1` |
@@ -1336,6 +1342,41 @@ cells without a contact on those chromosomes are dropped.  The GEO files of thes
   single-cell Hi-C, the unique fragment-end pairs (`chrom1 coord1 chrom2 coord2`, chromosomes without `chr`; mm9) of
   the 10 deposited CD4+ Th1 cells, 2 MB (`nagano2013_th1`); the ensemble Hi-C of the series is not fetched.  11,156 to
   30,665 contacts per cell, 74-93 % cis.  No embedding (`"embed": False`: too few cells).  Atlas `nagano2013_th1`.
+
+### snm3C-seq: contacts of single nuclei with their methylation (`lee2019_snm3c/`, `tian2023_snm3c/`, `yuan2026_retina/`)
+
+snm3C-seq reads the contacts and the DNA methylation of the same nucleus; only the contacts are fetched (one
+table per nucleus).  `build_schic_pairs.py STUDY` bins them at 1 Mb per nucleus and pooled, with a
+contact embedding and Leiden clusters, as for the single-cell Hi-C above.
+
+- **Lee 2019 prefrontal cortex** (Lee D-S *et al.*, *Nat Methods* 16:999, 2019, doi:10.1038/s41592-019-0547-z; GEO
+  GSE130711): the first snm3C-seq, 4,238 nuclei of the prefrontal cortex of two donors (21 and 29 years; five
+  batches), one `indexed_contacts` table per nucleus (hg19; 44 GB, `lee2019_snm3c`).  The deposit has no cell types;
+  they come from BandNorm's table of this dataset (Zheng Y *et al.*, *Genome Biol* 23:222, 2022;
+  `Lee2019_Summary.txt`, 14 types).  5.26 billion contacts, median 1.26 M per nucleus, 87 % cis.  The Leiden
+  clusters agree with those types (ARI 0.72): oligodendrocytes (1,241 of 1,245), astrocytes, OPCs, endothelial cells
+  and microglia each fall in a cluster of their own; the 1,614 neurons fall in two clusters that follow the batch (one
+  holds 636 of the 982 nuclei of batch 181218) rather than the neuron type.  Atlas `lee2019_pfc`.
+- **Tian 2023 human brain** (Tian W *et al.*, *Science* 382:eadf5357, 2023, doi:10.1126/science.adf5357; NeMO
+  dat-jx4eu3g, GEO GSE215353): the snm3C-seq half of the authors' brain atlas, one `.tar` per nucleus holding its
+  `.3C.contact.tsv.gz` (Juicer short format, hg38; 145,070 nuclei, 556 GB, `tian2023_snm3c`, listed by the NeMO bag of
+  the publication), with the authors' cell table (S5: region, donor, pool, sub-type), taxonomy (S4) and donors (S3)
+  from their portal.  `build_schic_pairs.py tian2023_snm3c` keeps the 143,760 nuclei of the cell table (17 regions,
+  three donors): 61.9 billion contacts, median 427,000 per nucleus, 62 % cis.  The embedding streams the per-cell maps
+  (`embed_kw`: 20 components per chromosome, incremental PCA).  The Leiden clusters agree with the 29 major types
+  at ARI 0.45: oligodendrocytes (50,270 of 51,538 in two clusters), astrocytes, microglia, OPCs and the vascular
+  cells each fall in clusters of their own; the neurons fall in three clusters that mix their types.  The build took
+  29 h on 20 cores (binning 1 h, maps 8 h, embedding 20 h); the per-cell maps (19.9 billion pixels) are 35 GB in the
+  store.  Atlas `tian2023_brain`.
+- **Yuan 2026 retina** (Yuan Y *et al.*, *Sci Adv* 12:eadv9162, 2026, doi:10.1126/sciadv.adv9162; GEO GSE277361):
+  macula, peripheral retina and retinal pigment epithelium (RPE) of four donors, 36 plates.  The deposit holds every
+  well (13,824 `*.3C.contact.tsv.gz`, 11.3 GB, `yuan2026_retina`) and no cell table; the authors kept 6,624 nuclei
+  by methylation (mapping rate, final reads, mCCC / mCH / mCG levels), and their code (GitHub
+  yingyuan830/human_retina, Zenodo 21465091) has no per-cell labels.  `build_schic_pairs.py yuan2026_retina` keeps
+  the wells with at least 100,000 contacts (`YUAN2026_MIN_CONTACTS`; quantiles of all wells: 10 % 14,163, median
+  85,362, 90 % 135,245): 4,922 nuclei, 646 M contacts, median 122,000 per nucleus, 53 % cis, with tissue, donor and
+  library parsed from the file names.  Seven of the 11 Leiden clusters are 97 % RPE and hold 2,273 of the 2,673 RPE
+  nuclei; macula and peripheral retina mix.  Atlas `yuan2026_eye`.
 
 ## Figure 3 datasets — bridges between contacts and geometry
 
