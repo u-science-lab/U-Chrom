@@ -150,6 +150,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `ulianov2021_snhic/`: single-nucleus / single-cell Hi-C contact tables (oocytes and zygotes, early embryos, MCF7 lines, Drosophila BG3) | 490 MB / 8.1 GB / 2.4 GB / 7 MB | fetch the same names; recipe `build_schic_pairs.py` | atlas stores `flyamer2017_oocyte_zygote`, `collombet2020_embryo`, `zhou2024_mcf7`, `ulianov2021_bg3` |
 | `gassler2017_snhic/`, `nagano2013_th1/`: single-nucleus / single-cell Hi-C (zygote pronuclei of Scc1 / Wapl knockouts; the first single-cell Hi-C, Th1 cells) | 345 MB / 2 MB | fetch the same names; recipe `build_schic_pairs.py` | atlas stores `gassler2017_zygote`, `nagano2013_th1` |
 | `lagunov2026_lampbrush/`: Lagunov 2026 single-oocyte Hi-C of chicken lampbrush chromosomes (25 oocytes, chicken T2T assembly) | 427 MB (per-oocyte `.mcool`; the `.hic` copies, 732 MB, not fetched) | fetch `lagunov2026_lampbrush`; recipe `build_schic_pairs.py` | atlas store `lagunov2026_oocyte` |
+| `qu2023_sccareseq/`: Qu 2023 scCARE-seq, Hi-C and RNA of the same mouse ES cells in serum or 2i (384 cells) | 1.29 GB (HiC-Pro valid pairs per cell, one RNA count table; the bulk Hi-C / CARE-seq files not fetched) | fetch `qu2023_sccareseq`; recipe `build_schic_pairs.py` | atlas store `qu2023_mesc` |
 | `lu2025_scnanohic2/`: Lu 2025 scNanoHi-C2 of mouse fetal germ cells, E11.5-E18.5 (2,150 cells passing the authors' filter; structures of 468) | 21.4 GB (per-cell .mcool per library, cell table, structures; the per-read parquet files, 88 GB, not fetched) | fetch `lu2025_scnanohic2`; recipes `build_schic_pairs.py`, `build_dipc_structures.py` | atlas stores `lu2025_egc`, `lu2025_egc_3d` |
 | `lee2019_snm3c/`: Lee 2019 snm3C-seq contacts of the human prefrontal cortex (4,238 nuclei of two donors) | 44 GB (contacts only; the methylation files are not fetched) | fetch `lee2019_snm3c`; recipe `build_schic_pairs.py` | atlas store `lee2019_pfc` |
 | `tian2023_snm3c/`: Tian 2023 snm3C-seq contacts of the adult human brain (145,070 nuclei; the 143,760 of the authors' cell table are used) | 556 GB (contacts only; the methylation files are not fetched) | fetch `tian2023_snm3c` (NeMO, a compute cluster); recipe `build_schic_pairs.py` | atlas store `tian2023_brain` |
@@ -690,6 +691,7 @@ brain cells).
 | `flyamer2017_oocyte_zygote`, `collombet2020_embryo`, `zhou2024_mcf7`, `ulianov2021_bg3` | 52 / 171 / 43 / 6 | `flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `ulianov2021_snhic/` + `<id>.chromdata.zarr` | `build_schic_pairs.py <folder name>` | the folder names |
 | `gassler2017_zygote`, `nagano2013_th1` | 27 / 6 | `gassler2017_snhic/gassler2017_zygote.chromdata.zarr`, `nagano2013_th1/nagano2013_th1.chromdata.zarr` | `build_schic_pairs.py gassler2017_snhic`, `... nagano2013_th1` | `gassler2017_snhic`, `nagano2013_th1` |
 | `lagunov2026_oocyte` | 13 | `lagunov2026_lampbrush/lagunov2026_oocyte.chromdata.zarr` | `build_schic_pairs.py lagunov2026_lampbrush` | `lagunov2026_lampbrush` |
+| `qu2023_mesc` | 60 | `qu2023_sccareseq/qu2023_mesc.chromdata.zarr` | `build_schic_pairs.py qu2023_sccareseq` | `qu2023_sccareseq` |
 | `li2023_scnanohic_gm12878` | 265 | `li2023_scnanohic/li2023_scnanohic_gm12878.chromdata.zarr` | `build_scnanohic2023.py` | `li2023_scnanohic` |
 | `xu2025_sperm_human`, `xu2025_sperm_mouse` | 1,017 / 704 | `xu2025_sperm/<id>.chromdata.zarr` | `build_dipc_structures.py xu2025_sperm`, `derive_embeddings.py --hic per_cell --leiden` | `xu2025_sperm` |
 | `payne2021_igs_embryo`, `payne2021_igs_pgp1` | 23 / 3 | `payne2021_igs/<id>.chromdata.zarr` | loaders of the same names (see *`payne2021_igs/`*); traces are sets of reads (`trace_kind` `set`), the thumbnails dots | `payne2021_igs` |
@@ -1288,7 +1290,7 @@ labels).
   the same separation (closer copy pair; 0.32-0.62 over 60 cells).  Leiden clusters follow stage (50 of the 55
   E11.5 cells in one).  Atlas `lu2025_egc_3d`.
 
-### Single-cell Hi-C without structures (`flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `tan2023_cerebellum/`, `ulianov2021_snhic/`, `gassler2017_snhic/`, `nagano2013_th1/`, `lagunov2026_lampbrush/`)
+### Single-cell Hi-C without structures (`flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `tan2023_cerebellum/`, `ulianov2021_snhic/`, `gassler2017_snhic/`, `nagano2013_th1/`, `lagunov2026_lampbrush/`, `qu2023_sccareseq/`)
 
 Studies that deposit one contact table per cell and no structure.  `build_schic_pairs.py STUDY` bins each cell's
 contacts (both homologs together, alleles ignored; autosomes, X and Y) into a per-cell 1-Mb `.scool` (linked
@@ -1356,6 +1358,22 @@ cells without a contact on those chromosomes are dropped.  The GEO files of thes
   97 % cis.  Two Leiden clusters, which follow the type more than the stage (ARI 0.34 against the type, 0.05 against
   the stage, 0.42 against both): one holds 12 of the 14 lampbrush type-1 oocytes and 1 of the 4 post-lampbrush
   type-1 ones, the other all 7 type-2 oocytes.  Atlas `lagunov2026_oocyte`.
+
+- **Qu 2023** (Qu J *et al.*, *Nat Struct Mol Biol* 30:1393, 2023, doi:10.1038/s41594-023-01066-9; GEO GSE211395):
+  scCARE-seq, Hi-C and RNA of the same cell, 384 mouse ES cells (129X1 x 129S1), 192 in serum and 192 in 2i; the
+  HiC-Pro valid pairs of each cell (`<condition>_H_<n>`, mm10) and one RNA count table of the same cells
+  (`<condition>_R_<n>`, 49,585 Ensembl genes), 1.29 GB (`qu2023_sccareseq`).  Cells are named `<condition>_<nnn>`;
+  the recipe links the RNA counts as an AnnData (`qu2023_mesc_rna.h5ad`, all 384 cells found; median 1,750 counts
+  and 951 genes per cell, serum 3,328 / 2i 1,353 counts) and adds an RNA PCA / UMAP of the 2,000 most variable
+  genes (the `rna` entry of a study in `build_schic_pairs.py`).  42,662,451 contacts (42,666,873 read), 7,839 to
+  675,813 per cell, median 88,346, 82 % cis.  17 Leiden clusters of the contact embedding: 372 of the 384 cells lie
+  in a cluster where their condition is the majority (ARI against the condition 0.12, low only because each
+  condition splits into many clusters).  Within a condition the clusters are a batch structure of the libraries,
+  not biology: they follow the 24 groups of 16 cells whose numbers share the remainder modulo 12 (ARI 0.58), and
+  cells share identical contact positions (cell `2i_H_1` shares 1.6 to 5.5 % of its position pairs with each of six
+  other 2i cells, 2.9 % with `serum_H_1`).  The RNA clusters follow runs of 12 consecutive numbers instead (ARI 0.39)
+  and do not separate the conditions at this depth (ARI 0.06).  The deposit does not describe the plate layout; the
+  contacts are kept as deposited.  Atlas `qu2023_mesc`.
 
 ### snm3C-seq: contacts of single nuclei with their methylation (`lee2019_snm3c/`, `tian2023_snm3c/`, `yuan2026_retina/`)
 

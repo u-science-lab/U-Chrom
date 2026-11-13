@@ -1479,5 +1479,24 @@
   "resolution": 100000,
   "fill": 0.258,
   "map": "lagunov2026_oocyte.map.webp"
+ },
+ "qu2023_mesc": {
+  "section": null,
+  "color_by": "condition",
+  "layout": "embedding",
+  "layout_key": "hic_umap",
+  "caption": "Cells on the contact embedding, by culture condition",
+  "n": 384,
+  "categories": 2,
+  "grid": false,
+  "space": "qu2023_mesc.space.webp",
+  "map_key": "bulk",
+  "map_label": "All 384 cells (merged)",
+  "chrom": "chr2",
+  "start": 27300000,
+  "end": 67400000,
+  "resolution": 100000,
+  "fill": 0.333,
+  "map": "qu2023_mesc.map.webp"
  }
 }
