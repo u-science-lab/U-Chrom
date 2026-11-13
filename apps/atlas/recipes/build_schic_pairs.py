@@ -546,7 +546,7 @@ def _bin_cell(args):
     else:
         sep, header, cols = FORMATS[_FMT]
         fh = io.BytesIO(gzip.decompress(src)) if isinstance(src, bytes) else src
-        dtype = {cols[0]: str, cols[1]: np.int64, cols[2]: str, cols[3]: np.int64}
+        dtype = {cols[0]: str, cols[1]: str, cols[2]: str, cols[3]: str}      # positions checked below
         # the leading '#' lines are skipped by count, not as comments: read names may hold a '#' (Du 2020: the
         # Illumina barcode after the read name), which a comment character would cut off mid-row
         skip = 1 if header else _n_comment_lines(src)
@@ -555,6 +555,10 @@ def _bin_cell(args):
                              usecols=list(cols), dtype=dtype, compression=None if isinstance(src, bytes) else "gzip")
         except pd.errors.EmptyDataError:                # a cell without contacts (an empty file)
             df = pd.DataFrame({c: pd.Series(dtype=t) for c, t in dtype.items()})
+        pos = [pd.to_numeric(df[c], errors="coerce") for c in (cols[1], cols[3])]
+        good = pos[0].notna() & pos[1].notna()          # a truncated last row (two Du 2020 files end mid-row)
+        df = df[good].copy()
+        df[cols[1]], df[cols[3]] = pos[0][good].astype(np.int64), pos[1][good].astype(np.int64)
     c1, c2 = _codes(df[cols[0]]), _codes(df[cols[2]])
     p1, p2 = df[cols[1]].to_numpy(), df[cols[3]].to_numpy()
     size = np.array([_KM.sizes[c] for c in _KM.chroms] + [0], dtype=np.int64)
