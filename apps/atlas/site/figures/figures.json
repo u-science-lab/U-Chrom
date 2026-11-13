@@ -1593,5 +1593,24 @@
   "resolution": 1000000,
   "fill": 0.435,
   "map": "pang2022_ovarian.map.webp"
+ },
+ "du2020_oocyte": {
+  "section": null,
+  "color_by": "cell_type",
+  "layout": "embedding",
+  "layout_key": "hic_umap",
+  "caption": "Oocytes on the contact embedding, by genotype and configuration",
+  "n": 73,
+  "categories": 4,
+  "grid": false,
+  "space": "du2020_oocyte.space.webp",
+  "map_key": "bulk",
+  "map_label": "All 73 cells (merged)",
+  "chrom": "chr2",
+  "start": 27200000,
+  "end": 67300000,
+  "resolution": 100000,
+  "fill": 0.297,
+  "map": "du2020_oocyte.map.webp"
  }
 }
