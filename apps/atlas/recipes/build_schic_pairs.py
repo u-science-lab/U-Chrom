@@ -82,7 +82,7 @@ FORMATS = {"flyamer": (",", True, (0, 2, 1, 3)),        # chr1,chr2,pos1,pos2,st
            "pairs": ("\t", False, (1, 2, 3, 4)),       # 4DN .pairs / hickit: readID chr1 pos1 chr2 pos2 ...
            "nagano": ("\t", True, (0, 1, 2, 3)),        # chrom1 coord1 chrom2 coord2 (chromosomes "1".."X")
            "juicer": ("\t", False, (1, 2, 5, 6)),      # juicer short: str1 chr1 pos1 frag1 str2 chr2 pos2 frag2
-           "ncc": (" ", False, (0, 3, 6, 9))}          # NucProcess: chr_a f_start f_end start_a end_a strand_a chr_b ...
+           "ncc": (" ", False, (0, 1, 6, 7))}          # NucProcess: chr_a start_a end_a f_start_a f_end_a strand_a chr_b ...
 
 
 # -- the studies -------------------------------------------------------------------------------------------------
@@ -547,16 +547,34 @@ def _bin_cell(args):
         sep, header, cols = FORMATS[_FMT]
         fh = io.BytesIO(gzip.decompress(src)) if isinstance(src, bytes) else src
         dtype = {cols[0]: str, cols[1]: np.int64, cols[2]: str, cols[3]: np.int64}
+        # the leading '#' lines are skipped by count, not as comments: read names may hold a '#' (Du 2020: the
+        # Illumina barcode after the read name), which a comment character would cut off mid-row
+        skip = 1 if header else _n_comment_lines(src)
         try:
-            df = pd.read_csv(fh, sep=sep, comment=None if header else "#", header=None, skiprows=1 if header else 0,
+            df = pd.read_csv(fh, sep=sep, comment=None, header=None, skiprows=skip,
                              usecols=list(cols), dtype=dtype, compression=None if isinstance(src, bytes) else "gzip")
         except pd.errors.EmptyDataError:                # a cell without contacts (an empty file)
             df = pd.DataFrame({c: pd.Series(dtype=t) for c, t in dtype.items()})
     c1, c2 = _codes(df[cols[0]]), _codes(df[cols[2]])
     p1, p2 = df[cols[1]].to_numpy(), df[cols[3]].to_numpy()
+    size = np.array([_KM.sizes[c] for c in _KM.chroms] + [0], dtype=np.int64)
+    off = (p1 < 0) | (p1 >= size[c1]) | (p2 < 0) | (p2 >= size[c2])   # corrupt rows (a Pang 2022 .ncc has one)
+    c1, c2 = np.where(off, -1, c1), np.where(off, -1, c2)
     ck, bk = _KM.keys(c1, p1, c2, p2)
     ok = (c1 >= 0) & (c2 >= 0)
     return ci, ck, bk, len(df), int((c1[ok] == c2[ok]).sum())
+
+
+def _n_comment_lines(src) -> int:
+    """Leading lines starting with '#' of a gzipped table (a path or its compressed bytes)."""
+    fh = gzip.GzipFile(fileobj=io.BytesIO(src)) if isinstance(src, bytes) else gzip.open(src, "rb")
+    n = 0
+    with fh:
+        for line in fh:
+            if not line.startswith(b"#"):
+                break
+            n += 1
+    return n
 
 
 def _tar_member(path: Path) -> bytes:

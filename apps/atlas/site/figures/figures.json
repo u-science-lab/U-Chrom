@@ -1498,5 +1498,43 @@
   "resolution": 100000,
   "fill": 0.333,
   "map": "qu2023_mesc.map.webp"
+ },
+ "silva2020_oocyte": {
+  "section": null,
+  "color_by": "group",
+  "layout": "embedding",
+  "layout_key": "hic_umap",
+  "caption": "Oocytes on the contact embedding, by genotype",
+  "n": 131,
+  "categories": 4,
+  "grid": false,
+  "space": "silva2020_oocyte.space.webp",
+  "map_key": "bulk",
+  "map_label": "All 131 cells (merged)",
+  "chrom": "chr2",
+  "start": 27200000,
+  "end": 67300000,
+  "resolution": 100000,
+  "fill": 0.356,
+  "map": "silva2020_oocyte.map.webp"
+ },
+ "dequeker2022_zygote": {
+  "section": null,
+  "color_by": "pronucleus",
+  "layout": "embedding",
+  "layout_key": "hic_umap",
+  "caption": "Pronuclei on the contact embedding, by parent",
+  "n": 109,
+  "categories": 2,
+  "grid": false,
+  "space": "dequeker2022_zygote.space.webp",
+  "map_key": "bulk",
+  "map_label": "All 109 cells (merged)",
+  "chrom": "chr2",
+  "start": 0,
+  "end": 182000000,
+  "resolution": 500000,
+  "fill": 0.307,
+  "map": "dequeker2022_zygote.map.webp"
  }
 }
