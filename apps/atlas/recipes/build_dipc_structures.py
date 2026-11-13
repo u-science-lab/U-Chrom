@@ -18,6 +18,10 @@ These studies deposit, per cell, the contact pairs and 20 kb structures (``pytho
   lu2025_scnanohic2   Lu et al. 2025, Nat Struct Mol Biol 32:2112 (GEO GSE269496): scNanoHi-C2 of mouse embryonic
                       germ cells; the cells passing the authors' filter with a 50 kb structure (one per cell),
                       contacts from their per-cell .mcool (``build_schic_pairs.py``); store lu2025_egc_3d
+  chen2026_charm      Chen et al. 2026, Nature 653:942 (GEO GSE303006): CHARM-seq of hybrid mESC and mouse
+                      cortex; the cells passing the authors' QC with a 20 kb structure of RMSD at most 1.5
+                      (``CHEN2026_MAX_RMSD``), contacts at 1 Mb per cell (``res_map``), RNA counts; stores
+                      chen2026_charm_mesc_3d and chen2026_charm_brain_3d
 
 Every store (``<data>/<name>/<store>.chromdata.zarr``) has
 
@@ -297,8 +301,44 @@ def lu2025(raw: Path) -> dict:
                       "their filter, with the cells' contacts (10 kb level of their .mcool, haplotypes merged)"}
 
 
+#: Chen 2026 cells kept with a structure: the authors' RMSD of their 20 kb model at most this (their own cut)
+CHEN2026_MAX_RMSD = 1.5
+
+
+def chen2026(raw: Path) -> dict:
+    """Chen 2026 CHARM-seq: per system (mESC, cortex) the cells passing the authors' QC whose 20 kb structure has an
+    RMSD of at most ``CHEN2026_MAX_RMSD`` (the authors' cut), their structure and pairs out of the tarballs into
+    ``raw/cells`` once; contacts at 1 Mb per cell (thousands of deep cells), RNA counts of every gene."""
+    from build_schic_pairs import chen2026_cells, chen2026_extract, chen2026_file
+
+    stores, files = {}, {}
+    for store, cells in chen2026_cells(raw).items():
+        n_all = len(cells)
+        cells = cells[cells["rmsd_20k"] <= CHEN2026_MAX_RMSD]
+        pairs = chen2026_extract(raw, store, cells.index, "pairs")
+        tdg = chen2026_extract(raw, store, cells.index, "3dg")
+        got = {c: (pairs[c], tdg[c], None) for c in cells.index if c in pairs and c in tdg}
+        log(f"chen2026: {store}: {len(cells):,} of {n_all:,} cells with RMSD <= {CHEN2026_MAX_RMSD}, "
+            f"{len(got):,} with pairs and structure")
+        stores[store + "_3d"] = cells.reindex(sorted(got))
+        files.update(got)
+    frags = {"chen2026_charm_mesc_3d": {"atac": "GSM9115537_mesc.atac.fragment.tsv.gz",
+                                        "h3k27me3": "GSM9115545_mesc.h3k27me3.fragment.tsv.gz"},
+             "chen2026_charm_brain_3d": {"atac": "GSE303006_brain.atac.fragment.tsv.gz",
+                                         "h3k27ac": "GSE303006_brain.h3k27ac.fragment.tsv.gz"}}
+    return {"stores": stores, "files": files, "assembly": "mm10", "res_3d": 200_000, "res_map": 1_000_000,
+            "fragments": {s: {k: raw / n for k, n in f.items() if (raw / n).exists()} for s, f in frags.items()},
+            "runs": "the run the authors chose: the first of the three of five runs with the lowest median RMSD",
+            "rna": {s: (raw / chen2026_file(s.removesuffix("_3d"), "rna"), "tsv") for s in stores},
+            "source": "Chen et al. 2026, Nature 653:942 (CHARM-seq: chromatin contacts, RNA, accessibility and one "
+                      "histone mark of the same single cells, C57BL/6J x CAST/EiJ; GEO GSE303006): the authors' 20 kb "
+                      "diploid structures of the cells passing their QC with an RMSD of at most "
+                      f"{CHEN2026_MAX_RMSD}, their phased contact pairs (homologs summed), cell table and RNA counts"}
+
+
 STUDIES = {"tan2019_dipc": tan2019, "xu2025_sperm": xu2025, "wu2024_limca": wu2024, "wu2024_limca_human": wu2024h,
-           "liu2026_hires_xci": liu2026, "tan2023_cerebellum": tan2023, "lu2025_scnanohic2": lu2025}
+           "liu2026_hires_xci": liu2026, "tan2023_cerebellum": tan2023, "lu2025_scnanohic2": lu2025,
+           "chen2026_charm": chen2026}
 
 
 # -- workers -----------------------------------------------------------------------------------------------------
@@ -366,8 +406,33 @@ def _cell_structure(args):
 
 # -- steps -------------------------------------------------------------------------------------------------------
 
-def bin_contacts(cells, files, stem: Path, sizes, workers: int):
-    binner = ContactBinner(sizes, cells.index, stem.parent / f".{stem.name}_bins", cell_res=RES_MAP,
+def fragment_tracks(paths: dict, cells: pd.Index, bins: pd.DataFrame) -> pd.DataFrame:
+    """Pooled per-locus tracks from 10x-style fragment files (chrom, start, end, name, mapq, strand, cell): the
+    fragments of ``cells`` starting in each bin, per million of them (``<name>_cpm``), one column per file."""
+    out = {}
+    keep = set(cells)
+    offset = {c: i for c, i in zip(*np.unique(bins["chrom"].to_numpy(), return_index=True))}
+    res = int((bins["end"] - bins["start"]).iloc[0])
+    nbin = bins.groupby("chrom", sort=False).size()
+    for name, path in paths.items():
+        counts = np.zeros(len(bins), np.int64)
+        n = 0
+        for df in pd.read_csv(path, sep="\t", header=None, usecols=[0, 1, 6], names=["chrom", "start", "cell"],
+                              dtype={"chrom": str, "start": np.int64, "cell": str}, chunksize=5_000_000,
+                              comment="#"):
+            df = df[df["cell"].isin(keep) & df["chrom"].isin(offset)]
+            b = df["start"].to_numpy() // res
+            ok = b < df["chrom"].map(nbin).to_numpy()
+            idx = df["chrom"].map(offset).to_numpy()[ok] + b[ok]
+            counts += np.bincount(idx, minlength=len(bins))
+            n += int(ok.sum())
+        log(f"{name}: {n:,} fragments of the store's cells ({path.name})")
+        out[f"{name}_cpm"] = (counts * 1e6 / max(n, 1)).astype(np.float32)
+    return pd.DataFrame(out, index=bins.index)
+
+
+def bin_contacts(cells, files, stem: Path, sizes, workers: int, res_map: int = RES_MAP):
+    binner = ContactBinner(sizes, cells.index, stem.parent / f".{stem.name}_bins", cell_res=res_map,
                            bulk_res=RES_MAP)
     jobs = [(int(binner.cell_index.get_loc(c)), files[c][0]) for c in cells.index]
     t0 = time.time()
@@ -378,7 +443,8 @@ def bin_contacts(cells, files, stem: Path, sizes, workers: int):
                 log(f"  contacts of {k + 1:,} / {len(jobs):,} cells ({time.time() - t0:.0f} s)")
     binner.close()
     log(f"contacts: {binner.n_in:,} read, {binner.n_kept:,} on kept chromosomes, {len(jobs):,} cells")
-    scool = stem.with_name(stem.name + f"_cells_{RES_MAP // 1000}kb.scool")
+    scool = stem.with_name(stem.name + (f"_cells_{res_map // 1000}kb.scool" if res_map < 1_000_000 else
+                                        f"_cells_{res_map // 1_000_000}Mb.scool"))
     binner.write_scool(scool)
     mcool = binner.write_mcool(stem.with_name(stem.name + "_bulk.mcool"),
                                resolutions=(100_000, 500_000, 1_000_000))
@@ -423,7 +489,8 @@ def build_store(name: str, cells: pd.DataFrame, study: dict, out_dir: Path, work
     stem = out_dir / name
     log(f"{name}: {len(cells):,} cells, {assembly}, {len(sizes)} chromosomes, structures at {res // 1000} kb")
 
-    scool, mcool, per_cell = bin_contacts(cells, files, stem, sizes, workers)
+    res_map = study.get("res_map", RES_MAP)
+    scool, mcool, per_cell = bin_contacts(cells, files, stem, sizes, workers, res_map)
     log(f"balanced {balance_mcool(mcool)} of {mcool.name}")
     cells = cells.copy()
     cells["n_contacts"] = per_cell.reindex(cells.index).fillna(0).astype(np.int64).to_numpy()
@@ -434,8 +501,11 @@ def build_store(name: str, cells: pd.DataFrame, study: dict, out_dir: Path, work
                                 f".3dg; {study.get('runs', 'the first run of each cell')}) "
                                 f"coarse-grained to {res // 1000} kb by averaging the particles of each bin of "
                                 f"each copy"}
-    if "rna" in study:
-        counts, genes, found = read_rna(study["rna"], cells.index)
+    rna = study.get("rna")
+    if isinstance(rna, dict):
+        rna = rna.get(name)
+    if rna is not None:
+        counts, genes, found = read_rna(rna, cells.index)
         log(f"RNA: {found:,} of {len(cells):,} cells in the counts, {counts.shape[1]:,} genes")
         if not found:
             raise ValueError(f"{name}: no cell of the RNA counts matches a cell id")
@@ -446,8 +516,8 @@ def build_store(name: str, cells: pd.DataFrame, study: dict, out_dir: Path, work
         embed_cells(meta, source="rna", matrix=z, normalization="none", methods=("pca", "umap"), n_pcs=30,
                     features=f"the {len(hvg):,} most variable genes (log1p CP10k, z-score, clipped at 10)")
     meta.link_cool(mcool.name, key="bulk", label=f"All {len(cells):,} cells (merged)")
-    meta.link_scool(scool.name, key="per_cell", label=f"Per cell ({RES_MAP // 1000} kb)", cell_name="cell_id",
-                    genome_assembly=assembly, bin_size=RES_MAP)
+    meta.link_scool(scool.name, key="per_cell", label="Per cell (" + (f"{res_map // 1000} kb)" if res_map < 1_000_000 else f"{res_map // 1_000_000} Mb)"),
+                    cell_name="cell_id", genome_assembly=assembly, bin_size=res_map)
     uns = {**meta.uns, **uns}
 
     out = stem.with_name(stem.name + ".chromdata.zarr")
@@ -488,7 +558,14 @@ def build_store(name: str, cells: pd.DataFrame, study: dict, out_dir: Path, work
             med = st["rmsd_run_2"].median()
             log(f"run 1 vs run 2: RMSD median {med:.2f} particle radii over {len(st):,} cells")
         traces = pd.concat(traces, ignore_index=True).set_index("trace_id")
-        w.finish(cells=cells_out, cellm=dict(meta.cellm), traces=traces, uns=uns)
+        kw = {}
+        frags = study.get("fragments", {}).get(name)
+        if frags:
+            kw["bin_tracks"] = fragment_tracks(frags, cells.index, bin_table(sizes, res))
+            uns["bin_tracks_note"] = (f"{', '.join(kw['bin_tracks'].columns)}: the deposited fragments of all the "
+                                      f"store's cells pooled, start positions counted per {res // 1000} kb bin, per "
+                                      f"million fragments")
+        w.finish(cells=cells_out, cellm=dict(meta.cellm), traces=traces, uns=uns, **kw)
     log(f"wrote {out}")
     return out
 

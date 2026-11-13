@@ -1,6 +1,6 @@
 """Atlas stores of single-cell Hi-C deposited as one contact table per cell, without structures.
 
-Eight studies (``python -m uchrom.datasets fetch NAME``; the raw files under ``<data>/<NAME>/raw``):
+Studies (``python -m uchrom.datasets fetch NAME``; the raw files under ``<data>/<NAME>/raw``):
 
   flyamer2017_snhic    Flyamer et al. 2017, Nature 544:110 (GEO GSE80006): snHi-C of single mouse oocytes (NSN, SN)
                        and zygote pronuclei (mm9) and of K562 cells (hg19); one ``-reads.csv.gz`` per nucleus (the
@@ -19,6 +19,10 @@ Eight studies (``python -m uchrom.datasets fetch NAME``; the raw files under ``<
   lu2025_scnanohic2    Lu et al. 2025, Nat Struct Mol Biol 32:2112 (GEO GSE269496): scNanoHi-C2 of mouse embryonic
                        germ cells, E11.5 to E18.5; the cells passing the authors' filter, the 10 kb level of their
                        per-cell ``.mcool`` (in one tarball per library); store lu2025_egc
+  chen2026_charm       Chen et al. 2026, Nature 653:942 (GEO GSE303006): CHARM-seq (contacts, RNA, accessibility and a
+                       histone mark of the same cells) of hybrid mESC and mouse cortex; the phased pairs of the
+                       cells passing the authors' QC (two tarballs) and the RNA counts (``<store>_rna.h5ad``, RNA
+                       PCA / UMAP); stores chen2026_charm_mesc and chen2026_charm_brain
   ulianov2021_snhic    Ulianov et al. 2021, Nat Commun 12:41 (GEO GSE131811): the authors' 10 kb maps of their 20
                        best Drosophila BG3 nuclei and of the population (dm3); the maps are taken as deposited
 
@@ -311,10 +315,80 @@ def tian2023(raw: Path) -> dict:
                       "cell table with their region, donor and cell type (tables S3-S5)"}
 
 
+#: Chen 2026 CHARM-seq: the two systems of the deposit (cell names: mESC 'P<plate><well>', cortex 'R<mouse>P...' (store 'brain', as the files are named)),
+#: their tarballs (pairs, 20 kb structures), RNA table and the histone mark profiled (GEO's feature README; the cell
+#: table writes H3K27ac for every cell, the mESC too)
+CHEN2026 = {
+    "chen2026_charm_mesc": {"prefix": "mesc", "gsm": {"pairs": "GSM9115541", "3dg": "GSM9115541",
+                                                      "rna": "GSM9115533"}, "histone_mark": "H3K27me3"},
+    "chen2026_charm_brain": {"prefix": "brain", "gsm": {}, "histone_mark": "H3K27ac"},
+}
+
+
+def chen2026_file(store: str, role: str) -> str:
+    """The deposited file of a CHARM-seq system: role 'pairs' / '3dg' (tarballs) or 'rna' (total counts)."""
+    spec = CHEN2026[store]
+    name = {"pairs": "pairs.tar.gz", "3dg": "20k.tdg.tar.gz", "rna": "RNAcounts.gene.total.format.tsv.gz"}[role]
+    return f"{spec['gsm'].get(role, 'GSE303006')}_{spec['prefix']}.{name}"
+
+
+def chen2026_cells(raw: Path) -> dict:
+    """store -> the authors' cell table of the cells passing their QC (``charm_metadata_qcpass``)."""
+    m = pd.read_csv(raw / "GSE303006_charm_metadata_qcpass.tsv.gz", sep="\t").set_index("cellname")
+    m.index = m.index.astype(str)
+    m.index.name = "cell_id"
+    out = {}
+    for store, sel in (("chen2026_charm_mesc", m["tissue"].isna()), ("chen2026_charm_brain", m["tissue"].notna())):
+        g = m[sel]
+        cells = pd.DataFrame({"cell_type": g["celltype"].astype(str)}, index=g.index)
+        if store.endswith("brain"):
+            cells["mouse"] = g["mouse"].astype(str)
+            cells["tissue"] = g["tissue"]
+        else:
+            order = ["G1", "Early-S", "Mid-S", "Late-S", "G2", "M"]
+            cells["cell_cycle"] = pd.Categorical(g["cellcycle_phase"], categories=order)
+            cells["cell_cycle_order"] = g["cellcycle_order"].astype(int)
+        cells["histone_mark"] = CHEN2026[store]["histone_mark"]
+        for src, dst in (("cleaned_contacts", "n_contacts_published"), ("cleaned_contacts_inter", "n_trans_published"),
+                         ("nUMIs", "n_counts_rna"), ("nGenes", "n_genes_rna"),
+                         ("nCount_accessibility", "n_fragments_atac"),
+                         ("nCount_histone_modification", "n_fragments_histone"), ("reads_y/x_ratio", "y_over_x"),
+                         ("20k", "rmsd_20k"), ("5k", "rmsd_5k")):
+            cells[dst] = g[src].to_numpy()
+        cells["n_contacts_published"] = cells["n_contacts_published"].astype(np.int64)
+        out[store] = cells.sort_index()
+    return out
+
+
+def chen2026_extract(raw: Path, store: str, cells, role: str) -> dict:
+    """cell -> its file taken out of the system's tarball into ``raw/cells`` once (role 'pairs' or '3dg')."""
+    ext = {"pairs": ".pairs.gz", "3dg": ".20k.3dg.gz"}[role]
+    out = raw / "cells"
+    extract_members([raw / chen2026_file(store, role)], [f"{c}{ext}" for c in cells], out)
+    return {c: out / f"{c}{ext}" for c in cells if (out / f"{c}{ext}").exists()}
+
+
+def chen2026(raw: Path) -> dict:
+    """Chen 2026 CHARM-seq: the cells passing the authors' QC, one store per system (mESC, cortex), their
+    phased pairs (homologs summed here) out of the tarballs and the RNA counts of every gene."""
+    stores = chen2026_cells(raw)
+    files = {}
+    for store, cells in stores.items():
+        got = chen2026_extract(raw, store, cells.index, "pairs")
+        log(f"chen2026: {store}: {len(cells):,} cells passing the authors' QC, {len(got):,} with pairs")
+        files.update(got)
+    return {"stores": stores, "files": files, "format": "pairs", "assembly": "mm10",
+            "rna": {s: (raw / chen2026_file(s, "rna"), "tsv") for s in stores},
+            "source": "Chen et al. 2026, Nature 653:942 (CHARM-seq: chromatin contacts, RNA, accessibility and one "
+                      "histone mark of the same single cells; mESC (H3K27me3) and mouse cortex (H3K27ac), "
+                      "C57BL/6J x CAST/EiJ; GEO GSE303006): the phased contact pairs of the cells passing the authors' "
+                      "QC (homologs summed), the authors' cell table (cell types, cell-cycle phase) and RNA counts"}
+
+
 STUDIES = {"flyamer2017_snhic": flyamer2017, "collombet2020_snhic": collombet2020, "zhou2024_mcf7": zhou2024,
            "tan2023_cerebellum": tan2023, "gassler2017_snhic": gassler2017, "nagano2013_th1": nagano2013,
            "lu2025_scnanohic2": lu2025, "lee2019_snm3c": lee2019, "yuan2026_retina": yuan2026,
-           "tian2023_snm3c": tian2023}
+           "tian2023_snm3c": tian2023, "chen2026_charm": chen2026}
 
 
 # -- binning -----------------------------------------------------------------------------------------------------
@@ -433,6 +507,25 @@ def embed(cd, scool: Path, key: str = "per_cell", **kw) -> None:
     log(f"hic_leiden: {labels.value_counts().to_dict()}")
 
 
+def add_rna(cd, spec, stem: Path) -> None:
+    """The cells' RNA counts as the linked AnnData ``<store>_rna.h5ad`` and an RNA PCA / UMAP (as the structure
+    stores of build_dipc_structures.py)."""
+    from build_dipc_structures import read_rna
+    from sc_hic_common import hvg_zscores, rna_h5ad
+    from uchrom.emb import embed_cells
+
+    counts, genes, found = read_rna(spec, cd.cells.index)
+    log(f"RNA: {found:,} of {len(cd.cells):,} cells in the counts, {counts.shape[1]:,} genes")
+    if not found:
+        raise ValueError(f"{stem.name}: no cell of the RNA counts matches a cell id")
+    cd.uns["linked_anndata"] = rna_h5ad(counts, cd.cells.index, genes, stem.with_name(stem.name + "_rna.h5ad"),
+                                        description="RNA counts of every gene as deposited, one row per cell of "
+                                                    "cells (zeros for cells without RNA)")
+    z, hvg = hvg_zscores(counts)
+    embed_cells(cd, source="rna", matrix=z, normalization="none", methods=("pca", "umap"), n_pcs=30,
+                features=f"the {len(hvg):,} most variable genes (log1p CP10k, z-score, clipped at 10)")
+
+
 def build_store(name: str, cells: pd.DataFrame, study: dict, out_dir: Path, workers: int) -> Path:
     from uchrom import ChromData
 
@@ -460,6 +553,8 @@ def build_store(name: str, cells: pd.DataFrame, study: dict, out_dir: Path, work
     for kind in ("linked_scool", "linked_cool"):             # absolute while embedding, relative in the store
         for rec in cd.uns[kind].values():
             rec["path"] = str(out_dir / Path(rec["path"]).name)
+    if study.get("rna"):
+        add_rna(cd, study["rna"][name], stem)
     if study.get("embed", True):
         embed(cd, scool, **study.get("embed_kw", {}))
     for kind in ("linked_scool", "linked_cool"):
