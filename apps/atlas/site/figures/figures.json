@@ -1460,5 +1460,24 @@
   "resolution": 100000,
   "fill": 1.0,
   "map": "tian2023_brain.map.webp"
+ },
+ "lagunov2026_oocyte": {
+  "section": null,
+  "color_by": "type",
+  "layout": "embedding",
+  "layout_key": "hic_umap",
+  "caption": "Oocytes on the contact embedding, by the authors' type",
+  "n": 25,
+  "categories": 2,
+  "grid": false,
+  "space": "lagunov2026_oocyte.space.webp",
+  "map_key": "bulk",
+  "map_label": "All 25 cells (merged)",
+  "chrom": "chr2",
+  "start": 22800000,
+  "end": 62900000,
+  "resolution": 100000,
+  "fill": 0.258,
+  "map": "lagunov2026_oocyte.map.webp"
  }
 }

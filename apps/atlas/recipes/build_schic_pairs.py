@@ -1,6 +1,6 @@
 """Atlas stores of single-cell Hi-C deposited as one contact table per cell, without structures.
 
-Eight studies (``python -m uchrom.datasets fetch NAME``; the raw files under ``<data>/<NAME>/raw``):
+Seventeen studies (``python -m uchrom.datasets fetch NAME``; the raw files under ``<data>/<NAME>/raw``):
 
   flyamer2017_snhic    Flyamer et al. 2017, Nature 544:110 (GEO GSE80006): snHi-C of single mouse oocytes (NSN, SN)
                        and zygote pronuclei (mm9) and of K562 cells (hg19); one ``-reads.csv.gz`` per nucleus (the
@@ -21,6 +21,21 @@ Eight studies (``python -m uchrom.datasets fetch NAME``; the raw files under ``<
                        per-cell ``.mcool`` (in one tarball per library); store lu2025_egc
   ulianov2021_snhic    Ulianov et al. 2021, Nat Commun 12:41 (GEO GSE131811): the authors' 10 kb maps of their 20
                        best Drosophila BG3 nuclei and of the population (dm3); the maps are taken as deposited
+  wu2025_scmicroc_gm12878  Wu et al. 2025, Nat Genet 57:1777 (GEO GSE281150): scMicro-C of GM12878, every cell with a
+                       contact table (the 355 cells, the 1000 U MNase titration, the SDS test; hickit pairs, hg38)
+  qu2023_sccareseq     Qu et al. 2023, Nat Struct Mol Biol 30:1393 (GEO GSE211395): scCARE-seq, Hi-C and RNA of the
+                       same mESC, serum or 2i; HiC-Pro valid pairs and the RNA counts (linked AnnData, mm10)
+  lagunov2026_lampbrush  Lagunov et al. 2026, Nucleic Acids Res 54:gkag316 (GEO GSE288409): single-oocyte Hi-C of chicken
+                       lampbrush and post-lampbrush oocytes, the 1 kb level of each oocyte's .mcool (chicken T2T
+                       assembly ASM2420605v2: chr1-38, Z, W; sizes from the maps)
+  du2020_snhic         Du et al. 2020, Mol Cell 77:825 (GEO GSE136093): single-oocyte Hi-C of Scc1 conditional knockout
+                       and control full-grown oocytes, NSN and SN (.pairs, mm9)
+  dequeker2022_snhic   Dequeker et al. 2022, Nature 606:197 (GEO GSE196300): snHi-C of zygote pronuclei with and without
+                       MCM loading, wild type and Wapl knockout; the authors' 10 kb ``.cool`` (mm9)
+  silva2020_snhic      Silva et al. 2020, J Cell Biol 219:e201906100 (GEO GSE132264): snHi-C of Scc1 and Wapl knockout
+                       oocytes and their controls; the authors' 10 kb ``.cool`` (mm9)
+  pang2022_schic       Pang et al. 2022, Genome Biol 23:121 (GEO GSE201919): single-cell Hi-C of ovarian cancer cells
+                       (a PEO1 / HEYA8 mixture, OVCA429 shGRHL2), NucProcess ``.ncc`` (hg38)
 
 Every store (``<data>/<NAME>/<store>.chromdata.zarr``) holds no 3-D coordinates, only cells and linked maps:
 
@@ -29,7 +44,8 @@ Every store (``<data>/<NAME>/<store>.chromdata.zarr``) holds no 3-D coordinates,
 * ``<store>_cells_1Mb.scool`` (each cell at 1 Mb, linked ``per_cell``; the contacts of both homologs summed, alleles
   ignored) and ``<store>_bulk.mcool`` (all cells, 50 kb - 1 Mb, ICE-balanced, linked ``bulk``); Ulianov: 10 kb;
 * a scHiCluster embedding of the per-cell maps (``cellm['hic_pca']``, ``['hic_umap']``) and its Leiden clusters
-  (``cells['hic_leiden']``).
+  (``cells['hic_leiden']``);
+* with RNA of the same cells (Qu 2023): ``<store>_rna.h5ad`` (linked AnnData) and an RNA PCA / UMAP.
 
 Then ``python -m chromdata.embedded STORE``.  Usage::
 
@@ -65,7 +81,8 @@ FORMATS = {"flyamer": (",", True, (0, 2, 1, 3)),        # chr1,chr2,pos1,pos2,st
            "hicpro": ("\t", False, (1, 2, 4, 5)),       # readID chr1 pos1 strand1 chr2 pos2 strand2 ...
            "pairs": ("\t", False, (1, 2, 3, 4)),       # 4DN .pairs / hickit: readID chr1 pos1 chr2 pos2 ...
            "nagano": ("\t", True, (0, 1, 2, 3)),        # chrom1 coord1 chrom2 coord2 (chromosomes "1".."X")
-           "juicer": ("\t", False, (1, 2, 5, 6))}      # juicer short: str1 chr1 pos1 frag1 str2 chr2 pos2 frag2
+           "juicer": ("\t", False, (1, 2, 5, 6)),      # juicer short: str1 chr1 pos1 frag1 str2 chr2 pos2 frag2
+           "ncc": (" ", False, (0, 3, 6, 9))}          # NucProcess: chr_a f_start f_end start_a end_a strand_a chr_b ...
 
 
 # -- the studies -------------------------------------------------------------------------------------------------
@@ -311,10 +328,192 @@ def tian2023(raw: Path) -> dict:
                       "cell table with their region, donor and cell type (tables S3-S5)"}
 
 
+#: Wu 2025 cell names -> experiment (GEO sub-series)
+_WU2025_EXPERIMENTS = {"cell": "scMicro-C", "GM-1000U": "1000 U MNase titration", "SDS-GM": "SDS",
+                       "woSDS-GM": "no SDS"}
+
+
+def wu2025(raw: Path) -> dict:
+    """Wu 2025 GM12878: every cell with a contact table (hickit pairs named ``allValidPairs``)."""
+    files, rows = {}, []
+    for p in sorted((raw / "cells").glob("GSM*.allValidPairs.txt.gz")):
+        gsm, cell = re.match(r"^(GSM\d+)_(.+)\.allValidPairs\.txt\.gz$", p.name).groups()
+        files[cell] = p
+        rows.append({"cell_id": cell, "gsm": gsm, "experiment": _WU2025_EXPERIMENTS[cell.rsplit("_", 1)[0]]})
+    cells = pd.DataFrame(rows).set_index("cell_id")
+    cells["experiment"] = pd.Categorical(cells["experiment"], categories=list(_WU2025_EXPERIMENTS.values()))
+    cells["cell_type"] = cells["experiment"]
+    return {"stores": {"wu2025_scmicroc_gm12878": cells}, "files": files, "format": "pairs", "assembly": "hg38",
+            "source": "Wu et al. 2025, Nat Genet 57:1777 (scMicro-C of GM12878; GEO GSE281150: GSE192759, GSE278191, "
+                      "GSE280482): the contact pairs of every cell that has them (the 355 scMicro-C cells, the 96 "
+                      "cells of the 1000 U MNase titration, the 71 of the SDS test), hickit, phases ignored"}
+
+
+def qu2023(raw: Path) -> dict:
+    """Qu 2023 scCARE-seq: Hi-C ``<cond>_H_<n>`` and RNA ``<cond>_R_<n>`` of the same cell -> cell ``<cond>_<n>``."""
+    files, rows = {}, []
+    for p in sorted((raw / "cells").glob("GSM*_H_*.allValidPairs.txt.gz")):
+        gsm, cond, n = re.match(r"^(GSM\d+)_(2i|serum)_H_(\d+)\.allValidPairs\.txt\.gz$", p.name).groups()
+        cell = f"{cond}_{int(n):03d}"
+        files[cell] = p
+        rows.append({"cell_id": cell, "gsm": gsm, "condition": cond, "label": f"{cond}_H_{n}"})
+    cells = pd.DataFrame(rows).set_index("cell_id")
+    cells["condition"] = pd.Categorical(cells["condition"], categories=["serum", "2i"])
+    cells["cell_type"] = cells["condition"]
+
+    def rename(c: str) -> str:                          # the count table's 2i_R_17 -> 2i_017
+        cond, _, n = c.rsplit("_", 2)
+        return f"{cond}_{int(n):03d}"
+
+    return {"stores": {"qu2023_mesc": cells}, "files": files, "format": "hicpro", "assembly": "mm10",
+            "rna": (raw / "GSE211395_scCARE-seq_RNA_raw_gene_counts.txt.gz", "tsv", rename),
+            "source": "Qu et al. 2023, Nat Struct Mol Biol 30:1393 (scCARE-seq: Hi-C and RNA of the same cell, "
+                      "129X1 x 129S1 mESC in serum or 2i; GEO GSE211395): HiC-Pro valid pairs of each cell and the "
+                      "RNA counts of the same cells (scCARE-seq_RNA_raw_gene_counts)"}
+
+
+#: Lagunov 2026 chicken chromosomes kept (chrM dropped)
+GALGAL_T2T = [f"chr{i}" for i in range(1, 39)] + ["chrZ", "chrW"]
+
+
+def lagunov2026(raw: Path) -> dict:
+    """Lagunov 2026 chicken oocytes: the 1 kb level of each oocyte's .mcool, stage and the authors' type."""
+    files = {}
+    for p in sorted((raw / "cells").glob("GSM*_q30.mcool")):
+        gsm, lib = re.match(r"^(GSM\d+)_(O\d+)_q30\.mcool$", p.name).groups()
+        files[lib] = (gsm, p)
+    rows = {}
+    with gzip.open(raw / "GSE288409_series_matrix.txt.gz", "rt") as fh:
+        for line in fh:
+            key, *vals = line.rstrip("\n").split("\t")
+            vals = [v.strip('"') for v in vals]
+            if key == "!Sample_geo_accession":
+                rows["gsm"] = vals
+            elif key == "!Sample_characteristics_ch1" and vals[0].startswith("Stage:"):
+                rows["stage"] = [v.split(": ", 1)[1] for v in vals]
+            elif key == "!Sample_description":
+                for i, v in enumerate(vals):
+                    if v.startswith("Library name:"):
+                        rows.setdefault("library", [None] * len(vals))[i] = v.split(": ", 1)[1]
+                    elif m := re.search(r'"type (\d)"', v):
+                        rows.setdefault("type", [None] * len(vals))[i] = f"type {m[1]}"
+    m = pd.DataFrame(rows).set_index("library")
+    stage = {"lumpbrush chromosome": "lampbrush", "post-lumpbrush chromosome": "post-lampbrush"}
+    cells = pd.DataFrame({"gsm": m["gsm"], "stage": m["stage"].map(stage), "type": m["type"]})
+    if cells["stage"].isna().any() or cells["type"].isna().any():
+        raise ValueError(f"lagunov2026: unparsed samples {cells[cells.isna().any(axis=1)].index.tolist()}")
+    if any(files[c][0] != g for c, g in cells["gsm"].items() if c in files):
+        raise ValueError("lagunov2026: library names and GSM accessions do not match")
+    cells["stage"] = pd.Categorical(cells["stage"], categories=list(stage.values()))
+    cells["cell_type"] = cells["stage"].astype(str) + ", " + cells["type"]
+    cells.index.name = "cell_id"
+    order = sorted(cells.index, key=lambda c: int(c[1:]))
+    files = {c: f"{p}::/resolutions/1000" for c, (g, p) in files.items()}
+    return {"stores": {"lagunov2026_oocyte": cells.reindex(order)}, "files": files, "format": "cool",
+            "assembly": "ASM2420605v2", "keep": GALGAL_T2T, "sizes_from": files[order[0]],
+            "source": "Lagunov et al. 2026, Nucleic Acids Res 54:gkag316 (single-oocyte Hi-C of chicken lampbrush and "
+                      "post-lampbrush oocytes; GEO GSE288409): the 1 kb level of each oocyte's map (juicer, MAPQ >= "
+                      "30, duplicates removed) on the chicken T2T assembly ASM2420605v2, pixels taken as contacts at "
+                      "the bin midpoints; stage and the authors' type 1 / type 2 (assigned after quality control)"}
+
+
+def du2020(raw: Path) -> dict:
+    """Du 2020 full-grown oocytes: '<n>_Scc1_<flfl|CKO>_<NSN|SN>_FGO' -> genotype and chromatin configuration."""
+    files, rows = {}, []
+    for p in sorted((raw / "cells").glob("GSM*_FGO.pairs.gz")):
+        gsm, n, geno, conf = re.match(r"^(GSM\d+)_(\d+)_Scc1_(flfl|CKO)_(NSN|SN)_FGO\.pairs\.gz$", p.name).groups()
+        cell = f"Scc1_{geno}_{conf}_{int(n):02d}"
+        files[cell] = p
+        rows.append({"cell_id": cell, "gsm": gsm,
+                     "genotype": {"flfl": "Scc1 flox/flox (control)", "CKO": "Scc1 flox/flox; Zp3-Cre (knockout)"}[geno],
+                     "configuration": conf})
+    cells = pd.DataFrame(rows).set_index("cell_id")
+    m = _series_matrix([raw / "GSE136093_series_matrix.txt.gz"]).set_index("geo_accession")
+    if (cells["gsm"].map(m["genotype/variation"]).str.endswith("Zp3-Cre") != cells["genotype"].str.contains("Cre")).any():
+        raise ValueError("du2020: file names and GEO genotypes disagree")
+    cells["cell_type"] = np.where(cells["genotype"].str.contains("knockout"), "Scc1 knockout", "control") + ", " + \
+        cells["configuration"]
+    return {"stores": {"du2020_oocyte": cells}, "files": files, "format": "pairs", "assembly": "mm9",
+            "source": "Du et al. 2020, Mol Cell 77:825 (single-oocyte Hi-C of Scc1 conditional knockout (Zp3-Cre) and "
+                      "control full-grown oocytes, NSN and SN; GEO GSE136093): the contact pairs of each oocyte"}
+
+
+def _numbered_cools(raw: Path, gse: str) -> tuple:
+    """(files: GSM -> decompressed 10 kb .cool, series matrix) of the Gassler-style deposits (Dequeker, Silva)."""
+    files = {}
+    for p in sorted((raw / "cells").glob("GSM*.10000.cool.gz")):
+        dest = p.with_suffix("")
+        if not dest.exists():
+            tmp = dest.with_suffix(".part")
+            tmp.write_bytes(gzip.decompress(p.read_bytes()))
+            tmp.replace(dest)
+        files[re.match(r"^(GSM\d+)_", p.name)[1]] = dest
+    return files, _series_matrix([raw / f"{gse}_series_matrix.txt.gz"])
+
+
+#: Dequeker 2022 sample groups (the title after the number)
+_DEQUEKER_GROUPS = {"b6129svcba_wt.ctrl": "wild type", "b6129svcba_no.mcm": "wild type, no MCM",
+                    "waplfl": "Wapl control", "waplko": "Wapl knockout", "waplko_no.mcm": "Wapl knockout, no MCM"}
+
+
+def dequeker2022(raw: Path) -> dict:
+    files, m = _numbered_cools(raw, "GSE196300")
+    num, group = m["title"].str.extract(r"^(\d+)_(.+)$").T.to_numpy()
+    if not set(group) <= set(_DEQUEKER_GROUPS):
+        raise ValueError(f"dequeker2022: unknown groups {sorted(set(group) - set(_DEQUEKER_GROUPS))}")
+    cells = pd.DataFrame({"gsm": m["geo_accession"].to_numpy(), "label": m["title"].to_numpy(),
+                          "group": [_DEQUEKER_GROUPS[g] for g in group], "genotype": m["genotype"].to_numpy(),
+                          "pronucleus": m["parental origin"].to_numpy(), "strain": m["strain"].to_numpy()},
+                         index=[f"{int(n):03d}_{g}" for n, g in zip(num, group)])
+    cells["cell_type"] = cells["group"] + ", " + cells["pronucleus"]
+    files = {c: files[g] for c, g in cells["gsm"].items() if g in files}
+    return {"stores": {"dequeker2022_zygote": cells.sort_index()}, "files": files, "format": "cool",
+            "assembly": "mm9",
+            "source": "Dequeker et al. 2022, Nature 606:197 (snHi-C of G1 zygote pronuclei, wild type and Wapl "
+                      "knockout, with and without MCM loading as labelled in the deposit; GEO GSE196300): the authors' "
+                      "10 kb maps of each pronucleus, each pixel taken as count contacts at the bin midpoints"}
+
+
+def silva2020(raw: Path) -> dict:
+    files, m = _numbered_cools(raw, "GSE132264")
+    num, group = m["title"].str.extract(r"^(\d+)_(.+)$").T.to_numpy()
+    names = {"Scc1-Control": "Scc1 control", "Scc1-KO": "Scc1 knockout", "Wapl-Control": "Wapl control",
+             "Wapl-KO": "Wapl knockout"}
+    cells = pd.DataFrame({"gsm": m["geo_accession"].to_numpy(), "label": m["title"].to_numpy(),
+                          "group": [names[g] for g in group], "strain": m["strain"].to_numpy()},
+                         index=[f"{int(n):03d}_{g}" for n, g in zip(num, group)])
+    cells["cell_type"] = cells["group"]
+    files = {c: files[g] for c, g in cells["gsm"].items() if g in files}
+    return {"stores": {"silva2020_oocyte": cells.sort_index()}, "files": files, "format": "cool", "assembly": "mm9",
+            "source": "Silva et al. 2020, J Cell Biol 219:e201906100 (snHi-C of oocytes of Scc1 and Wapl conditional "
+                      "knockouts and their controls; GEO GSE132264): the authors' 10 kb maps of each oocyte, each pixel "
+                      "taken as count contacts at the bin midpoints"}
+
+
+def pang2022(raw: Path) -> dict:
+    files = {}
+    for p in sorted((raw / "cells").glob("GSM*_Cell_ID_*.ncc.gz")):
+        gsm, n = re.match(r"^(GSM\d+)_Cell_ID_(\d+)\.ncc\.gz$", p.name).groups()
+        files[gsm] = (f"cell_{int(n):02d}", p)
+    m = _series_matrix(sorted(raw.glob("GSE201919-GPL*_series_matrix.txt.gz")))
+    m = m[m["geo_accession"].isin(list(files))]
+    cells = pd.DataFrame({"gsm": m["geo_accession"].to_numpy(), "cell_line": m["cell line"].to_numpy()},
+                         index=[files[g][0] for g in m["geo_accession"]])
+    cells["cell_line"] = cells["cell_line"].replace({"PEO1/HEYA8": "PEO1 / HEYA8 mixture"})
+    cells["cell_type"] = cells["cell_line"]
+    files = {c: p for c, p in files.values()}
+    return {"stores": {"pang2022_ovarian": cells.sort_index()}, "files": files, "format": "ncc", "assembly": "hg38",
+            "source": "Pang et al. 2022, Genome Biol 23:121 (single-cell Hi-C of ovarian cancer cells picked by "
+                      "dielectrophoresis from a PEO1 / HEYA8 mixture and from OVCA429 shGRHL2; GEO GSE201919): the "
+                      "NucProcess contacts (.ncc) of each cell"}
+
+
 STUDIES = {"flyamer2017_snhic": flyamer2017, "collombet2020_snhic": collombet2020, "zhou2024_mcf7": zhou2024,
            "tan2023_cerebellum": tan2023, "gassler2017_snhic": gassler2017, "nagano2013_th1": nagano2013,
            "lu2025_scnanohic2": lu2025, "lee2019_snm3c": lee2019, "yuan2026_retina": yuan2026,
-           "tian2023_snm3c": tian2023}
+           "tian2023_snm3c": tian2023, "wu2025_scmicroc_gm12878": wu2025, "qu2023_sccareseq": qu2023,
+           "lagunov2026_lampbrush": lagunov2026, "du2020_snhic": du2020, "dequeker2022_snhic": dequeker2022,
+           "silva2020_snhic": silva2020, "pang2022_schic": pang2022}
 
 
 # -- binning -----------------------------------------------------------------------------------------------------
@@ -433,11 +632,33 @@ def embed(cd, scool: Path, key: str = "per_cell", **kw) -> None:
     log(f"hic_leiden: {labels.value_counts().to_dict()}")
 
 
+def link_rna(cd, spec, stem: Path) -> None:
+    """The RNA counts of the same cells as the store's linked AnnData (``<store>_rna.h5ad``) and an RNA PCA / UMAP of
+    the most variable genes."""
+    from build_dipc_structures import read_rna
+    from sc_hic_common import hvg_zscores, rna_h5ad
+    from uchrom.emb import embed_cells
+
+    counts, genes, found = read_rna(spec, cd.cells.index.astype(str))
+    log(f"RNA: {found:,} of {len(cd.cells):,} cells in the counts, {counts.shape[1]:,} genes")
+    if not found:
+        raise ValueError("no cell of the RNA counts matches a cell id")
+    cd.uns["linked_anndata"] = rna_h5ad(counts, cd.cells.index, genes, stem.with_name(stem.name + "_rna.h5ad"),
+                                        description="RNA counts of every gene as deposited, one row per cell of "
+                                                    "cells (zeros for cells without RNA)")
+    cd.cells["n_counts_rna"] = np.asarray(counts.sum(1)).ravel()
+    cd.cells["n_genes_rna"] = np.asarray((counts > 0).sum(1)).ravel()
+    z, hvg = hvg_zscores(counts)
+    embed_cells(cd, source="rna", matrix=z, normalization="none", methods=("pca", "umap"), n_pcs=30,
+                features=f"the {len(hvg):,} most variable genes (log1p CP10k, z-score, clipped at 10)")
+
+
 def build_store(name: str, cells: pd.DataFrame, study: dict, out_dir: Path, workers: int) -> Path:
     from uchrom import ChromData
 
     assembly = study["assembly"][name] if isinstance(study["assembly"], dict) else study["assembly"]
-    sizes = chromsizes(None, assembly, keep=HG38 if assembly.startswith("hg") else MM10)
+    keep = study.get("keep") or (HG38 if assembly.startswith("hg") else MM10)
+    sizes = chromsizes(study.get("sizes_from"), assembly, keep=keep)
     stem = out_dir / name
     if study.get("min_contacts"):
         cells = keep_deep(cells, study["files"], study["min_contacts"], workers)
@@ -454,6 +675,8 @@ def build_store(name: str, cells: pd.DataFrame, study: dict, out_dir: Path, work
                    uns={"genome_assembly": assembly, "source": study["source"],
                         "coordinate_status": "no 3-D coordinates: contacts only",
                         "haplotypes": "ignored: each contact counted once (a cell's map sums its homologs)"})
+    if "rna" in study:
+        link_rna(cd, study["rna"], stem)
     cd.link_cool(mcool.name, key="bulk", label=f"All {len(cells):,} cells (merged)")
     cd.link_scool(scool.name, key="per_cell", label="Per cell (1 Mb)", cell_name="cell_id", genome_assembly=assembly,
                   bin_size=CELL_RES)

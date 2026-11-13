@@ -149,6 +149,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `li2023_scnanohic/`: Li 2023 scNanoHi-C, the authors' contact tables of 24 GM12878 cells | 818 MB | fetch `li2023_scnanohic`; recipe `build_scnanohic2023.py` | atlas store `li2023_scnanohic_gm12878` |
 | `flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `ulianov2021_snhic/`: single-nucleus / single-cell Hi-C contact tables (oocytes and zygotes, early embryos, MCF7 lines, Drosophila BG3) | 490 MB / 8.1 GB / 2.4 GB / 7 MB | fetch the same names; recipe `build_schic_pairs.py` | atlas stores `flyamer2017_oocyte_zygote`, `collombet2020_embryo`, `zhou2024_mcf7`, `ulianov2021_bg3` |
 | `gassler2017_snhic/`, `nagano2013_th1/`: single-nucleus / single-cell Hi-C (zygote pronuclei of Scc1 / Wapl knockouts; the first single-cell Hi-C, Th1 cells) | 345 MB / 2 MB | fetch the same names; recipe `build_schic_pairs.py` | atlas stores `gassler2017_zygote`, `nagano2013_th1` |
+| `lagunov2026_lampbrush/`: Lagunov 2026 single-oocyte Hi-C of chicken lampbrush chromosomes (25 oocytes, chicken T2T assembly) | 427 MB (per-oocyte `.mcool`; the `.hic` copies, 732 MB, not fetched) | fetch `lagunov2026_lampbrush`; recipe `build_schic_pairs.py` | atlas store `lagunov2026_oocyte` |
 | `lu2025_scnanohic2/`: Lu 2025 scNanoHi-C2 of mouse fetal germ cells, E11.5-E18.5 (2,150 cells passing the authors' filter; structures of 468) | 21.4 GB (per-cell .mcool per library, cell table, structures; the per-read parquet files, 88 GB, not fetched) | fetch `lu2025_scnanohic2`; recipes `build_schic_pairs.py`, `build_dipc_structures.py` | atlas stores `lu2025_egc`, `lu2025_egc_3d` |
 | `lee2019_snm3c/`: Lee 2019 snm3C-seq contacts of the human prefrontal cortex (4,238 nuclei of two donors) | 44 GB (contacts only; the methylation files are not fetched) | fetch `lee2019_snm3c`; recipe `build_schic_pairs.py` | atlas store `lee2019_pfc` |
 | `tian2023_snm3c/`: Tian 2023 snm3C-seq contacts of the adult human brain (145,070 nuclei; the 143,760 of the authors' cell table are used) | 556 GB (contacts only; the methylation files are not fetched) | fetch `tian2023_snm3c` (NeMO, a compute cluster); recipe `build_schic_pairs.py` | atlas store `tian2023_brain` |
@@ -688,6 +689,7 @@ brain cells).
 | `tan2023_cerebellum` | 1,610 | `tan2023_cerebellum/tan2023_cerebellum.chromdata.zarr` | `build_schic_pairs.py tan2023_cerebellum` | `tan2023_cerebellum` |
 | `flyamer2017_oocyte_zygote`, `collombet2020_embryo`, `zhou2024_mcf7`, `ulianov2021_bg3` | 52 / 171 / 43 / 6 | `flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `ulianov2021_snhic/` + `<id>.chromdata.zarr` | `build_schic_pairs.py <folder name>` | the folder names |
 | `gassler2017_zygote`, `nagano2013_th1` | 27 / 6 | `gassler2017_snhic/gassler2017_zygote.chromdata.zarr`, `nagano2013_th1/nagano2013_th1.chromdata.zarr` | `build_schic_pairs.py gassler2017_snhic`, `... nagano2013_th1` | `gassler2017_snhic`, `nagano2013_th1` |
+| `lagunov2026_oocyte` | 13 | `lagunov2026_lampbrush/lagunov2026_oocyte.chromdata.zarr` | `build_schic_pairs.py lagunov2026_lampbrush` | `lagunov2026_lampbrush` |
 | `li2023_scnanohic_gm12878` | 265 | `li2023_scnanohic/li2023_scnanohic_gm12878.chromdata.zarr` | `build_scnanohic2023.py` | `li2023_scnanohic` |
 | `xu2025_sperm_human`, `xu2025_sperm_mouse` | 1,017 / 704 | `xu2025_sperm/<id>.chromdata.zarr` | `build_dipc_structures.py xu2025_sperm`, `derive_embeddings.py --hic per_cell --leiden` | `xu2025_sperm` |
 | `payne2021_igs_embryo`, `payne2021_igs_pgp1` | 23 / 3 | `payne2021_igs/<id>.chromdata.zarr` | loaders of the same names (see *`payne2021_igs/`*); traces are sets of reads (`trace_kind` `set`), the thumbnails dots | `payne2021_igs` |
@@ -1286,7 +1288,7 @@ labels).
   the same separation (closer copy pair; 0.32-0.62 over 60 cells).  Leiden clusters follow stage (50 of the 55
   E11.5 cells in one).  Atlas `lu2025_egc_3d`.
 
-### Single-cell Hi-C without structures (`flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `tan2023_cerebellum/`, `ulianov2021_snhic/`, `gassler2017_snhic/`, `nagano2013_th1/`)
+### Single-cell Hi-C without structures (`flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `tan2023_cerebellum/`, `ulianov2021_snhic/`, `gassler2017_snhic/`, `nagano2013_th1/`, `lagunov2026_lampbrush/`)
 
 Studies that deposit one contact table per cell and no structure.  `build_schic_pairs.py STUDY` bins each cell's
 contacts (both homologs together, alleles ignored; autosomes, X and Y) into a per-cell 1-Mb `.scool` (linked
@@ -1342,6 +1344,18 @@ cells without a contact on those chromosomes are dropped.  The GEO files of thes
   single-cell Hi-C, the unique fragment-end pairs (`chrom1 coord1 chrom2 coord2`, chromosomes without `chr`; mm9) of
   the 10 deposited CD4+ Th1 cells, 2 MB (`nagano2013_th1`); the ensemble Hi-C of the series is not fetched.  11,156 to
   30,665 contacts per cell, 74-93 % cis.  No embedding (`"embed": False`: too few cells).  Atlas `nagano2013_th1`.
+
+- **Lagunov 2026** (Lagunov T *et al.*, *Nucleic Acids Res* 54:gkag316, 2026, doi:10.1093/nar/gkag316; GEO
+  GSE288409): single-nucleus Hi-C of 25 chicken oocytes, 20 at the lampbrush stage and 5 after it, each with the type
+  the authors assigned after quality control (18 type 1, 7 type 2); one `.mcool` per oocyte (1 kb to 4 Mb; juicer,
+  MAPQ >= 30, duplicates removed), 427 MB (`lagunov2026_lampbrush`; the `.hic` copies and the merged maps of the
+  series are not fetched).  The first bird of the atlas: the maps are on the chicken telomere-to-telomere assembly
+  ASM2420605v2, which UCSC does not serve, so the recipe takes the chromosome sizes from the maps (`sizes_from`) and
+  keeps chr1-38, Z and W (`GALGAL_T2T`; chrM dropped).  The pixels of the 1 kb level are taken as `count` contacts at
+  the bin midpoints.  13,970,635 contacts (14,039,281 with chrM), 158,110 to 2,063,608 per oocyte, median 452,542,
+  97 % cis.  Two Leiden clusters, which follow the type more than the stage (ARI 0.34 against the type, 0.05 against
+  the stage, 0.42 against both): one holds 12 of the 14 lampbrush type-1 oocytes and 1 of the 4 post-lampbrush
+  type-1 ones, the other all 7 type-2 oocytes.  Atlas `lagunov2026_oocyte`.
 
 ### snm3C-seq: contacts of single nuclei with their methylation (`lee2019_snm3c/`, `tian2023_snm3c/`, `yuan2026_retina/`)
 

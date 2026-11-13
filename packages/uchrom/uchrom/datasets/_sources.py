@@ -1119,6 +1119,101 @@ DATASETS = {
         "description": "Yuan 2026 snm3C-seq of human macula, peripheral retina and RPE: contacts of every well "
                        "(13,824; hg38, GSE277361)",
     },
+    # Wu et al. 2025 (Nat Genet 57:1777, doi:10.1038/s41588-025-02247-6), GEO GSE281150 (SuperSeries): scMicro-C of
+    # GM12878 (hg38).  For the atlas every cell with a contact table: the 355 cells of GSE192759, the 96 cells of the
+    # 1000 U MNase titration (GSE278191) and the 71 cells of the SDS test (GSE280482), each a hickit .pairs file named
+    # allValidPairs; the authors' 20 kb clean structures (runs 1 and 2) of the 1000 U and SDS cells, which GEO holds
+    # per sample (those of the 355 cells only inside a 102 GB tarball, not fetched; nor the 200 / 600 / 800 U cells,
+    # deposited only as 1-2 GB processed tarballs each).  Read by apps/atlas/recipes/build_schic_pairs.py and
+    # build_dipc_structures.py.  ``wu2025_scmicroc`` above (12 deepest cells) is the benchmark's input, kept apart.
+    "wu2025_scmicroc_gm12878": {
+        "files": lambda: ([(f"wu2025_scmicroc_gm12878/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE281150", r"_(cell_\d+|GM-1000U_\d+|w?o?SDS-GM_\d+)\.allValidPairs\.txt\.gz$|"
+                         r"_(GM-1000U|SDS-GM)_\d+_20kb_[12]\.clean\.3dg(\.txt)?\.gz$")]),
+        "size_mb": 5300,
+        "default": False,
+        "parallel": 4,
+        "description": "Wu 2025 scMicro-C of GM12878: contact pairs of 522 cells (355 + 1000 U titration + SDS "
+                       "test) and the 20 kb clean structures of the titration / SDS cells (hg38, GSE281150)",
+    },
+    # Qu et al. 2023 (Nat Struct Mol Biol 30:1393, doi:10.1038/s41594-023-01066-9), GEO GSE211395: scCARE-seq, Hi-C and
+    # RNA of the same cell, 129X1 x 129S1 mESC in serum or 2i (192 cells each); HiC-Pro valid pairs of each cell
+    # (2i_H_<n> / serum_H_<n>) and one RNA count table (2i_R_<n> / serum_R_<n>), mm10
+    "qu2023_sccareseq": {
+        "files": lambda: ([(f"qu2023_sccareseq/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE211395", r"_(2i|serum)_H_\d+\.allValidPairs\.txt\.gz$")]
+            + [(f"qu2023_sccareseq/raw/{n}", _gse("GSE211395", n))
+               for n in ("GSE211395_scCARE-seq_RNA_raw_gene_counts.txt.gz",)]
+            + [("qu2023_sccareseq/raw/GSE211395_series_matrix.txt.gz",
+                _gse_matrix("GSE211395", "GSE211395_series_matrix.txt.gz"))]),
+        "size_mb": 1290,
+        "default": False,
+        "parallel": 4,
+        "description": "Qu 2023 scCARE-seq of mESC in serum and 2i: HiC-Pro valid pairs of 384 cells and their RNA "
+                       "counts (mm10, GSE211395)",
+    },
+    # Lagunov et al. 2026 (Nucleic Acids Res 54:gkag316, doi:10.1093/nar/gkag316), GEO GSE288409: single-nucleus Hi-C
+    # of chicken oocytes at the lampbrush and post-lampbrush stages, one .mcool per oocyte (1 kb to 4 Mb, MAPQ >= 30) on a chicken
+    # telomere-to-telomere assembly (chr1-38, Z, W)
+    "lagunov2026_lampbrush": {
+        "files": lambda: ([(f"lagunov2026_lampbrush/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE288409", r"_q30\.mcool$")]
+            + [("lagunov2026_lampbrush/raw/GSE288409_series_matrix.txt.gz",
+                _gse_matrix("GSE288409", "GSE288409_series_matrix.txt.gz"))]),
+        "size_mb": 430,
+        "default": False,
+        "parallel": 4,
+        "description": "Lagunov 2026 single-oocyte Hi-C of chicken lampbrush chromosomes: per-oocyte .mcool of 25 "
+                       "oocytes (chicken T2T assembly, GSE288409)",
+    },
+    # Small single-nucleus Hi-C sets of oocytes, zygotes and tumour cells, read by build_schic_pairs.py: Du et al. 2020
+    # (Mol Cell 77:825; Scc1 conditional knockout and control full-grown oocytes, NSN / SN, .pairs, mm9), Dequeker et
+    # al. 2022 (Nature 606:197; zygote pronuclei with and without MCM loading, Wapl knockouts, the authors' 10 kb .cool,
+    # mm9), Silva et al. 2020 (J Cell Biol 219:e201906100; Scc1 / Wapl knockout oocytes and controls, 10 kb .cool, mm9),
+    # Pang et al. 2022 (Genome Biol 23:121; single ovarian cancer cells, NucProcess .ncc, hg38)
+    "du2020_snhic": {
+        "files": lambda: ([(f"du2020_snhic/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE136093", r"_FGO\.pairs\.gz$")]
+            + [("du2020_snhic/raw/GSE136093_series_matrix.txt.gz",
+                _gse_matrix("GSE136093", "GSE136093_series_matrix.txt.gz"))]),
+        "size_mb": 610,
+        "default": False,
+        "parallel": 4,
+        "description": "Du 2020 single-oocyte Hi-C of Scc1 knockout and control full-grown oocytes (NSN, SN), "
+                       ".pairs, mm9, GSE136093",
+    },
+    "dequeker2022_snhic": {
+        "files": lambda: ([(f"dequeker2022_snhic/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE196300", r"\.10000\.cool\.gz$")]
+            + [("dequeker2022_snhic/raw/GSE196300_series_matrix.txt.gz",
+                _gse_matrix("GSE196300", "GSE196300_series_matrix.txt.gz"))]),
+        "size_mb": 82,
+        "default": False,
+        "parallel": 4,
+        "description": "Dequeker 2022 snHi-C of zygote pronuclei (MCM, Wapl), the authors' 10 kb .cool, mm9, GSE196300",
+    },
+    "silva2020_snhic": {
+        "files": lambda: ([(f"silva2020_snhic/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE132264", r"\.10000\.cool\.gz$")]
+            + [("silva2020_snhic/raw/GSE132264_series_matrix.txt.gz",
+                _gse_matrix("GSE132264", "GSE132264_series_matrix.txt.gz"))]),
+        "size_mb": 235,
+        "default": False,
+        "parallel": 4,
+        "description": "Silva 2020 snHi-C of Scc1 / Wapl knockout oocytes and controls, the authors' 10 kb .cool, mm9, "
+                       "GSE132264",
+    },
+    "pang2022_schic": {
+        "files": lambda: ([(f"pang2022_schic/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE201919", r"_Cell_ID_\d+\.ncc\.gz$")]
+            + [(f"pang2022_schic/raw/{n}", _gse_matrix("GSE201919", n))
+               for n in ("GSE201919-GPL18573_series_matrix.txt.gz", "GSE201919-GPL20301_series_matrix.txt.gz")]),
+        "size_mb": 84,
+        "default": False,
+        "parallel": 4,
+        "description": "Pang 2022 single-cell Hi-C of ovarian cancer cells (PEO1 / HEYA8, OVCA429 shGRHL2), NucProcess "
+                       ".ncc, hg38, GSE201919",
+    },
     # Tan et al. 2023 (Science 381:1112), GEO GSE246785: Dip-C of the mouse cerebellum from birth to old age (6,432
     # cells; per-cell files in tarballs), the authors' 20 kb structures of the F1-hybrid and Purkinje-enriched cells,
     # read by apps/atlas/recipes/build_schic_pairs.py (all cells) and build_dipc_structures.py (structures)
