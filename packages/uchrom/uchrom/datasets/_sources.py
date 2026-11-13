@@ -1119,6 +1119,59 @@ DATASETS = {
         "description": "Yuan 2026 snm3C-seq of human macula, peripheral retina and RPE: contacts of every well "
                        "(13,824; hg38, GSE277361)",
     },
+    # Lee et al. 2019 (Nat Methods 16:999), the cell-line series of the snm3C-seq paper, GEO GSE124391: 619 snm3C
+    # cells of one experiment (144 GM12878, hg38; 351 E14 mESC and 96 NMuMG, mm10; 28 E14-GM12878 multiplets, mm10),
+    # per-cell contacts (indexed_contacts: chrom1 pos1 chrom2 pos2); the bulk 3C / Hi-C / m3C of mESC and the
+    # methylation (allc) files are not fetched.  Cell lines from the three series matrices (one per platform)
+    "lee2019_snm3c_lines": {
+        "files": lambda: ([(f"lee2019_snm3c_lines/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE124391", r"_snm3C_.*_indexed_contacts\.txt\.gz$")]
+            + [(f"lee2019_snm3c_lines/raw/{n}", _gse_matrix("GSE124391", n)) for n in (
+                "GSE124391-GPL20301_series_matrix.txt.gz", "GSE124391-GPL21103_series_matrix.txt.gz",
+                "GSE124391-GPL25431_series_matrix.txt.gz")]),
+        "size_mb": 1450,
+        "default": False,
+        "parallel": 4,
+        "description": "Lee 2019 snm3C-seq of cell lines: contacts of 619 cells (GM12878 hg38; E14 mESC, NMuMG and "
+                       "multiplets mm10; GSE124391)",
+    },
+    # Chen Z.J. et al. 2025 (Nat Genet, doi:10.1038/s41588-025-02300-4), GEO GSE297262: snm3C-seq3 of human
+    # subcutaneous adipose tissue of five donors (hg38); one tarball of every nucleus' contacts (.contact.rmbkl.tsv.gz:
+    # chrom1 pos1 chrom2 pos2 strand1 strand2, blacklist removed) and the authors' cell table (annotations, contact
+    # counts).  The methylation tables of the series are not fetched
+    "chen2025_snm3c": {
+        "files": [(f"chen2025_snm3c/raw/{n}", _gse("GSE297262", n)) for n in (
+            "GSE297262_README.txt", "GSE297262_snm3C_metadata.tsv.gz", "GSE297262_contacts.tar.gz")],
+        "size_mb": 15500,
+        "default": False,
+        "description": "Chen 2025 snm3C-seq3 of human subcutaneous adipose tissue (5 donors): every nucleus' contacts "
+                       "(hg38) and the authors' cell table (GSE297262)",
+    },
+    # Lee L. et al. 2023 (Brief Bioinform 24:bbad315, doi:10.1093/bib/bbad315; SnapHiC-D), GEO GSE210585: single-nucleus Hi-C of 94 mouse ESC
+    # and 188 neural progenitor cells (129/Sv x CAST, mm10), the valid pairs of each cell (hotspots removed; juicer
+    # medium: readID str1 chr1 pos1 frag1 str2 chr2 pos2 frag2 mapq1 mapq2); cell types from the series matrix
+    "lee2023_snhic": {
+        "files": lambda: ([(f"lee2023_snhic/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE210585", r"\.valid_pairs\.rm_hotspot\.sorted\.txt\.gz$")]
+            + [(f"lee2023_snhic/raw/{n}", _gse_matrix("GSE210585", n)) for n in ("GSE210585_series_matrix.txt.gz",)]),
+        "size_mb": 10300,
+        "default": False,
+        "parallel": 4,
+        "description": "Lee 2023 snHi-C of 94 mouse ESC and 188 neural progenitor cells: valid pairs per cell (mm10, "
+                       "GSE210585)",
+    },
+    # Lin et al. 2022 (Nat Commun 13:5857, doi:10.1038/s41467-022-33558-5), GEO GSE208045: sciDLO Hi-C of THP-1
+    # monocytes, THP-1-derived macrophages and M. tuberculosis-infected macrophages (hg19); one tarball per condition
+    # holding a 4DN .pairs file per cell barcode
+    "lin2022_scidlo": {
+        "files": [(f"lin2022_scidlo/raw/{n}", _gse("GSE208045", n)) for n in (
+            "GSE208045_sci_thp_pairs.tar.gz", "GSE208045_sci_thpp_pairs.tar.gz", "GSE208045_sci_ra_pairs.tar.gz")]
+            + [(f"lin2022_scidlo/raw/{n}", _gse_matrix("GSE208045", n)) for n in ("GSE208045_series_matrix.txt.gz",)],
+        "size_mb": 1150,
+        "default": False,
+        "description": "Lin 2022 sciDLO Hi-C of THP-1 monocytes, macrophages and M. tuberculosis-infected macrophages: "
+                       ".pairs per cell (hg19, GSE208045)",
+    },
     # Tan et al. 2023 (Science 381:1112), GEO GSE246785: Dip-C of the mouse cerebellum from birth to old age (6,432
     # cells; per-cell files in tarballs), the authors' 20 kb structures of the F1-hybrid and Purkinje-enriched cells,
     # read by apps/atlas/recipes/build_schic_pairs.py (all cells) and build_dipc_structures.py (structures)

@@ -1,6 +1,6 @@
 """Atlas stores of single-cell Hi-C deposited as one contact table per cell, without structures.
 
-Eight studies (``python -m uchrom.datasets fetch NAME``; the raw files under ``<data>/<NAME>/raw``):
+The studies (``python -m uchrom.datasets fetch NAME``; the raw files under ``<data>/<NAME>/raw``):
 
   flyamer2017_snhic    Flyamer et al. 2017, Nature 544:110 (GEO GSE80006): snHi-C of single mouse oocytes (NSN, SN)
                        and zygote pronuclei (mm9) and of K562 cells (hg19); one ``-reads.csv.gz`` per nucleus (the
@@ -21,6 +21,16 @@ Eight studies (``python -m uchrom.datasets fetch NAME``; the raw files under ``<
                        per-cell ``.mcool`` (in one tarball per library); store lu2025_egc
   ulianov2021_snhic    Ulianov et al. 2021, Nat Commun 12:41 (GEO GSE131811): the authors' 10 kb maps of their 20
                        best Drosophila BG3 nuclei and of the population (dm3); the maps are taken as deposited
+  lee2019_snm3c_lines  Lee et al. 2019, Nat Methods 16:999 (GEO GSE124391): snm3C-seq of GM12878 (hg38), E14 mESC
+                       and NMuMG (mm10) cells; stores lee2019_gm12878 and lee2019_mesc_nmumg (multiplets left out)
+  chen2025_snm3c       Chen Z.J. et al. 2025, Nat Genet 57:2238 (GEO GSE297262): snm3C-seq3 of human subcutaneous
+                       adipose tissue, the 6,652 nuclei of the authors' cell table (hg38), one tarball; store
+                       chen2025_adipose
+  lee2023_snhic        Lee L. et al. 2023, Brief Bioinform 24:bbad315 (GEO GSE210585): snHi-C of mouse ESC and
+                       neural progenitor cells, valid pairs per cell (mm10); store lee2023_esc_npc
+  lin2022_scidlo       Lin et al. 2022, Nat Commun 13:5857 (GEO GSE208045): sciDLO Hi-C of THP-1 monocytes,
+                       macrophages and M. tuberculosis-infected macrophages, one tarball of .pairs per condition
+                       (hg19); store lin2022_thp1
 
 Every store (``<data>/<NAME>/<store>.chromdata.zarr``) holds no 3-D coordinates, only cells and linked maps:
 
@@ -65,7 +75,9 @@ FORMATS = {"flyamer": (",", True, (0, 2, 1, 3)),        # chr1,chr2,pos1,pos2,st
            "hicpro": ("\t", False, (1, 2, 4, 5)),       # readID chr1 pos1 strand1 chr2 pos2 strand2 ...
            "pairs": ("\t", False, (1, 2, 3, 4)),       # 4DN .pairs / hickit: readID chr1 pos1 chr2 pos2 ...
            "nagano": ("\t", True, (0, 1, 2, 3)),        # chrom1 coord1 chrom2 coord2 (chromosomes "1".."X")
-           "juicer": ("\t", False, (1, 2, 5, 6))}      # juicer short: str1 chr1 pos1 frag1 str2 chr2 pos2 frag2
+           "juicer": ("\t", False, (1, 2, 5, 6)),      # juicer short: str1 chr1 pos1 frag1 str2 chr2 pos2 frag2
+           "juicer_medium": ("\t", False, (2, 3, 6, 7)),  # readID str1 chr1 pos1 frag1 str2 chr2 pos2 frag2 mapq1 mapq2
+           "chrpos": ("\t", False, (0, 1, 2, 3))}      # chr1 pos1 chr2 pos2 [strand1 strand2] (snm3C indexed contacts)
 
 
 # -- the studies -------------------------------------------------------------------------------------------------
@@ -311,10 +323,121 @@ def tian2023(raw: Path) -> dict:
                       "cell table with their region, donor and cell type (tables S3-S5)"}
 
 
+def _lee2019_lines_meta(raw: Path) -> pd.DataFrame:
+    """GSM -> title and cell line of the three series matrices of GSE124391 (one per platform)."""
+    m = _series_matrix(sorted(raw.glob("GSE124391-GPL*_series_matrix.txt.gz")))
+    return m.set_index("geo_accession")
+
+
+#: Lee 2019 cell lines: source names of GSE124391 -> cell line
+_LEE_LINES = {"Human GM12878 Cell Line": "GM12878", "Mouse Embryonic Stem Cell Line E14": "E14 mESC",
+              "NMuMG": "NMuMG", "E14 GM12878 multiplet": "E14-GM12878 multiplet"}
+
+
+def lee2019_lines(raw: Path) -> dict:
+    """Lee 2019 cell lines (GSE124391): the snm3C cells of the one mixed experiment, GM12878 (hg38) and E14 mESC +
+    NMuMG (mm10) in two stores; the 28 E14-GM12878 multiplets (several nuclei of both species in one well, aligned to
+    mm10 only) are not single cells and are left out."""
+    meta = _lee2019_lines_meta(raw)
+    files, rows = {}, []
+    for p in sorted((raw / "cells").glob("GSM*_indexed_contacts.txt.gz")):
+        gsm, date, well, index = re.match(r"^(GSM\d+)_(\d+)_snm3C_([A-P]\d+)_(AD\d+)_indexed_contacts\.txt\.gz$",
+                                          p.name).groups()
+        cell = f"{date}_{well}_{index}"
+        files[cell] = p
+        rows.append({"cell_id": cell, "gsm": gsm, "well": well, "index": index,
+                     "cell_line": _LEE_LINES[meta.loc[gsm, "source_name_ch1"]],
+                     "assembly": meta.loc[gsm, "genome build"]})
+    cells = pd.DataFrame(rows).set_index("cell_id")
+    log(f"lee2019_lines: {cells['cell_line'].value_counts().to_dict()}")
+    cells["cell_type"] = cells["cell_line"]
+    human = cells[cells["cell_line"] == "GM12878"]
+    mouse = cells[cells["cell_line"].isin(["E14 mESC", "NMuMG"])]
+    if set(human["assembly"]) != {"hg38"} or set(mouse["assembly"]) != {"mm10"}:
+        raise ValueError("lee2019_lines: unexpected genome builds in the series matrices")
+    return {"stores": {"lee2019_gm12878": human.drop(columns="assembly"),
+                       "lee2019_mesc_nmumg": mouse.drop(columns="assembly")},
+            "files": files, "format": "chrpos", "assembly": {"lee2019_gm12878": "hg38", "lee2019_mesc_nmumg": "mm10"},
+            "source": "Lee et al. 2019, Nat Methods 16:999 (snm3C-seq of cell lines, one experiment of GM12878, E14 mESC "
+                      "and NMuMG cells; GEO GSE124391): the contacts of each cell (indexed_contacts), cell lines from "
+                      "the series matrices; the E14-GM12878 multiplets left out"}
+
+
+def chen2025(raw: Path) -> dict:
+    """Chen 2025 adipose tissue (GSE297262): the 6,652 nuclei of the authors' cell table (those that passed their QC)
+    with donor and the three annotations (joint, contacts-only, methylation-only); one tarball of every nucleus'
+    contacts (blacklist removed), streamed."""
+    meta = pd.read_csv(raw / "GSE297262_snm3C_metadata.tsv.gz", sep="\t", index_col=0)
+    cells = pd.DataFrame({"donor": meta["sample"], "cell_type": meta["snm3C_annotation"],
+                          "contact_annotation": meta["inter_annotation"], "mCG_annotation": meta["mCG_annotation"],
+                          "n_contacts_published": meta["total_int"], "n_trans_published": meta["inter_chr_int"],
+                          "mCG": meta["mCG_CG"], "mCH": meta["mCH_CH"]}, index=meta.index)
+    cells.index.name = "cell_id"
+    return {"stores": {"chen2025_adipose": cells}, "tar": raw / "GSE297262_contacts.tar.gz", "format": "chrpos",
+            "assembly": "hg38",
+            "source": "Chen Z.J. et al. 2025, Nat Genet 57:2238 (snm3C-seq3 of human subcutaneous adipose tissue of five "
+                      "donors; GEO GSE297262): the contacts of the 6,652 nuclei of the authors' cell table "
+                      "(.contact.rmbkl.tsv.gz, blacklisted regions removed), their cell types (joint, contact-only and "
+                      "methylation-only annotations), contact counts and methylation levels"}
+
+
+def lee2023(raw: Path) -> dict:
+    """Lee L. 2023 (SnapHiC-D, GSE210585): snHi-C of 94 mouse ESC and 188 ES-derived neural progenitor cells, the
+    valid pairs (hotspots removed) of each; cell type and number from the sample titles."""
+    m = _series_matrix([raw / "GSE210585_series_matrix.txt.gz"]).set_index("geo_accession")
+    files, rows = {}, []
+    for p in sorted((raw / "cells").glob("GSM*.valid_pairs.rm_hotspot.sorted.txt.gz")):
+        gsm, label = re.match(r"^(GSM\d+)_(.+)\.valid_pairs\.rm_hotspot\.sorted\.txt\.gz$", p.name).groups()
+        kind, num = re.match(r"^single-nucleus Hi-C on mouse (ESC|NPC) - cell (\d+)$", m.loc[gsm, "title"]).groups()
+        cell = f"{kind}_{int(num):03d}"
+        files[cell] = p
+        rows.append({"cell_id": cell, "gsm": gsm, "library_cell": label, "cell_type": kind,
+                     "description": m.loc[gsm, "cell type"]})
+    cells = pd.DataFrame(rows).set_index("cell_id")
+    return {"stores": {"lee2023_esc_npc": cells}, "files": files, "format": "juicer_medium", "assembly": "mm10",
+            "source": "Lee L. et al. 2023, Brief Bioinform 24:bbad315 (SnapHiC-D; snHi-C of mouse ESC and ES-derived "
+                      "neural progenitor cells, 129/Sv x CAST; GEO GSE210585): the valid pairs of each cell "
+                      "(hotspots removed), alleles ignored"}
+
+
+#: Lin 2022 tarballs -> condition (series matrix: sci_thp = Thp1-mono, sci_thpp = Thp1-macro, sci_ra = Thp1-M.tb)
+_LIN_TARS = {"GSE208045_sci_thp_pairs.tar.gz": "THP-1 monocyte", "GSE208045_sci_thpp_pairs.tar.gz": "THP-1 macrophage",
+             "GSE208045_sci_ra_pairs.tar.gz": "THP-1 macrophage + M. tuberculosis"}
+
+
+def _lin_cell(member: str) -> str:
+    """'sci_thp_pairs_txt/V300067419_L03_1.cell.AACCGTCG.sorted.pairs.txt' -> 'L03_1_AACCGTCG'."""
+    lib, bc = re.match(r"^V\d+_(L\d+_\d+)\.cell\.([ACGTN]+)\.sorted\.pairs\.txt$", Path(member).name).groups()
+    return f"{lib}_{bc}"
+
+
+def lin2022(raw: Path) -> dict:
+    """Lin 2022 THP-1 (GSE208045): every cell's .pairs in one tarball per condition (the tarballs are listed once)."""
+    rows = []
+    for name, condition in _LIN_TARS.items():
+        with tarfile.open(raw / name) as t:
+            for mem in t:
+                if mem.isfile() and mem.name.endswith(".pairs.txt"):
+                    rows.append({"cell_id": _lin_cell(mem.name), "condition": condition,
+                                 "library": _lin_cell(mem.name).rsplit("_", 1)[0], "tarball": name})
+    cells = pd.DataFrame(rows).set_index("cell_id")
+    if not cells.index.is_unique:
+        raise ValueError("lin2022: cell names repeat across the tarballs")
+    cells["condition"] = pd.Categorical(cells["condition"], categories=list(_LIN_TARS.values()))
+    cells["cell_type"] = cells["condition"]
+    log(f"lin2022: {cells['condition'].value_counts().to_dict()}")
+    return {"stores": {"lin2022_thp1": cells.drop(columns="tarball")}, "tar": [raw / n for n in _LIN_TARS],
+            "tar_name": _lin_cell, "format": "pairs", "assembly": "hg19",
+            "source": "Lin et al. 2022, Nat Commun 13:5857 (sciDLO Hi-C of THP-1 monocytes, PMA-derived macrophages and "
+                      "macrophages infected with M. tuberculosis H37Ra; GEO GSE208045): the .pairs of every cell barcode "
+                      "of the deposit"}
+
+
 STUDIES = {"flyamer2017_snhic": flyamer2017, "collombet2020_snhic": collombet2020, "zhou2024_mcf7": zhou2024,
            "tan2023_cerebellum": tan2023, "gassler2017_snhic": gassler2017, "nagano2013_th1": nagano2013,
            "lu2025_scnanohic2": lu2025, "lee2019_snm3c": lee2019, "yuan2026_retina": yuan2026,
-           "tian2023_snm3c": tian2023}
+           "tian2023_snm3c": tian2023, "lee2019_snm3c_lines": lee2019_lines, "chen2025_snm3c": chen2025,
+           "lee2023_snhic": lee2023, "lin2022_scidlo": lin2022}
 
 
 # -- binning -----------------------------------------------------------------------------------------------------
@@ -346,11 +469,13 @@ def _bin_cell(args):
         df, cols = cool_contacts(src), ("chrom1", "pos1", "chrom2", "pos2")
     else:
         sep, header, cols = FORMATS[_FMT]
-        fh = io.BytesIO(gzip.decompress(src)) if isinstance(src, bytes) else src
+        if isinstance(src, bytes):                      # a tar member: gzipped or plain text
+            src = gzip.decompress(src) if src[:2] == b"\x1f\x8b" else src
+        fh = io.BytesIO(src) if isinstance(src, bytes) else src
         dtype = {cols[0]: str, cols[1]: np.int64, cols[2]: str, cols[3]: np.int64}
         try:
             df = pd.read_csv(fh, sep=sep, comment=None if header else "#", header=None, skiprows=1 if header else 0,
-                             usecols=list(cols), dtype=dtype, compression=None if isinstance(src, bytes) else "gzip")
+                             usecols=list(cols), dtype=dtype, compression=None if isinstance(src, bytes) else "infer")
         except pd.errors.EmptyDataError:                # a cell without contacts (an empty file)
             df = pd.DataFrame({c: pd.Series(dtype=t) for c, t in dtype.items()})
     c1, c2 = _codes(df[cols[0]]), _codes(df[cols[2]])
@@ -382,21 +507,27 @@ def keep_deep(cells: pd.DataFrame, files: dict, min_contacts: int, workers: int)
     return cells[n >= min_contacts]
 
 
-def _tar_cells(tar: Path, index: pd.Index):
-    """(cell index, bytes) of every cell's pairs file in a .tar.gz, streamed in archive order."""
-    with tarfile.open(tar, "r|gz") as t:
-        for mem in t:
-            if not mem.isfile():
-                continue
-            cell = Path(mem.name).name.split(".")[0]
-            if cell in index:
-                yield int(index.get_loc(cell)), t.extractfile(mem).read()
+def _tar_cells(tars, index: pd.Index, name=None):
+    """(cell index, bytes) of every cell's pairs file in one or more .tar.gz, streamed in archive order; ``name``:
+    member path -> cell name (default: the file name up to its first dot)."""
+    name = name or (lambda member: Path(member).name.split(".")[0])
+    for tar in [tars] if isinstance(tars, (str, Path)) else tars:
+        with tarfile.open(tar, "r|gz") as t:
+            for mem in t:
+                if not mem.isfile():
+                    continue
+                try:
+                    cell = name(mem.name)
+                except (AttributeError, ValueError):
+                    continue
+                if cell in index:
+                    yield int(index.get_loc(cell)), t.extractfile(mem).read()
 
 
 def bin_contacts(cells: pd.DataFrame, study: dict, stem: Path, sizes: dict, workers: int):
     binner = ContactBinner(sizes, cells.index, stem.parent / f".{stem.name}_bins", cell_res=CELL_RES)
     if "tar" in study:
-        jobs = _tar_cells(study["tar"], binner.cell_index)
+        jobs = _tar_cells(study["tar"], binner.cell_index, study.get("tar_name"))
     else:
         jobs = [(int(binner.cell_index.get_loc(c)), study["files"][c]) for c in cells.index]
     n_cis = np.zeros(len(binner.cells), np.int64)
