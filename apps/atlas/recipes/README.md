@@ -1382,7 +1382,6 @@ cells without a contact on those chromosomes are dropped.  The GEO files of thes
   splitting into sub-clusters: 89 of the 94 ES cells in two clusters that are 97 % ES cells, 185 of the 188
   progenitors in the other three.  Built in 18 min on 8 cores.  Atlas `lee2023_esc_npc`.
 
-### snm3C-seq: contacts of single nuclei with their methylation (`lee2019_snm3c/`, `lee2019_snm3c_lines/`, `tian2023_snm3c/`, `yuan2026_retina/`, `chen2025_snm3c/`)
 - **Lagunov 2026** (Lagunov T *et al.*, *Nucleic Acids Res* 54:gkag316, 2026, doi:10.1093/nar/gkag316; GEO
   GSE288409): single-nucleus Hi-C of 25 chicken oocytes, 20 at the lampbrush stage and 5 after it, each with the type
   the authors assigned after quality control (18 type 1, 7 type 2); one `.mcool` per oocyte (1 kb to 4 Mb; juicer,
@@ -1464,7 +1463,7 @@ cells without a contact on those chromosomes are dropped.  The GEO files of thes
   cell), five Leiden clusters (ARI 0.21 against the experiment; one holds 27 of the 32 SDS cells).  Atlas
   `wu2025_scmicroc_gm12878_3d`.
 
-### snm3C-seq: contacts of single nuclei with their methylation (`lee2019_snm3c/`, `tian2023_snm3c/`, `yuan2026_retina/`)
+### snm3C-seq: contacts of single nuclei with their methylation (`lee2019_snm3c/`, `lee2019_snm3c_lines/`, `tian2023_snm3c/`, `yuan2026_retina/`, `chen2025_snm3c/`)
 
 snm3C-seq reads the contacts and the DNA methylation of the same nucleus; only the contacts are fetched (one
 table per nucleus).  `build_schic_pairs.py STUDY` bins them at 1 Mb per nucleus and pooled, with a
