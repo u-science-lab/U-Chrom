@@ -18,6 +18,10 @@ These studies deposit, per cell, the contact pairs and 20 kb structures (``pytho
   lu2025_scnanohic2   Lu et al. 2025, Nat Struct Mol Biol 32:2112 (GEO GSE269496): scNanoHi-C2 of mouse embryonic
                       germ cells; the cells passing the authors' filter with a 50 kb structure (one per cell),
                       contacts from their per-cell .mcool (``build_schic_pairs.py``); store lu2025_egc_3d
+  wu2025_scmicroc_gm12878  Wu et al. 2025, Nat Genet 57:1777 (GEO GSE281150): scMicro-C of GM12878; the cells of the
+                      1000 U MNase titration and the SDS test with 20 kb clean structures (runs 1 and 2, deposited per
+                      sample; those of the 355 cells of GSE192759 are only in a 102 GB tarball); store
+                      wu2025_scmicroc_gm12878_3d
 
 Every store (``<data>/<name>/<store>.chromdata.zarr``) has
 
@@ -297,8 +301,26 @@ def lu2025(raw: Path) -> dict:
                       "their filter, with the cells' contacts (10 kb level of their .mcool, haplotypes merged)"}
 
 
+def wu2025(raw: Path) -> dict:
+    """Wu 2025 GM12878: the cells with a 20 kb clean structure (run 1; run 2 where deposited) and contact pairs."""
+    from build_schic_pairs import wu2025 as wu2025_maps
+
+    files = _cell_files(raw / "cells", r"^GSM\d+_(?P<cell>(?:GM-1000U|SDS-GM)_\d+)(?P<role>\.allValidPairs|_20kb_1\.clean"
+                        r"|_20kb_2\.clean)(?:\.3dg)?(?:\.txt)?\.gz$")
+    files = {c: (f[".allValidPairs"], f["_20kb_1.clean"], f.get("_20kb_2.clean")) for c, f in files.items()
+             if ".allValidPairs" in f and "_20kb_1.clean" in f}
+    cells = wu2025_maps(raw)["stores"]["wu2025_scmicroc_gm12878"]
+    log(f"wu2025: {len(files):,} cells with a 20 kb clean structure, "
+        f"{sum(f[2] is not None for f in files.values()):,} with a second run")
+    return {"stores": {"wu2025_scmicroc_gm12878_3d": cells.reindex(sorted(files))}, "files": files,
+            "assembly": "hg38", "res_3d": 100_000,
+            "source": "Wu et al. 2025, Nat Genet 57:1777 (scMicro-C of GM12878; GEO GSE278191 and GSE280482): contact "
+                      "pairs (hickit) and the authors' 20 kb clean hickit structures (runs 1 and 2) of the cells of "
+                      "the 1000 U MNase titration and the SDS test that have one"}
+
+
 STUDIES = {"tan2019_dipc": tan2019, "xu2025_sperm": xu2025, "wu2024_limca": wu2024, "wu2024_limca_human": wu2024h,
-           "liu2026_hires_xci": liu2026, "tan2023_cerebellum": tan2023, "lu2025_scnanohic2": lu2025}
+           "liu2026_hires_xci": liu2026, "tan2023_cerebellum": tan2023, "lu2025_scnanohic2": lu2025, "wu2025_scmicroc_gm12878": wu2025}
 
 
 # -- workers -----------------------------------------------------------------------------------------------------
