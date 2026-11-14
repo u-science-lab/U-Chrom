@@ -482,7 +482,7 @@ def build_store(name: str, cells: pd.DataFrame, study: dict, out_dir: Path, work
     from uchrom.emb import embed_cells
 
     files = study["files"]
-    assembly = study["assembly"][name] if isinstance(study["assembly"], dict) else study["assembly"]
+    assembly = study["assembly"][name.removesuffix("_test")] if isinstance(study["assembly"], dict) else study["assembly"]
     keep = HG38 if assembly.startswith("hg") else MM10
     sizes = chromsizes(files[cells.index[0]][0], assembly, keep=keep)
     res = study["res_3d"]
@@ -559,7 +559,7 @@ def build_store(name: str, cells: pd.DataFrame, study: dict, out_dir: Path, work
             log(f"run 1 vs run 2: RMSD median {med:.2f} particle radii over {len(st):,} cells")
         traces = pd.concat(traces, ignore_index=True).set_index("trace_id")
         kw = {}
-        frags = study.get("fragments", {}).get(name)
+        frags = study.get("fragments", {}).get(name.removesuffix("_test"))
         if frags:
             kw["bin_tracks"] = fragment_tracks(frags, cells.index, bin_table(sizes, res))
             uns["bin_tracks_note"] = (f"{', '.join(kw['bin_tracks'].columns)}: the deposited fragments of all the "

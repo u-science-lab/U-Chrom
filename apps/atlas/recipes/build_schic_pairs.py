@@ -529,7 +529,7 @@ def add_rna(cd, spec, stem: Path) -> None:
 def build_store(name: str, cells: pd.DataFrame, study: dict, out_dir: Path, workers: int) -> Path:
     from uchrom import ChromData
 
-    assembly = study["assembly"][name] if isinstance(study["assembly"], dict) else study["assembly"]
+    assembly = study["assembly"][name.removesuffix("_test")] if isinstance(study["assembly"], dict) else study["assembly"]
     sizes = chromsizes(None, assembly, keep=HG38 if assembly.startswith("hg") else MM10)
     stem = out_dir / name
     if study.get("min_contacts"):
@@ -554,7 +554,7 @@ def build_store(name: str, cells: pd.DataFrame, study: dict, out_dir: Path, work
         for rec in cd.uns[kind].values():
             rec["path"] = str(out_dir / Path(rec["path"]).name)
     if study.get("rna"):
-        add_rna(cd, study["rna"][name], stem)
+        add_rna(cd, study["rna"][name.removesuffix("_test")], stem)
     if study.get("embed", True):
         embed(cd, scool, **study.get("embed_kw", {}))
     for kind in ("linked_scool", "linked_cool"):
