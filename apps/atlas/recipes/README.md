@@ -149,13 +149,24 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `li2023_scnanohic/`: Li 2023 scNanoHi-C, the authors' contact tables of 24 GM12878 cells | 818 MB | fetch `li2023_scnanohic`; recipe `build_scnanohic2023.py` | atlas store `li2023_scnanohic_gm12878` |
 | `flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `ulianov2021_snhic/`: single-nucleus / single-cell Hi-C contact tables (oocytes and zygotes, early embryos, MCF7 lines, Drosophila BG3) | 490 MB / 8.1 GB / 2.4 GB / 7 MB | fetch the same names; recipe `build_schic_pairs.py` | atlas stores `flyamer2017_oocyte_zygote`, `collombet2020_embryo`, `zhou2024_mcf7`, `ulianov2021_bg3` |
 | `gassler2017_snhic/`, `nagano2013_th1/`: single-nucleus / single-cell Hi-C (zygote pronuclei of Scc1 / Wapl knockouts; the first single-cell Hi-C, Th1 cells) | 345 MB / 2 MB | fetch the same names; recipe `build_schic_pairs.py` | atlas stores `gassler2017_zygote`, `nagano2013_th1` |
+| `lin2022_scidlo/`: Lin 2022 sciDLO Hi-C of THP-1 monocytes, macrophages and M. tuberculosis-infected macrophages (1,343 cells) | 1.1 GB (one tarball of `.pairs` per condition) | fetch `lin2022_scidlo`; recipe `build_schic_pairs.py` | atlas store `lin2022_thp1` |
+| `lee2023_snhic/`: Lee L. 2023 single-nucleus Hi-C of mouse ES cells and neural progenitors (282 nuclei) | 10.3 GB | fetch `lee2023_snhic`; recipe `build_schic_pairs.py` | atlas store `lee2023_esc_npc` |
+| `lagunov2026_lampbrush/`: Lagunov 2026 single-oocyte Hi-C of chicken lampbrush chromosomes (25 oocytes, chicken T2T assembly) | 427 MB (per-oocyte `.mcool`; the `.hic` copies, 732 MB, not fetched) | fetch `lagunov2026_lampbrush`; recipe `build_schic_pairs.py` | atlas store `lagunov2026_oocyte` |
+| `qu2023_sccareseq/`: Qu 2023 scCARE-seq, Hi-C and RNA of the same mouse ES cells in serum or 2i (384 cells) | 1.29 GB (HiC-Pro valid pairs per cell, one RNA count table; the bulk Hi-C / CARE-seq files not fetched) | fetch `qu2023_sccareseq`; recipe `build_schic_pairs.py` | atlas store `qu2023_mesc` |
+| `silva2020_snhic/`, `dequeker2022_snhic/`: snHi-C maps of oocytes (Scc1 / Wapl knockouts) and of zygote pronuclei (MCM loading, Wapl) | 235 MB / 82 MB (the authors' 10 kb `.cool`) | fetch the same names; recipe `build_schic_pairs.py` | atlas stores `silva2020_oocyte`, `dequeker2022_zygote` |
+| `pang2022_schic/`: Pang 2022 single-cell Hi-C of ovarian cancer cells (33 cells) | 84 MB (NucProcess `.ncc`; the bulk `.hic` of the series not fetched) | fetch `pang2022_schic`; recipe `build_schic_pairs.py` | atlas store `pang2022_ovarian` |
+| `du2020_snhic/`: Du 2020 single-oocyte Hi-C of Scc1 knockout and control full-grown oocytes (73) | 575 MB (`.pairs`) | fetch `du2020_snhic`; recipe `build_schic_pairs.py` | atlas store `du2020_oocyte` |
 | `lu2025_scnanohic2/`: Lu 2025 scNanoHi-C2 of mouse fetal germ cells, E11.5-E18.5 (2,150 cells passing the authors' filter; structures of 468) | 21.4 GB (per-cell .mcool per library, cell table, structures; the per-read parquet files, 88 GB, not fetched) | fetch `lu2025_scnanohic2`; recipes `build_schic_pairs.py`, `build_dipc_structures.py` | atlas stores `lu2025_egc`, `lu2025_egc_3d` |
 | `lee2019_snm3c/`: Lee 2019 snm3C-seq contacts of the human prefrontal cortex (4,238 nuclei of two donors) | 44 GB (contacts only; the methylation files are not fetched) | fetch `lee2019_snm3c`; recipe `build_schic_pairs.py` | atlas store `lee2019_pfc` |
+| `lee2019_snm3c_lines/`: Lee 2019 snm3C-seq contacts of cell lines (144 GM12878, 351 E14 mESC, 96 NMuMG, 28 multiplets) | 1.4 GB (contacts only; the methylation files and the bulk mESC 3C / Hi-C / m3C are not fetched) | fetch `lee2019_snm3c_lines`; recipe `build_schic_pairs.py` | atlas stores `lee2019_gm12878`, `lee2019_mesc_nmumg` |
 | `tian2023_snm3c/`: Tian 2023 snm3C-seq contacts of the adult human brain (145,070 nuclei; the 143,760 of the authors' cell table are used) | 556 GB (contacts only; the methylation files are not fetched) | fetch `tian2023_snm3c` (NeMO, a compute cluster); recipe `build_schic_pairs.py` | atlas store `tian2023_brain` |
 | `yuan2026_retina/`: Yuan 2026 snm3C-seq contacts of human macula, peripheral retina and RPE (every well of 36 plates, 13,824) | 11.3 GB (contacts only; the methylation files are not fetched) | fetch `yuan2026_retina`; recipe `build_schic_pairs.py` | atlas store `yuan2026_eye` |
+| `chen2025_snm3c/`: Chen 2025 snm3C-seq3 contacts of human subcutaneous adipose tissue (6,652 nuclei of five donors) | 16.2 GB (one tarball; the methylation tables are not fetched) | fetch `chen2025_snm3c`; recipe `build_schic_pairs.py` | atlas store `chen2025_adipose` |
 | `tan2023_cerebellum/`: Tan 2023 Dip-C of the mouse cerebellum, P0-P637 (6,432 cells; structures of 675) | 27.7 GB (all-cell pairs) + 13.3 GB (structures and their pairs) | fetch `tan2023_cerebellum`, `tan2023_cerebellum_3d`; recipes `build_schic_pairs.py`, `build_dipc_structures.py` | atlas stores `tan2023_cerebellum`, `tan2023_cerebellum_3d` |
 | `spacea_ma2026/`: Ma 2026 SpaceA, spatial SPRITE of 9 mouse embryo sections, E11.5-E14.5 (5 libraries, 17 runs) | 2.7 TB fastq; C6 run 1 alone: clusters 87 MB, store 550 MB with the derived maps | fetch `ma2026_spacea_<library>` (GSA, academic use); recipe `spacea_ma2026/slurm/` (a compute cluster) | per-spot check of `ChromData.clusters` (U-Chrom PR #153); the browser's cluster track; not in the atlas |
 | `wu2025_scmicroc/`: Wu 2025 scMicro-C GM12878, 12 deepest cells | 3.1 GB (102 GB streamed) | fetch `wu2025_scmicroc` | EMber deep development and test (PREREG §11); Fig. 3a / S8 |
+| `wu2025_scmicroc_gm12878/`: Wu 2025 scMicro-C of GM12878, every cell with a contact table (522) and the 20 kb clean structures (runs 1 and 2) of the 1000 U titration and SDS cells | 5.3 GB (hickit pairs + 3dg; the 102 GB 3dg tarball of the 355 cells, the bigwigs and the 200 / 600 / 800 U processed tarballs, 386 GB, not fetched) | fetch `wu2025_scmicroc_gm12878`; recipes `build_schic_pairs.py`, `build_dipc_structures.py` | atlas stores `wu2025_scmicroc_gm12878`, `wu2025_scmicroc_gm12878_3d` |
+| `chen2026_charm/`: Chen 2026 CHARM-seq of hybrid mouse ES cells (805) and adult mouse brain (4,265): contacts, RNA, accessibility and one histone mark of the same cells, 20 kb structures | 75.5 GB (pairs and structure tarballs, RNA, cell table) + 3.3 GB (fragments) | fetch `chen2026_charm`, `chen2026_charm_fragments`; recipes `build_schic_pairs.py`, `build_dipc_structures.py` | atlas stores `chen2026_charm_mesc`, `chen2026_charm_brain`, `chen2026_charm_mesc_3d`, `chen2026_charm_brain_3d` |
 | `rao2014_imr90/4DNFIR1JDZH7.mcool`: Rao 2014 IMR90, 4DN GRCh38 | 4.6 GB | fetch `rao2014_imr90_4dn` (**cluster only**; laptops read it over HTTP) | an unpublished benchmark; an unpublished benchmark (range reads) |
 | `bonev2017_mesc/4DNFIC21MG3U.mcool`: Bonev 2017 mESC Hi-C, 4DN mm10 | 12.6 GB | fetch `bonev2017_mesc_4dn` (**cluster only**) | an unpublished benchmark; an unpublished benchmark (range reads); tutorial `sc_structures` and uchrom-reproducibility `supp_table3/sc_structures/` (bulk mESC loops and insulation) |
 | `WTC11_HiC_2Mb.hcs`: the IGM demo input (GPL-3) | 3.9 MB | downloaded on demand by an unpublished benchmark into `$UCHROM_IGM_CACHE` | IGM protocol of the native engine vs the original IGM |
@@ -683,11 +694,22 @@ brain cells).
 | `lu2025_egc_3d` | 778 | `lu2025_scnanohic2/lu2025_egc_3d.chromdata.zarr` | `build_dipc_structures.py lu2025_scnanohic2`, `derive_embeddings.py --hic per_cell --leiden` | `lu2025_scnanohic2` |
 | `lu2025_egc` | 468 | `lu2025_scnanohic2/lu2025_egc.chromdata.zarr` | `build_schic_pairs.py lu2025_scnanohic2` | `lu2025_scnanohic2` |
 | `lee2019_pfc` | 1,538 | `lee2019_snm3c/lee2019_pfc.chromdata.zarr` | `build_schic_pairs.py lee2019_snm3c` | `lee2019_snm3c` |
+| `lee2019_gm12878`, `lee2019_mesc_nmumg` | 81 / 194 | `lee2019_snm3c_lines/<id>.chromdata.zarr` | `build_schic_pairs.py lee2019_snm3c_lines` | `lee2019_snm3c_lines` |
 | `tian2023_brain` | 34,915 | `tian2023_snm3c/tian2023_brain.chromdata.zarr` | `build_schic_pairs.py tian2023_snm3c` | `tian2023_snm3c` |
 | `yuan2026_eye` | 1,216 | `yuan2026_retina/yuan2026_eye.chromdata.zarr` | `build_schic_pairs.py yuan2026_retina` | `yuan2026_retina` |
+| `chen2025_adipose` | 2,034 | `chen2025_snm3c/chen2025_adipose.chromdata.zarr` | `build_schic_pairs.py chen2025_snm3c` | `chen2025_snm3c` |
 | `tan2023_cerebellum` | 1,610 | `tan2023_cerebellum/tan2023_cerebellum.chromdata.zarr` | `build_schic_pairs.py tan2023_cerebellum` | `tan2023_cerebellum` |
 | `flyamer2017_oocyte_zygote`, `collombet2020_embryo`, `zhou2024_mcf7`, `ulianov2021_bg3` | 52 / 171 / 43 / 6 | `flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `ulianov2021_snhic/` + `<id>.chromdata.zarr` | `build_schic_pairs.py <folder name>` | the folder names |
 | `gassler2017_zygote`, `nagano2013_th1` | 27 / 6 | `gassler2017_snhic/gassler2017_zygote.chromdata.zarr`, `nagano2013_th1/nagano2013_th1.chromdata.zarr` | `build_schic_pairs.py gassler2017_snhic`, `... nagano2013_th1` | `gassler2017_snhic`, `nagano2013_th1` |
+| `lin2022_thp1` | 90 | `lin2022_scidlo/lin2022_thp1.chromdata.zarr` | `build_schic_pairs.py lin2022_scidlo` | `lin2022_scidlo` |
+| `lee2023_esc_npc` | 290 | `lee2023_snhic/lee2023_esc_npc.chromdata.zarr` | `build_schic_pairs.py lee2023_snhic` | `lee2023_snhic` |
+| `lagunov2026_oocyte` | 13 | `lagunov2026_lampbrush/lagunov2026_oocyte.chromdata.zarr` | `build_schic_pairs.py lagunov2026_lampbrush` | `lagunov2026_lampbrush` |
+| `qu2023_mesc` | 60 | `qu2023_sccareseq/qu2023_mesc.chromdata.zarr` | `build_schic_pairs.py qu2023_sccareseq` | `qu2023_sccareseq` |
+| `silva2020_oocyte`, `dequeker2022_zygote` | 26 / 19 | `silva2020_snhic/silva2020_oocyte.chromdata.zarr`, `dequeker2022_snhic/dequeker2022_zygote.chromdata.zarr` | `build_schic_pairs.py silva2020_snhic`, `... dequeker2022_snhic` | `silva2020_snhic`, `dequeker2022_snhic` |
+| `pang2022_ovarian` | 14 | `pang2022_schic/pang2022_ovarian.chromdata.zarr` | `build_schic_pairs.py pang2022_schic` | `pang2022_schic` |
+| `du2020_oocyte` | 20 | `du2020_snhic/du2020_oocyte.chromdata.zarr` | `build_schic_pairs.py du2020_snhic` | `du2020_snhic` |
+| `wu2025_scmicroc_gm12878`, `wu2025_scmicroc_gm12878_3d` | 275 / 479 | `wu2025_scmicroc_gm12878/<id>.chromdata.zarr` | `build_schic_pairs.py wu2025_scmicroc_gm12878`; `build_dipc_structures.py wu2025_scmicroc_gm12878`, `derive_embeddings.py --hic per_cell --leiden` | `wu2025_scmicroc_gm12878` |
+| `chen2026_charm_mesc`, `chen2026_charm_brain`, `chen2026_charm_mesc_3d`, `chen2026_charm_brain_3d` | 189 / 630 / 268 / 1,400 | `chen2026_charm/<id>.chromdata.zarr` | `build_schic_pairs.py chen2026_charm`; `build_dipc_structures.py chen2026_charm`, `derive_embeddings.py --hic per_cell --leiden` | `chen2026_charm`, `chen2026_charm_fragments` |
 | `li2023_scnanohic_gm12878` | 265 | `li2023_scnanohic/li2023_scnanohic_gm12878.chromdata.zarr` | `build_scnanohic2023.py` | `li2023_scnanohic` |
 | `xu2025_sperm_human`, `xu2025_sperm_mouse` | 1,017 / 704 | `xu2025_sperm/<id>.chromdata.zarr` | `build_dipc_structures.py xu2025_sperm`, `derive_embeddings.py --hic per_cell --leiden` | `xu2025_sperm` |
 | `payne2021_igs_embryo`, `payne2021_igs_pgp1` | 23 / 3 | `payne2021_igs/<id>.chromdata.zarr` | loaders of the same names (see *`payne2021_igs/`*); traces are sets of reads (`trace_kind` `set`), the thumbnails dots | `payne2021_igs` |
@@ -1201,7 +1223,7 @@ Figure 3 datasets.
 - Not fetched: ChAIR (Nat. Methods 2025; CNCB OMIX009588 / 9589, 120 GB from China), Nagano 2013 (10 Th1
   cells), Ramani 2017 sciHi-C (cell lines, hg19 / mm10 mix).
 
-### Single-cell Hi-C with the authors' structures (`tan2019_dipc/`, `tan2023_cerebellum/`, `lu2025_scnanohic2/`, `xu2025_sperm/`, `wu2024_limca/`, `wu2024_limca_human/`, `liu2026_hires_xci/`, `lando2024_mesc/`, `zhou2019_rice/`)
+### Single-cell Hi-C with the authors' structures (`tan2019_dipc/`, `tan2023_cerebellum/`, `lu2025_scnanohic2/`, `xu2025_sperm/`, `wu2024_limca/`, `wu2024_limca_human/`, `liu2026_hires_xci/`, `lando2024_mesc/`, `zhou2019_rice/`, `chen2026_charm/`)
 
 Studies that deposit, per cell, the contacts and the authors' own 3-D structure.  `build_dipc_structures.py STUDY`
 (hickit / Dip-C `.3dg`, 20 kb particles averaged to 100 kb, or 200 kb for HiRES) and `build_nuc_structures.py
@@ -1285,8 +1307,31 @@ labels).
   Check (2026-11-01): contacting 100-kb bins more than 2 Mb apart lie 0.39 times as far apart as random pairs at
   the same separation (closer copy pair; 0.32-0.62 over 60 cells).  Leiden clusters follow stage (50 of the 55
   E11.5 cells in one).  Atlas `lu2025_egc_3d`.
+- **Chen 2026 CHARM-seq** (Chen Y *et al.*, *Nature* 653:942, 2026, doi:10.1038/s41586-026-10322-z; GEO GSE303006):
+  chromatin contacts, RNA, accessibility (ATAC) and one histone mark of the same single cells, hybrid mouse ES cells
+  (C57BL/6J x CAST/EiJ; mark H3K27me3, by GEO's feature README, although the cell table says H3K27ac for every
+  cell) and the adult brain of three hybrid mice (mark H3K27ac).  The deposit has the cell table of the cells
+  passing the authors' QC (805 ES cells, 4,265 brain cells; cell type, cell-cycle phase, contact counts, the RMSD of
+  each 20 kb and 5 kb model), one tarball of phased `.pairs` and one of 20 kb diploid structures (`.3dg`) per
+  system, the RNA counts and pooled fragment files; 75.5 GB (`chen2026_charm`) + 3.3 GB (`chen2026_charm_fragments`).
+  The brain cells are mostly cortical but include striatal medium spiny neurons (`Inh_MSN`, 413) and olfactory-bulb
+  neurons (`Ex_OB`, 333), so the stores are named `brain` as the files are.  `build_schic_pairs.py chen2026_charm`
+  takes every cell's pairs (out of the tarballs once, `raw/cells`; homologs summed), counts equal to the authors' for
+  every cell: mESC 1.41 billion (median 1.85 million per cell, 68 % cis), brain 2.06 billion (median 485,000, 80 %
+  cis); the RNA counts as a linked AnnData with an RNA embedding.  The contact clusters follow the cell cycle in the
+  ES cells (ARI 0.23; one cluster holds 71 of the 153 G1 and 32 of the 39 M cells) and the cell types in the brain
+  (ARI 0.36, mice 0.01; astrocytes, OPCs, oligodendrocytes, microglia and medium spiny neurons each mostly in a
+  cluster of their own).  Atlas `chen2026_charm_mesc`, `chen2026_charm_brain`.  `build_dipc_structures.py
+  chen2026_charm` keeps the cells whose 20 kb model has an RMSD of at most 1.5 (the authors' cut,
+  `CHEN2026_MAX_RMSD`; 729 ES cells, median 0.18, and 3,801 brain cells, median 0.66), averages the structures to
+  200 kb (one trace per chromosome copy), bins the contacts at 1 Mb per cell (`res_map`) and pools the ATAC and
+  histone fragments of the kept cells per 200-kb bin (CPM, `bin_tracks`); `derive_embeddings.py --hic per_cell
+  --leiden` embeds the 1-Mb maps as linked and clusters the RNA (brain: ARI 0.82 with the types).  Check
+  (2026-11-13): contacting 200-kb bins more than 2 Mb apart lie 0.38 (ES cells) and 0.32 (brain) times as far apart
+  as random pairs at the same separation (closer copy pair; 20 cells each).  Built in 2 h 35 min on 16 cores (both
+  recipes, 82 GB peak memory).  Atlas `chen2026_charm_mesc_3d`, `chen2026_charm_brain_3d`.
 
-### Single-cell Hi-C without structures (`flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `tan2023_cerebellum/`, `ulianov2021_snhic/`, `gassler2017_snhic/`, `nagano2013_th1/`)
+### Single-cell Hi-C without structures (`flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `tan2023_cerebellum/`, `ulianov2021_snhic/`, `gassler2017_snhic/`, `nagano2013_th1/`, `lin2022_scidlo/`, `lee2023_snhic/`, `lagunov2026_lampbrush/`, `qu2023_sccareseq/`, `silva2020_snhic/`, `dequeker2022_snhic/`, `pang2022_schic/`, `du2020_snhic/`, `wu2025_scmicroc_gm12878/`)
 
 Studies that deposit one contact table per cell and no structure.  `build_schic_pairs.py STUDY` bins each cell's
 contacts (both homologs together, alleles ignored; autosomes, X and Y) into a per-cell 1-Mb `.scool` (linked
@@ -1342,8 +1387,108 @@ cells without a contact on those chromosomes are dropped.  The GEO files of thes
   single-cell Hi-C, the unique fragment-end pairs (`chrom1 coord1 chrom2 coord2`, chromosomes without `chr`; mm9) of
   the 10 deposited CD4+ Th1 cells, 2 MB (`nagano2013_th1`); the ensemble Hi-C of the series is not fetched.  11,156 to
   30,665 contacts per cell, 74-93 % cis.  No embedding (`"embed": False`: too few cells).  Atlas `nagano2013_th1`.
+- **Lin 2022** (Lin D *et al.*, *Nat Commun* 13:5857, 2022, doi:10.1038/s41467-022-33558-5; GEO GSE208045): sciDLO
+  Hi-C (single-cell indexed DLO Hi-C, MseI) of THP-1 monocytes, PMA-derived macrophages and macrophages infected with
+  *M. tuberculosis* H37Ra, one tarball per condition (`sci_thp`, `sci_thpp`, `sci_ra`: the series matrix names them
+  Thp1-mono, Thp1-macro, Thp1-M.tb) holding a 4DN `.pairs` per cell barcode (hg19; 1.1 GB, `lin2022_scidlo`).  The
+  tarballs hold exactly the cells of the paper: 409 monocytes, 424 macrophages, 510 infected macrophages; cell names
+  are library + barcode.  63.2 M contacts, median 33,500 per cell, 92 % cis.  The Leiden clusters agree with the
+  conditions at ARI 0.23: two clusters hold 336 of the 409 monocytes and are 98 % monocytes; macrophages and infected
+  macrophages mix in the other three.  Built in 9 min on 8 cores.  Atlas `lin2022_thp1`.
+- **Lee L. 2023** (Lee L *et al.*, *Brief Bioinform* 24:bbad315, 2023, doi:10.1093/bib/bbad315; GEO GSE210585):
+  the deep single-nucleus Hi-C made for SnapHiC-D, 94 mouse ES cells and 188 ES-derived neural progenitor cells
+  (129/Sv x CAST, mm10), one `valid_pairs.rm_hotspot.sorted.txt.gz` per nucleus (Juicer medium format: read name,
+  strand, chromosome, position, fragment of each end, both MAPQs; 10.3 GB, `lee2023_snhic`), the type and number from
+  the sample titles.  Taken as deposited (alleles ignored): 425 M contacts, median 1.52 M per nucleus, 75 % cis.  The
+  paper gives medians of 1.29 M (ES cells) and 0.95 M (progenitors); the deposit has 1.17 M and 1.68 M rows, and no
+  filter tried reproduces both (both MAPQ >= 30: 0.75 M / 1.12 M; cis pairs under 1 kb removed: 0.71 M / 0.92 M; no
+  duplicate rows), so the paper's counts are not those of the deposited tables.  40-45 % of the rows are cis pairs
+  closer than 1 kb (on the diagonal at 1 Mb).  The Leiden clusters agree with the types at ARI 0.38, the types
+  splitting into sub-clusters: 89 of the 94 ES cells in two clusters that are 97 % ES cells, 185 of the 188
+  progenitors in the other three.  Built in 18 min on 8 cores.  Atlas `lee2023_esc_npc`.
 
-### snm3C-seq: contacts of single nuclei with their methylation (`lee2019_snm3c/`, `tian2023_snm3c/`, `yuan2026_retina/`)
+- **Lagunov 2026** (Lagunov T *et al.*, *Nucleic Acids Res* 54:gkag316, 2026, doi:10.1093/nar/gkag316; GEO
+  GSE288409): single-nucleus Hi-C of 25 chicken oocytes, 20 at the lampbrush stage and 5 after it, each with the type
+  the authors assigned after quality control (18 type 1, 7 type 2); one `.mcool` per oocyte (1 kb to 4 Mb; juicer,
+  MAPQ >= 30, duplicates removed), 427 MB (`lagunov2026_lampbrush`; the `.hic` copies and the merged maps of the
+  series are not fetched).  The first bird of the atlas: the maps are on the chicken telomere-to-telomere assembly
+  ASM2420605v2, which UCSC does not serve, so the recipe takes the chromosome sizes from the maps (`sizes_from`) and
+  keeps chr1-38, Z and W (`GALGAL_T2T`; chrM dropped).  The pixels of the 1 kb level are taken as `count` contacts at
+  the bin midpoints.  13,970,635 contacts (14,039,281 with chrM), 158,110 to 2,063,608 per oocyte, median 452,542,
+  97 % cis.  Two Leiden clusters, which follow the type more than the stage (ARI 0.34 against the type, 0.05 against
+  the stage, 0.42 against both): one holds 12 of the 14 lampbrush type-1 oocytes and 1 of the 4 post-lampbrush
+  type-1 ones, the other all 7 type-2 oocytes.  Atlas `lagunov2026_oocyte`.
+
+- **Qu 2023** (Qu J *et al.*, *Nat Struct Mol Biol* 30:1393, 2023, doi:10.1038/s41594-023-01066-9; GEO GSE211395):
+  scCARE-seq, Hi-C and RNA of the same cell, 384 mouse ES cells (129X1 x 129S1), 192 in serum and 192 in 2i; the
+  HiC-Pro valid pairs of each cell (`<condition>_H_<n>`, mm10) and one RNA count table of the same cells
+  (`<condition>_R_<n>`, 49,585 Ensembl genes), 1.29 GB (`qu2023_sccareseq`).  Cells are named `<condition>_<nnn>`;
+  the recipe links the RNA counts as an AnnData (`qu2023_mesc_rna.h5ad`, all 384 cells found; median 1,750 counts
+  and 951 genes per cell, serum 3,328 / 2i 1,353 counts) and adds an RNA PCA / UMAP of the 2,000 most variable
+  genes (the `rna` entry of a study in `build_schic_pairs.py`).  42,662,451 contacts (42,666,873 read), 7,839 to
+  675,813 per cell, median 88,346, 82 % cis.  17 Leiden clusters of the contact embedding: 372 of the 384 cells lie
+  in a cluster where their condition is the majority (ARI against the condition 0.12, low only because each
+  condition splits into many clusters).  Within a condition the clusters are a batch structure of the libraries,
+  not biology: they follow the 24 groups of 16 cells whose numbers share the remainder modulo 12 (ARI 0.58), and
+  cells share identical contact positions (cell `2i_H_1` shares 1.6 to 5.5 % of its position pairs with each of six
+  other 2i cells, 2.9 % with `serum_H_1`).  The RNA clusters follow runs of 12 consecutive numbers instead (ARI 0.39)
+  and do not separate the conditions at this depth (ARI 0.06).  The deposit does not describe the plate layout; the
+  contacts are kept as deposited.  Atlas `qu2023_mesc`.
+
+- **Silva 2020** (Silva MCC *et al.*, *J Cell Biol* 219:e201906100, 2020, doi:10.1083/jcb.201906100; GEO GSE132264):
+  the authors' 10 kb maps (`.cool`, filtered as in Flyamer 2017; mm9) of 131 oocytes of Scc1 conditional knockouts
+  (35) and controls (37), Wapl knockouts (36) and controls (23), 235 MB (`silva2020_snhic`); groups and strain from
+  the series matrix, cells named `<n>_<group>` as in Gassler 2017 (`_numbered_cools`).  Pixels taken as `count`
+  contacts at the bin midpoints: 54,462,817 contacts, median 373,679 per oocyte, 98 % cis.  Four Leiden clusters
+  (ARI 0.12 against the genotype): two hold 29 of the 35 Scc1 knockouts, the other two 55 of the 59 Wapl oocytes,
+  knockouts and controls together; the Wapl oocytes are C57BL/6J, the Scc1 ones B6/129SV/CBA, so strain and
+  genotype are confounded there.  Atlas `silva2020_oocyte`.
+- **Dequeker 2022** (Dequeker BJH *et al.*, *Nature* 606:197, 2022, doi:10.1038/s41586-022-04730-0; GEO GSE196300):
+  the authors' 10 kb maps of 109 G1 zygote pronuclei (54 maternal, 55 paternal; mm9), 82 MB (`dequeker2022_snhic`):
+  wild type (29) and wild type without MCM loading (31; deposit label `no.mcm`), Wapl knockouts (22) and Wapl
+  knockouts without MCM loading (19), Wapl controls (8).  34,156,080 contacts, median 290,115 per pronucleus, 96 %
+  cis.  Four Leiden clusters split the parents (ARI 0.45: one holds 38 of the 54 maternal pronuclei, two others 49
+  of the 55 paternal ones) and not the MCM or Wapl groups (ARI -0.01); the paper's effects (loops, insulation) are
+  below what a 1 Mb embedding sees.  Atlas `dequeker2022_zygote`.
+
+- **Du 2020** (Du Z *et al.*, *Mol Cell* 77:825, 2020, doi:10.1016/j.molcel.2019.11.011; GEO GSE136093):
+  single-oocyte Hi-C of 73 full-grown oocytes, Scc1 conditional knockouts (Zp3-Cre; 20 NSN, 15 SN) and controls
+  (flox/flox; 21 NSN, 17 SN); one `.pairs` per oocyte (mm9), 575 MB (`du2020_snhic`).  Genotype and configuration
+  from the file names, checked against the series matrix.  The read names hold a `#` (the barcode), so the recipe
+  skips the leading `#` lines by count instead of treating `#` as a comment; two files end in a truncated row,
+  which is dropped.  32,088,317 contacts, median 400,070 per oocyte, 98 % cis.  Three Leiden clusters follow the
+  configuration and, in NSN oocytes, the genotype (ARI 0.47 against both): one holds 31 of the 32 SN oocytes of
+  both genotypes, one 19 of the 21 NSN controls, one 14 of the 20 NSN knockouts.  Atlas `du2020_oocyte`.
+- **Pang 2022** (Pang QY *et al.*, *Genome Biol* 23:121, 2022, doi:10.1186/s13059-022-02687-x; GEO GSE201919):
+  single-cell Hi-C of 33 ovarian cancer cells picked by dielectrophoresis, 24 from a PEO1 / HEYA8 mixture (the two
+  lines are not told apart per cell in the deposit) and 9 OVCA429 shGRHL2 Tet-inducible cells; the NucProcess
+  contacts of each (`.ncc`, space-separated, positions in columns 1 and 7; hg38), 84 MB (`pang2022_schic`).  Cell
+  lines from the two series matrices.  Two `.ncc` rows are corrupt (a file path glued to a chromosome name, a
+  position beyond its chromosome) and are dropped.  2,158,200 contacts, 7,237 to 152,989 per cell, median 49,519,
+  71 % cis; 7 cells of the mixture have less than 25 % cis contacts (likely failed cells, kept as deposited).  Two
+  Leiden clusters (ARI 0.13 against the line): one holds 14 of the 17 mixture cells with more than 25 % cis, the
+  other all 9 OVCA429 cells together with the 7 low-cis cells.  Atlas `pang2022_ovarian`.
+- **Wu 2025 scMicro-C** (Wu H *et al.*, *Nat Genet* 57:1777, 2025, doi:10.1038/s41588-025-02247-6; GEO GSE281150, the
+  SuperSeries of GSE192759, GSE278191, GSE280482 and others): every GM12878 cell with a contact table, 522, 5.3 GB
+  with the structures (`wu2025_scmicroc_gm12878`): the 355 scMicro-C cells (`cell_<nnn>`), 96 of the 1000 U MNase
+  titration (`GM-1000U_<nnn>`) and 71 of the test with (35) and without SDS (36).  The files named
+  `allValidPairs.txt.gz` are hickit `.pairs` (phase columns ignored).  The 200, 600 and 800 U titration cells are
+  deposited only as processed tarballs (1-2 GB per cell, 386 GB in all) and are not included.  471,266,168 contacts,
+  1,238 to 3,067,438 per cell, median 822,203, 80 % cis (scMicro-C 86 %, titration 73 %; the no-SDS cells are
+  shallow, median 134,294).  Eight Leiden clusters follow the experiment (ARI 0.24), not depth (ARI 0.03): one
+  holds 85 of the 96 titration cells, two others 29 of the 35 SDS and 32 of the 36 no-SDS cells; the 355 cells
+  fill five clusters.  Atlas `wu2025_scmicroc_gm12878`.  `wu2025_scmicroc` (the loader of the 12 deepest cells, a
+  benchmark input) is kept apart.
+  Structures (`build_dipc_structures.py wu2025_scmicroc_gm12878`): GEO holds the authors' hickit structures per
+  sample only for the titration and SDS cells (5 runs at 5, 10 and 20 kb; the 355 cells' are in a 102 GB tarball);
+  the 20 kb clean runs 1 and 2 are fetched.  126 cells have run 1 (94 titration, 32 SDS), 118 also run 2: run 1
+  averaged to 100 kb is the coordinates, run 2 a layer.  Run 1 against run 2: median RMSD 6.87 particle radii,
+  falling with depth (median 18.8 in the shallowest quarter of cells, 2.4 in the deepest; Spearman -0.42 with the
+  contact count); 28 cells at 2 or less.  Contacts at 100 kb per cell and merged (112,793,230; median 875,385 per
+  cell), five Leiden clusters (ARI 0.21 against the experiment; one holds 27 of the 32 SDS cells).  Atlas
+  `wu2025_scmicroc_gm12878_3d`.
+
+### snm3C-seq: contacts of single nuclei with their methylation (`lee2019_snm3c/`, `lee2019_snm3c_lines/`, `tian2023_snm3c/`, `yuan2026_retina/`, `chen2025_snm3c/`)
 
 snm3C-seq reads the contacts and the DNA methylation of the same nucleus; only the contacts are fetched (one
 table per nucleus).  `build_schic_pairs.py STUDY` bins them at 1 Mb per nucleus and pooled, with a
@@ -1377,6 +1522,30 @@ contact embedding and Leiden clusters, as for the single-cell Hi-C above.
   85,362, 90 % 135,245): 4,922 nuclei, 646 M contacts, median 122,000 per nucleus, 53 % cis, with tissue, donor and
   library parsed from the file names.  Seven of the 11 Leiden clusters are 97 % RPE and hold 2,273 of the 2,673 RPE
   nuclei; macula and peripheral retina mix.  Atlas `yuan2026_eye`.
+- **Lee 2019 cell lines** (the paper above; GEO GSE124391): the cell-line experiment of the snm3C-seq paper, human
+  GM12878 and mouse E14 ES and NMuMG cells sorted into the same plates (one date, 181102) and told apart by species;
+  one `indexed_contacts` table per cell (`chrom1 pos1 chrom2 pos2`, no read names; 1.4 GB, `lee2019_snm3c_lines`),
+  the cell line and genome from the three series matrices (one per platform).  Two stores, one per genome: 144
+  GM12878 cells (hg38; 24.9 M contacts, median 154,000 per cell, 49 % cis, 53 cells below 50 %; one line, so the
+  clusters follow depth and cis fraction), and 351 E14 + 96 NMuMG cells (mm10; 111.6 M contacts, median 211,000 per
+  cell, 53 % cis).  The 28 wells deposited as E14-GM12878 multiplets (several nuclei of both species, aligned to mm10
+  only) are left out.  Rows as deposited (1.5 % are exact repeats of another row of the same cell, kept).  In the mouse
+  store the clusters agree with the lines at ARI 0.13: two clusters hold 69 of the 96 NMuMG cells and one ES cell,
+  the ES cells split over five clusters by depth, and one cluster gathers 28 cells of both lines with few cis
+  contacts (median 16 %).  Built in 11 min on 8 cores.  Atlas `lee2019_gm12878`, `lee2019_mesc_nmumg`.
+- **Chen 2025 adipose tissue** (Chen ZJ *et al.*, *Nat Genet* 57:2238, 2025, doi:10.1038/s41588-025-02300-4; GEO
+  GSE297262): snm3C-seq3 of the subcutaneous adipose tissue of five Finnish women, one 16.2 GB tarball of every
+  nucleus' contacts (`<cell>.contact.rmbkl.tsv.gz`: `chrom1 pos1 chrom2 pos2 strand1 strand2`, blacklisted regions
+  removed; hg38), read as a stream, and the authors' cell table (`snm3C_metadata.tsv.gz`: donor, the joint,
+  contact-only and methylation-only annotations, contact counts, mCG / mCH levels; `chen2025_snm3c`).  The tarball
+  holds exactly the 6,652 nuclei of the table (those that passed the authors' QC, as in the paper).  1.53 billion
+  contacts, median 223,000 per nucleus, 58 % cis; 97.3 % of the authors' `total_int` per nucleus (5-95 %: 96.8-97.8 %,
+  Pearson 0.9999; chrM and unplaced contigs dropped), the authors' cis fraction 57 %.  The Leiden clusters agree with
+  the authors' eight cell types at ARI 0.90 (0.92 with the contact-only annotation): adipose stem and progenitor
+  cells (1,801 of 1,814), adipocytes, endothelial cells, perivascular cells, lymphoid and mast cells (170 of 172) each
+  fill a cluster of their own (96-100 % of its nuclei); the adipocyte cluster also takes 62 of the 63 transition
+  cells, and the myeloid cells fill two clusters; the donors mix (ARI 0.03).  Built in 63 min on 16 cores.  Atlas
+  `chen2025_adipose`.
 
 ## Figure 3 datasets — bridges between contacts and geometry
 
