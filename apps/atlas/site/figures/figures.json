@@ -1517,5 +1517,43 @@
   "resolution": 100000,
   "fill": 0.682,
   "map": "lee2019_mesc_nmumg.map.webp"
+ },
+ "chen2025_adipose": {
+  "section": null,
+  "color_by": "cell_type",
+  "layout": "embedding",
+  "layout_key": "hic_umap",
+  "caption": "Nuclei on the contact embedding, by cell type",
+  "n": 6652,
+  "categories": 8,
+  "grid": false,
+  "space": "chen2025_adipose.space.webp",
+  "map_key": "bulk",
+  "map_label": "All 6,652 cells (merged)",
+  "chrom": "chr2",
+  "start": 36300000,
+  "end": 76400000,
+  "resolution": 100000,
+  "fill": 1.0,
+  "map": "chen2025_adipose.map.webp"
+ },
+ "lee2023_esc_npc": {
+  "section": null,
+  "color_by": "cell_type",
+  "layout": "embedding",
+  "layout_key": "hic_umap",
+  "caption": "Nuclei on the contact embedding, by cell type",
+  "n": 282,
+  "categories": 2,
+  "grid": false,
+  "space": "lee2023_esc_npc.space.webp",
+  "map_key": "bulk",
+  "map_label": "All 282 cells (merged)",
+  "chrom": "chr2",
+  "start": 27300000,
+  "end": 67400000,
+  "resolution": 100000,
+  "fill": 0.723,
+  "map": "lee2023_esc_npc.map.webp"
  }
 }

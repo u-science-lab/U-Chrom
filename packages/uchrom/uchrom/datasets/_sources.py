@@ -1142,7 +1142,7 @@ DATASETS = {
     "chen2025_snm3c": {
         "files": [(f"chen2025_snm3c/raw/{n}", _gse("GSE297262", n)) for n in (
             "GSE297262_README.txt", "GSE297262_snm3C_metadata.tsv.gz", "GSE297262_contacts.tar.gz")],
-        "size_mb": 15500,
+        "size_mb": 16200,
         "default": False,
         "description": "Chen 2025 snm3C-seq3 of human subcutaneous adipose tissue (5 donors): every nucleus' contacts "
                        "(hg38) and the authors' cell table (GSE297262)",
