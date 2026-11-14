@@ -1316,6 +1316,32 @@ DATASETS = {
         "description": "Liu 2026 HiRES of female hybrid mESC through random X inactivation: pairs, 20 kb diploid "
                        "3dg, metadata and RNA UMI counts (GSE278310 + GSE310759)",
     },
+    # Chen et al. 2026 (Nature 653:942), GEO GSE303006: CHARM-seq, chromatin contacts, RNA, accessibility and one
+    # histone mark of the same single cells, C57BL/6J x CAST/EiJ mESC (805 cells, H3K27me3) and mouse cortex (4,265
+    # cells, H3K27ac; files named 'brain').  Fetched: the authors' cell table, the phased per-cell pairs and the 20 kb
+    # structures (one tarball each per system) and the total RNA counts; read by apps/atlas/recipes/build_schic_pairs.py
+    # and build_dipc_structures.py.  Not fetched: the 5 kb structures (145 GB), the allele-split RNA tables; the
+    # accessibility / histone fragment files are the separate source chen2026_charm_fragments.
+    "chen2026_charm": {
+        "files": [(f"chen2026_charm/raw/{n}", _gsm(n) if n.startswith("GSM") else _gse("GSE303006", n)) for n in (
+            "GSE303006_charm_metadata_qcpass.tsv.gz", "GSE303006_file_format_README.txt",
+            "GSM9115533_mesc.RNAcounts.gene.total.format.tsv.gz", "GSE303006_brain.RNAcounts.gene.total.format.tsv.gz",
+            "GSM9115541_mesc.pairs.tar.gz", "GSM9115541_mesc.20k.tdg.tar.gz", "GSE303006_brain.pairs.tar.gz",
+            "GSE303006_brain.20k.tdg.tar.gz")],
+        "size_mb": 75500,
+        "default": False,
+        "description": "Chen 2026 CHARM-seq of hybrid mESC and mouse cortex: cell table, phased per-cell pairs, 20 kb "
+                       "diploid 3dg, total RNA counts (GSE303006)",
+    },
+    "chen2026_charm_fragments": {
+        "files": [(f"chen2026_charm/raw/{n}", _gsm(n) if n.startswith("GSM") else _gse("GSE303006", n)) for n in (
+            "GSM9115537_mesc.atac.fragment.tsv.gz", "GSM9115545_mesc.h3k27me3.fragment.tsv.gz",
+            "GSE303006_brain.atac.fragment.tsv.gz", "GSE303006_brain.h3k27ac.fragment.tsv.gz")],
+        "size_mb": 3300,
+        "default": False,
+        "description": "Chen 2026 CHARM-seq: accessibility and histone-mark (mESC H3K27me3, cortex H3K27ac) fragments "
+                       "of every cell (GSE303006)",
+    },
     # NucDynamics structures (Laue lab format; apps/atlas/recipes/build_nuc_structures.py): Lando et al. 2024 (Mol
     # Cell 84:1406; haploid mESC leaving naive pluripotency, .ncc contacts + 100 kb .n3d with 10 models) and Zhou et
     # al. 2019 (Nat Plants 5:795; rice egg, sperm, zygote and shoot cells, .ncc + 5 kb PDB).

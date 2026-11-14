@@ -63,8 +63,11 @@ def main() -> None:
         label = f"{a.hic_resolution // 1_000_000}mb" if a.hic_resolution % 1_000_000 == 0 else f"{a.hic_resolution // 1000}kb"
         out = store.parent / f"{store.name.removesuffix('.chromdata.zarr')}_{label}.scool"
         key = f"{a.hic}_{label}"
-        rebin_scool(cd, a.hic, resolution=a.hic_resolution, out=out, key_added=key)
-        print(f"rebinned {a.hic} -> {out.name} ({key}) ({time.time() - t0:.0f} s)", flush=True)
+        if cd.uns.get("linked_scool", {}).get(a.hic, {}).get("bin_size") == a.hic_resolution:
+            key = a.hic                                 # already at that resolution: embed the linked maps
+        else:
+            rebin_scool(cd, a.hic, resolution=a.hic_resolution, out=out, key_added=key)
+            print(f"rebinned {a.hic} -> {out.name} ({key}) ({time.time() - t0:.0f} s)", flush=True)
         embed_contacts(cd, contacts=key, key_added="hic", n_threads=a.threads)
         print(f"hic embeddings: {[k for k in cd.cellm if k.startswith('hic_')]} ({time.time() - t0:.0f} s)", flush=True)
     if a.rna_regex or a.rna_after:
