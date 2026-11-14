@@ -166,6 +166,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `spacea_ma2026/`: Ma 2026 SpaceA, spatial SPRITE of 9 mouse embryo sections, E11.5-E14.5 (5 libraries, 17 runs) | 2.7 TB fastq; C6 run 1 alone: clusters 87 MB, store 550 MB with the derived maps | fetch `ma2026_spacea_<library>` (GSA, academic use); recipe `spacea_ma2026/slurm/` (a compute cluster) | per-spot check of `ChromData.clusters` (U-Chrom PR #153); the browser's cluster track; not in the atlas |
 | `wu2025_scmicroc/`: Wu 2025 scMicro-C GM12878, 12 deepest cells | 3.1 GB (102 GB streamed) | fetch `wu2025_scmicroc` | EMber deep development and test (PREREG §11); Fig. 3a / S8 |
 | `wu2025_scmicroc_gm12878/`: Wu 2025 scMicro-C of GM12878, every cell with a contact table (522) and the 20 kb clean structures (runs 1 and 2) of the 1000 U titration and SDS cells | 5.3 GB (hickit pairs + 3dg; the 102 GB 3dg tarball of the 355 cells, the bigwigs and the 200 / 600 / 800 U processed tarballs, 386 GB, not fetched) | fetch `wu2025_scmicroc_gm12878`; recipes `build_schic_pairs.py`, `build_dipc_structures.py` | atlas stores `wu2025_scmicroc_gm12878`, `wu2025_scmicroc_gm12878_3d` |
+| `chen2026_charm/`: Chen 2026 CHARM-seq of hybrid mouse ES cells (805) and adult mouse brain (4,265): contacts, RNA, accessibility and one histone mark of the same cells, 20 kb structures | 75.5 GB (pairs and structure tarballs, RNA, cell table) + 3.3 GB (fragments) | fetch `chen2026_charm`, `chen2026_charm_fragments`; recipes `build_schic_pairs.py`, `build_dipc_structures.py` | atlas stores `chen2026_charm_mesc`, `chen2026_charm_brain`, `chen2026_charm_mesc_3d`, `chen2026_charm_brain_3d` |
 | `rao2014_imr90/4DNFIR1JDZH7.mcool`: Rao 2014 IMR90, 4DN GRCh38 | 4.6 GB | fetch `rao2014_imr90_4dn` (**cluster only**; laptops read it over HTTP) | an unpublished benchmark; an unpublished benchmark (range reads) |
 | `bonev2017_mesc/4DNFIC21MG3U.mcool`: Bonev 2017 mESC Hi-C, 4DN mm10 | 12.6 GB | fetch `bonev2017_mesc_4dn` (**cluster only**) | an unpublished benchmark; an unpublished benchmark (range reads); tutorial `sc_structures` and uchrom-reproducibility `supp_table3/sc_structures/` (bulk mESC loops and insulation) |
 | `WTC11_HiC_2Mb.hcs`: the IGM demo input (GPL-3) | 3.9 MB | downloaded on demand by an unpublished benchmark into `$UCHROM_IGM_CACHE` | IGM protocol of the native engine vs the original IGM |
@@ -708,6 +709,7 @@ brain cells).
 | `pang2022_ovarian` | 14 | `pang2022_schic/pang2022_ovarian.chromdata.zarr` | `build_schic_pairs.py pang2022_schic` | `pang2022_schic` |
 | `du2020_oocyte` | 20 | `du2020_snhic/du2020_oocyte.chromdata.zarr` | `build_schic_pairs.py du2020_snhic` | `du2020_snhic` |
 | `wu2025_scmicroc_gm12878`, `wu2025_scmicroc_gm12878_3d` | 275 / 479 | `wu2025_scmicroc_gm12878/<id>.chromdata.zarr` | `build_schic_pairs.py wu2025_scmicroc_gm12878`; `build_dipc_structures.py wu2025_scmicroc_gm12878`, `derive_embeddings.py --hic per_cell --leiden` | `wu2025_scmicroc_gm12878` |
+| `chen2026_charm_mesc`, `chen2026_charm_brain`, `chen2026_charm_mesc_3d`, `chen2026_charm_brain_3d` | 189 / 630 / 268 / 1,400 | `chen2026_charm/<id>.chromdata.zarr` | `build_schic_pairs.py chen2026_charm`; `build_dipc_structures.py chen2026_charm`, `derive_embeddings.py --hic per_cell --leiden` | `chen2026_charm`, `chen2026_charm_fragments` |
 | `li2023_scnanohic_gm12878` | 265 | `li2023_scnanohic/li2023_scnanohic_gm12878.chromdata.zarr` | `build_scnanohic2023.py` | `li2023_scnanohic` |
 | `xu2025_sperm_human`, `xu2025_sperm_mouse` | 1,017 / 704 | `xu2025_sperm/<id>.chromdata.zarr` | `build_dipc_structures.py xu2025_sperm`, `derive_embeddings.py --hic per_cell --leiden` | `xu2025_sperm` |
 | `payne2021_igs_embryo`, `payne2021_igs_pgp1` | 23 / 3 | `payne2021_igs/<id>.chromdata.zarr` | loaders of the same names (see *`payne2021_igs/`*); traces are sets of reads (`trace_kind` `set`), the thumbnails dots | `payne2021_igs` |
@@ -1221,7 +1223,7 @@ Figure 3 datasets.
 - Not fetched: ChAIR (Nat. Methods 2025; CNCB OMIX009588 / 9589, 120 GB from China), Nagano 2013 (10 Th1
   cells), Ramani 2017 sciHi-C (cell lines, hg19 / mm10 mix).
 
-### Single-cell Hi-C with the authors' structures (`tan2019_dipc/`, `tan2023_cerebellum/`, `lu2025_scnanohic2/`, `xu2025_sperm/`, `wu2024_limca/`, `wu2024_limca_human/`, `liu2026_hires_xci/`, `lando2024_mesc/`, `zhou2019_rice/`)
+### Single-cell Hi-C with the authors' structures (`tan2019_dipc/`, `tan2023_cerebellum/`, `lu2025_scnanohic2/`, `xu2025_sperm/`, `wu2024_limca/`, `wu2024_limca_human/`, `liu2026_hires_xci/`, `lando2024_mesc/`, `zhou2019_rice/`, `chen2026_charm/`)
 
 Studies that deposit, per cell, the contacts and the authors' own 3-D structure.  `build_dipc_structures.py STUDY`
 (hickit / Dip-C `.3dg`, 20 kb particles averaged to 100 kb, or 200 kb for HiRES) and `build_nuc_structures.py
@@ -1305,6 +1307,29 @@ labels).
   Check (2026-11-01): contacting 100-kb bins more than 2 Mb apart lie 0.39 times as far apart as random pairs at
   the same separation (closer copy pair; 0.32-0.62 over 60 cells).  Leiden clusters follow stage (50 of the 55
   E11.5 cells in one).  Atlas `lu2025_egc_3d`.
+- **Chen 2026 CHARM-seq** (Chen Y *et al.*, *Nature* 653:942, 2026, doi:10.1038/s41586-026-10322-z; GEO GSE303006):
+  chromatin contacts, RNA, accessibility (ATAC) and one histone mark of the same single cells, hybrid mouse ES cells
+  (C57BL/6J x CAST/EiJ; mark H3K27me3, by GEO's feature README, although the cell table says H3K27ac for every
+  cell) and the adult brain of three hybrid mice (mark H3K27ac).  The deposit has the cell table of the cells
+  passing the authors' QC (805 ES cells, 4,265 brain cells; cell type, cell-cycle phase, contact counts, the RMSD of
+  each 20 kb and 5 kb model), one tarball of phased `.pairs` and one of 20 kb diploid structures (`.3dg`) per
+  system, the RNA counts and pooled fragment files; 75.5 GB (`chen2026_charm`) + 3.3 GB (`chen2026_charm_fragments`).
+  The brain cells are mostly cortical but include striatal medium spiny neurons (`Inh_MSN`, 413) and olfactory-bulb
+  neurons (`Ex_OB`, 333), so the stores are named `brain` as the files are.  `build_schic_pairs.py chen2026_charm`
+  takes every cell's pairs (out of the tarballs once, `raw/cells`; homologs summed), counts equal to the authors' for
+  every cell: mESC 1.41 billion (median 1.85 million per cell, 68 % cis), brain 2.06 billion (median 485,000, 80 %
+  cis); the RNA counts as a linked AnnData with an RNA embedding.  The contact clusters follow the cell cycle in the
+  ES cells (ARI 0.23; one cluster holds 71 of the 153 G1 and 32 of the 39 M cells) and the cell types in the brain
+  (ARI 0.36, mice 0.01; astrocytes, OPCs, oligodendrocytes, microglia and medium spiny neurons each mostly in a
+  cluster of their own).  Atlas `chen2026_charm_mesc`, `chen2026_charm_brain`.  `build_dipc_structures.py
+  chen2026_charm` keeps the cells whose 20 kb model has an RMSD of at most 1.5 (the authors' cut,
+  `CHEN2026_MAX_RMSD`; 729 ES cells, median 0.18, and 3,801 brain cells, median 0.66), averages the structures to
+  200 kb (one trace per chromosome copy), bins the contacts at 1 Mb per cell (`res_map`) and pools the ATAC and
+  histone fragments of the kept cells per 200-kb bin (CPM, `bin_tracks`); `derive_embeddings.py --hic per_cell
+  --leiden` embeds the 1-Mb maps as linked and clusters the RNA (brain: ARI 0.82 with the types).  Check
+  (2026-11-13): contacting 200-kb bins more than 2 Mb apart lie 0.38 (ES cells) and 0.32 (brain) times as far apart
+  as random pairs at the same separation (closer copy pair; 20 cells each).  Built in 2 h 35 min on 16 cores (both
+  recipes, 82 GB peak memory).  Atlas `chen2026_charm_mesc_3d`, `chen2026_charm_brain_3d`.
 
 ### Single-cell Hi-C without structures (`flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `tan2023_cerebellum/`, `ulianov2021_snhic/`, `gassler2017_snhic/`, `nagano2013_th1/`, `lin2022_scidlo/`, `lee2023_snhic/`, `lagunov2026_lampbrush/`, `qu2023_sccareseq/`, `silva2020_snhic/`, `dequeker2022_snhic/`, `pang2022_schic/`, `du2020_snhic/`, `wu2025_scmicroc_gm12878/`)
 
