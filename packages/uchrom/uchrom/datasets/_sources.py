@@ -1108,6 +1108,47 @@ DATASETS = {
         "description": "Tian 2023 snm3C-seq of the adult human brain: contacts of 145,070 nuclei (hg38, NeMO) and the "
                        "authors' cell table, taxonomy and donors",
     },
+    # Liu H. et al. 2023 (Nature 624:366), the snm3C-seq half of the adult mouse brain atlas (NeMO dat-sig83t9; GEO
+    # GSE213262 holds the methylation only): one .tar per nucleus holding its contacts (.3C.contact.tsv.gz, juicer
+    # short, mm10), 171,418 nuclei, 457 GB, listed by the NeMO bag of the publication (its methylation, allc, and the
+    # cell-group maps are not fetched); the authors' cell table with the subclass of each nucleus (Supplementary
+    # Table 3) and the Allen whole-brain taxonomy (subclass -> class, release 20231215)
+    "liu2023_snm3c": {
+        "files": lambda: ([(f"liu2023_snm3c/raw/cells/{n}", u) for n, u in _nemo_bag_files(
+            "https://data.nemoarchive.org/publication_release/ecker_sn_mCseq_2023/"
+            "Analysis_bag_1_ecker_sn_mCseq_2023_analysis.tgz", r"\.3C\.contact\.tsv\.tar$")]
+            + [("liu2023_snm3c/raw/41586_2023_6805_MOESM6_ESM.csv",
+                "https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-023-06805-y/MediaObjects/"
+                "41586_2023_6805_MOESM6_ESM.csv"),
+               ("liu2023_snm3c/raw/cluster_to_cluster_annotation_membership_pivoted.csv",
+                "https://allen-brain-cell-atlas.s3.us-west-2.amazonaws.com/metadata/WMB-taxonomy/20231215/views/"
+                "cluster_to_cluster_annotation_membership_pivoted.csv")]),
+        "md5": {"liu2023_snm3c/raw/41586_2023_6805_MOESM6_ESM.csv": "094cb38ea2392fc80fd6d87c77c5950f",
+                "liu2023_snm3c/raw/cluster_to_cluster_annotation_membership_pivoted.csv":
+                    "06a0f8cd2b2181fed0fc6e3597af5c20"},
+        "size_mb": 457500,
+        "default": False,
+        "parallel": 24,
+        "description": "Liu 2023 snm3C-seq of the whole adult mouse brain: contacts of 171,418 nuclei (mm10, NeMO), the "
+                       "authors' cell table (Supplementary Table 3) and the Allen whole-brain taxonomy",
+    },
+    # Zeng et al. 2026 (Cell 189:2148), the snm3C-seq of the aging mouse brain atlas, GEO GSE292803 (female mice, 2, 9
+    # and 18 months, eight regions): one tarball per cell type and age (108) holding the contacts of every nucleus of
+    # that group (.3C.contact.tsv.gz, juicer short, mm10), 274 GB; the methylation (allc) files of the same samples
+    # and the male series GSE313770 (allc only) are not fetched.  The authors' snm3C cell table (Table S4, 72,666
+    # nuclei: age, region, replicate, cell types) from the publisher.
+    "zeng2026_snm3c": {
+        "files": lambda: ([(f"zeng2026_snm3c/raw/tars/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE292803", r"\.contact\.tsv\.gz\.tar\.gz$")]
+            + [("zeng2026_snm3c/raw/1-s2.0-S0092867426002229-mmc4.xlsx",
+                "https://ars.els-cdn.com/content/image/1-s2.0-S0092867426002229-mmc4.xlsx")]),
+        "md5": {"zeng2026_snm3c/raw/1-s2.0-S0092867426002229-mmc4.xlsx": "903d9b12a24301a9b0287e2e671bdfad"},
+        "size_mb": 274200,
+        "default": False,
+        "parallel": 6,
+        "description": "Zeng 2026 snm3C-seq of the aging mouse brain (female, 2 / 9 / 18 months, eight regions): "
+                       "contacts per cell type and age (108 tarballs, mm10, GSE292803) and the authors' cell table",
+    },
     # Yuan et al. 2026 (Sci Adv 12:eadv9162), GEO GSE277361: snm3C-seq of human macula, peripheral retina and RPE from four
     # donors; every well of the 36 plates is deposited (13,824; no per-cell cell types)
     "yuan2026_retina": {

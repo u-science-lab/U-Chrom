@@ -48,6 +48,12 @@ The studies (``python -m uchrom.datasets fetch NAME``; the raw files under ``<da
                        MCM loading, wild type and Wapl knockout; the authors' 10 kb ``.cool`` (mm9)
   silva2020_snhic      Silva et al. 2020, J Cell Biol 219:e201906100 (GEO GSE132264): snHi-C of Scc1 and Wapl knockout
                        oocytes and their controls; the authors' 10 kb ``.cool`` (mm9)
+  liu2023_snm3c        Liu H. et al. 2023, Nature 624:366 (NeMO dat-sig83t9): snm3C-seq of the whole adult mouse brain,
+                       the nuclei of the authors' cell table with a contact file (one .tar per nucleus, mm10), subclass
+                       and Allen class; store liu2023_brain
+  zeng2026_snm3c       Zeng et al. 2026, Cell 189:2148 (GEO GSE292803): snm3C-seq of the aging mouse brain (female, 8
+                       weeks, 9 and 18 months), the nuclei of the authors' cell table in the 108 tarballs (one per cell
+                       type and age, mm10); store zeng2026_aging_brain
   pang2022_schic       Pang et al. 2022, Genome Biol 23:121 (GEO GSE201919): single-cell Hi-C of ovarian cancer cells
                        (a PEO1 / HEYA8 mixture, OVCA429 shGRHL2), NucProcess ``.ncc`` (hg38)
 
@@ -342,6 +348,101 @@ def tian2023(raw: Path) -> dict:
             "source": "Tian et al. 2023, Science 382:eadf5357 (snm3C-seq of the adult human brain, 46 regions of three "
                       "donors; NeMO dat-jx4eu3g, GEO GSE215353): the contacts of the 143,760 nuclei of the authors' "
                       "cell table with their region, donor and cell type (tables S3-S5)"}
+
+
+def liu2023(raw: Path) -> dict:
+    """Liu 2023 adult mouse brain: the snm3C nuclei of the authors' cell table (Supplementary Table 3: the 176,003
+    that passed their QC) with a contact file on NeMO, with dissection region, sample, subclass and the class of
+    that subclass in the Allen whole-brain taxonomy; one .tar per nucleus holding its contacts."""
+    meta = pd.read_csv(raw / "41586_2023_6805_MOESM6_ESM.csv", index_col=0, low_memory=False)
+    tax = pd.read_csv(raw / "cluster_to_cluster_annotation_membership_pivoted.csv")
+    strip = lambda s: re.sub(r"^\d+ ", "", s)                 # noqa: E731  ('037 DG Glut' -> 'DG Glut')
+    cls = pd.Series(tax["class"].map(strip).to_numpy(), index=tax["subclass"].map(strip)).groupby(level=0).first()
+    missing = set(meta["Subclass"]) - set(cls.index)
+    if missing:
+        raise ValueError(f"liu2023: subclasses not in the Allen taxonomy: {sorted(missing)[:5]}")
+    cells = pd.DataFrame({"major_region": meta["MajorRegion"], "sub_region": meta["SubRegion"],
+                          "dissection_region": meta["DissectionRegion"], "cemba_region": meta["CEMBARegion"],
+                          "sample": meta["Sample"], "plate": meta["Plate"], "subclass": meta["Subclass"],
+                          "cell_class": meta["Subclass"].map(cls), "cell_group": meta["CellGroup"],
+                          "mCG": meta["mCGFrac"], "mCH": meta["mCHFrac"],
+                          "n_cis_long_published": meta["CisLongContact"], "n_trans_published": meta["TransContact"]},
+                         index=meta.index)
+    cells["cell_type"] = cells["subclass"]
+    cells.index.name = "cell_id"
+    files = {c: raw / "cells" / f"{c}.3C.contact.tsv.tar" for c in cells.index}
+    files = {c: p for c, p in files.items() if p.exists()}
+    log(f"liu2023: {len(cells):,} nuclei in the cell table, {len(files):,} with contacts; "
+        f"{cells['subclass'].nunique()} subclasses, {cells['cell_class'].nunique()} classes")
+    return {"stores": {"liu2023_brain": cells}, "files": files, "format": "juicer", "assembly": "mm10",
+            "embed_kw": {"n_per_chrom": 20, "pca": "incremental", "n_threads": 32},
+            "source": "Liu et al. 2023, Nature 624:366 (snm3C-seq of the whole adult mouse brain, 117 dissected regions, "
+                      "male, 8 weeks; NeMO dat-sig83t9): the contacts of the nuclei of the authors' cell table "
+                      "(Supplementary Table 3) with their dissection region and subclass, and the class of each "
+                      "subclass in the Allen whole-brain taxonomy (Yao et al. 2023, release 20231215)"}
+
+
+ZENG2026_AGES = ["8wk", "9mo", "18mo"]
+
+
+def _zeng_extract(tar: Path) -> list:
+    """The per-nucleus contact files of one Zeng 2026 tarball written to ``raw/cells`` (once; a marker file names
+    the members) -> [(member file name, tarball name)]."""
+    out = tar.parent.parent / "cells"
+    done = out / f".{tar.name}.members"
+    if not done.exists():
+        names = []
+        with tarfile.open(tar, "r|gz") as t:
+            for mem in t:
+                if mem.isfile():
+                    base = Path(mem.name).name
+                    tmp = out / f"{base}.part"
+                    tmp.write_bytes(t.extractfile(mem).read())
+                    tmp.replace(out / base)
+                    names.append(base)
+        done.write_text("\n".join(names) + "\n")
+    return [(n, tar.name) for n in done.read_text().split()]
+
+
+def zeng2026(raw: Path) -> dict:
+    """Zeng 2026 aging mouse brain: the snm3C nuclei of the authors' cell table (Table S4: 72,666 nuclei of female
+    mice at 8 weeks, 9 and 18 months, eight regions) whose contacts are in the 108 GEO tarballs (one per cell type and
+    age), with age, region, replicate and the authors' cell types; the tarballs are unpacked into ``raw/cells`` once."""
+    meta = pd.read_excel(raw / "1-s2.0-S0092867426002229-mmc4.xlsx").set_index("cell")
+    (raw / "cells").mkdir(exist_ok=True)
+    tars = sorted((raw / "tars").glob("GSM*.contact.tsv.gz.tar.gz"))
+    with Pool(min(8, len(tars) or 1)) as pool:
+        members = [m for ms in pool.map(_zeng_extract, tars) for m in ms]
+    tar_of = {n.split(".")[0]: t for n, t in members}
+    files = {n.split(".")[0]: raw / "cells" / n for n, _ in members}
+    region = {"Frontal_Cortex": "frontal cortex", "Caudate_Putamen": "caudate putamen", "Amygdala": "amygdala",
+              "PAG-PCG": "PAG / PCG", "Nucleus_accumbens": "nucleus accumbens", "Entorhinal_Cortex": "entorhinal cortex",
+              "Anterior_Hippocampus": "anterior hippocampus", "Posterior_Hippocampus": "posterior hippocampus"}
+    cells = pd.DataFrame({"age": pd.Categorical(meta["Age"], categories=ZENG2026_AGES),
+                          "region": meta["Region"].map(region), "cemba_region": meta["CEMBARegion"],
+                          "replicate": meta["Replicate"], "plate": meta["Plate"],
+                          "major_type": meta["AgingMajorType"], "subclass": meta["CellSubclass"],
+                          "cell_class": meta["Class"], "mCG": meta["mCGFrac"], "mCH": meta["mCHFrac"],
+                          "n_contacts_published": meta["DeduppedContacts"]}, index=meta.index)
+    tar = cells.index.map(tar_of)
+    cells["geo_sample"] = tar.str.split("_").str[0]
+    cells["cell_type"] = cells["major_type"]
+    cells.index.name = "cell_id"
+    # the tarball's group ('GSM8865580_L23_IT_CTX_Glut.18mo...') against the cell's type and age ('L2/3 IT CTX Glut')
+    group = pd.Series(tar.str.split("_", n=1).str[1].str.removesuffix(".contact.tsv.gz.tar.gz"), index=cells.index)
+    expect = (cells["major_type"].str.replace("/", "").str.replace(" ", "_") + "." + cells["age"].astype(str))
+    have = group.notna()
+    bad = group[have] != expect[have]
+    log(f"zeng2026: {len(cells):,} nuclei in the cell table, {len(members):,} contact files in {len(tars)} tarballs, "
+        f"{int(have.sum()):,} of the table with contacts; {int(bad.sum())} in a tarball of another type / age; "
+        f"{len(set(files) - set(cells.index)):,} files not in the table")
+    files = {c: p for c, p in files.items() if c in cells.index}
+    return {"stores": {"zeng2026_aging_brain": cells}, "files": files, "format": "juicer", "assembly": "mm10",
+            "embed_kw": {"n_per_chrom": 20, "pca": "incremental", "n_threads": 32},
+            "source": "Zeng et al. 2026, Cell 189:2148 (snm3C-seq of the aging mouse brain, female C57BL/6J mice at 8 "
+                      "weeks, 9 and 18 months, eight regions; GEO GSE292803): the contacts of the nuclei of the "
+                      "authors' cell table (Table S4) deposited in the per-type tarballs, with age, region, replicate "
+                      "and the authors' cell types"}
 
 
 def _lee2019_lines_meta(raw: Path) -> pd.DataFrame:
@@ -707,7 +808,7 @@ STUDIES = {"flyamer2017_snhic": flyamer2017, "collombet2020_snhic": collombet202
            "lee2023_snhic": lee2023, "lin2022_scidlo": lin2022, "wu2025_scmicroc_gm12878": wu2025, "qu2023_sccareseq": qu2023,
            "lagunov2026_lampbrush": lagunov2026, "du2020_snhic": du2020, "dequeker2022_snhic": dequeker2022,
            "silva2020_snhic": silva2020, "pang2022_schic": pang2022,
-           "chen2026_charm": chen2026}
+           "chen2026_charm": chen2026, "liu2023_snm3c": liu2023, "zeng2026_snm3c": zeng2026}
 
 
 # -- binning -----------------------------------------------------------------------------------------------------
