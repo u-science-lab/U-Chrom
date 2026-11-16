@@ -48,6 +48,9 @@ The studies (``python -m uchrom.datasets fetch NAME``; the raw files under ``<da
                        MCM loading, wild type and Wapl knockout; the authors' 10 kb ``.cool`` (mm9)
   silva2020_snhic      Silva et al. 2020, J Cell Biol 219:e201906100 (GEO GSE132264): snHi-C of Scc1 and Wapl knockout
                        oocytes and their controls; the authors' 10 kb ``.cool`` (mm9)
+  zemke2026_snm3c      Zemke et al. 2026, Science 393:eadt8307 (GEO GSE299139): snm3C-seq of the human hippocampus of 40
+                       donors aged 20-95, the 22,240 nuclei of the authors' cell table; contacts deposited pooled per
+                       donor (cell in column 9), split per nucleus once (hg38); store zemke2026_hippocampus
   pang2022_schic       Pang et al. 2022, Genome Biol 23:121 (GEO GSE201919): single-cell Hi-C of ovarian cancer cells
                        (a PEO1 / HEYA8 mixture, OVCA429 shGRHL2), NucProcess ``.ncc`` (hg38)
 
@@ -402,6 +405,100 @@ def chen2025(raw: Path) -> dict:
                       "methylation-only annotations), contact counts and methylation levels"}
 
 
+def _zemke_split(args) -> dict:
+    """Split one donor's pooled contact table (juicer short + the cell's well in column 9, rows grouped by cell) into
+    one gzipped table per cell, ``<out>/<cell id>.contact.tsv.gz``; ``ids``: column 9 -> cell id (cells not in it
+    are counted, not written).  Returns column 9 -> rows; done once (a ``.done`` file keeps the counts)."""
+    import json
+    import subprocess
+
+    src, out, ids = args
+    done = out / f".{src.name}.done"
+    if done.exists():
+        return json.loads(done.read_text())
+    counts, cur, buf = {}, None, []
+
+    def flush():
+        if cur is None:
+            return
+        key = cur.decode()
+        if key in counts:
+            raise ValueError(f"zemke2026: {src.name}: the rows of {key} are not contiguous")
+        counts[key] = len(buf)
+        if key in ids:
+            dest = out / f"{ids[key]}.contact.tsv.gz"
+            dest.with_suffix(".part").write_bytes(gzip.compress(b"".join(buf), compresslevel=1))
+            dest.with_suffix(".part").rename(dest)
+
+    with subprocess.Popen(["gzip", "-dc", str(src)], stdout=subprocess.PIPE, bufsize=1 << 24) as proc:
+        for line in proc.stdout:
+            key = line[line.rfind(b"\t") + 1:].rstrip(b"\r\n")
+            if key != cur:
+                flush()
+                cur, buf = key, []
+            buf.append(line)
+        flush()
+    if proc.returncode:
+        raise RuntimeError(f"zemke2026: gzip -dc {src.name} failed ({proc.returncode})")
+    done.write_text(json.dumps(counts))
+    return counts
+
+
+def zemke2026(raw: Path) -> dict:
+    """Zemke 2026 human hippocampus (GSE299139): the 22,240 nuclei of the authors' cell table (40 donors aged 20-95;
+    their sub-type, class, doublet call, donor, age, sex).  The contacts are deposited pooled, one table per donor
+    library with the nucleus' well in column 9 (``<well>``; ``<n>_<well>`` in the four libraries that multiplex two
+    samples of a donor), split into one table per nucleus once.  The cell ids are ``<sample>-<index>`` (the table's
+    ``cell`` column is not unique: its renaming of the donor prefixes also hit wells of rows K and M)."""
+    import os
+
+    meta = pd.read_csv(raw / "GSE299139_human_aging_snm3C_metadata.csv.gz")
+    sample = meta["sample"].astype(str)
+    ids = (sample + "-" + meta["index"]).to_numpy()
+    if not pd.Index(ids).is_unique:
+        raise ValueError("zemke2026: <sample>-<index> is not unique")
+    # the key of column 9 in the donor's file: the index, prefixed by the sample's number when multiplexed
+    multiplexed = sample.str.contains("_")
+    col9 = np.where(multiplexed, sample.str.split("_").str[1] + "_" + meta["index"], meta["index"])
+    digits = meta["donor"].str.replace(r"\D", "", regex=True)
+    cells = pd.DataFrame({"donor": meta["donor"].to_numpy(), "sample": sample.to_numpy(),
+                          "age": meta["age"].to_numpy(), "age_group": meta["group"].to_numpy(),
+                          "sex": meta["gender"].to_numpy(), "cell_type": meta["cluster"].to_numpy(),
+                          "cell_class": meta["class"].to_numpy(), "is_doublet": meta["is_doublet"].astype(bool).to_numpy(),
+                          "doublet_score": meta["doublet_score"].to_numpy(),
+                          "n_contacts_published": meta["TotalContacts"].to_numpy(),
+                          "n_trans_published": meta["TransContact"].to_numpy(),
+                          "mCG": meta["mCGFrac"].to_numpy(), "mCH": meta["mCHFrac"].to_numpy()},
+                         index=pd.Index(ids, name="cell_id"))
+    pooled = sorted((raw / "cells").glob("GSM*.3C.contact.tsv.gz"))
+    jobs, out = [], raw / "split"
+    out.mkdir(exist_ok=True)
+    for p in pooled:
+        d = re.match(r"^GSM\d+_hc(\d+)\.3C\.contact\.tsv\.gz$", p.name)[1]
+        sel = (digits == d).to_numpy()
+        if not sel.any():
+            raise ValueError(f"zemke2026: no donor of the cell table for {p.name}")
+        jobs.append((p, out, dict(zip(col9[sel], ids[sel]))))
+    with Pool(min(len(jobs), int(os.environ.get("SLURM_CPUS_PER_TASK", 8)))) as pool:
+        counts = pool.map(_zemke_split, jobs, chunksize=1)
+    n_rows, extra = {}, 0
+    for (p, _, idmap), c in zip(jobs, counts):
+        extra += sum(1 for k in c if k not in idmap)
+        n_rows.update({idmap[k]: n for k, n in c.items() if k in idmap})
+    cells["n_rows_deposited"] = pd.Series(n_rows).reindex(cells.index)
+    missing = cells.index[cells["n_rows_deposited"].isna()]
+    log(f"zemke2026: {len(pooled)} donor tables, {len(n_rows):,} of {len(cells):,} nuclei of the cell table found, "
+        f"{extra} other wells in the tables; missing {list(missing[:5])}")
+    same = (cells["n_rows_deposited"] == cells["n_contacts_published"]).mean()
+    log(f"zemke2026: rows per nucleus = the table's TotalContacts for {same:.1%} of the nuclei")
+    files = {c: out / f"{c}.contact.tsv.gz" for c in n_rows}
+    return {"stores": {"zemke2026_hippocampus": cells}, "files": files, "format": "juicer", "assembly": "hg38",
+            "source": "Zemke et al. 2026, Science 393:eadt8307 (snm3C-seq of the human hippocampus, 40 donors aged "
+                      "20-95; GEO GSE299139): the contacts of the 22,240 nuclei of the authors' cell table (deposited "
+                      "pooled per donor, split by the well column), their sub-type, class, doublet call, donor, age "
+                      "and sex, contact counts and methylation levels"}
+
+
 def lee2023(raw: Path) -> dict:
     """Lee L. 2023 (SnapHiC-D, GSE210585): snHi-C of 94 mouse ESC and 188 ES-derived neural progenitor cells, the
     valid pairs (hotspots removed) of each; cell type and number from the sample titles."""
@@ -707,7 +804,7 @@ STUDIES = {"flyamer2017_snhic": flyamer2017, "collombet2020_snhic": collombet202
            "lee2023_snhic": lee2023, "lin2022_scidlo": lin2022, "wu2025_scmicroc_gm12878": wu2025, "qu2023_sccareseq": qu2023,
            "lagunov2026_lampbrush": lagunov2026, "du2020_snhic": du2020, "dequeker2022_snhic": dequeker2022,
            "silva2020_snhic": silva2020, "pang2022_schic": pang2022,
-           "chen2026_charm": chen2026}
+           "chen2026_charm": chen2026, "zemke2026_snm3c": zemke2026}
 
 
 # -- binning -----------------------------------------------------------------------------------------------------

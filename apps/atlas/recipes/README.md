@@ -162,6 +162,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `tian2023_snm3c/`: Tian 2023 snm3C-seq contacts of the adult human brain (145,070 nuclei; the 143,760 of the authors' cell table are used) | 556 GB (contacts only; the methylation files are not fetched) | fetch `tian2023_snm3c` (NeMO, a compute cluster); recipe `build_schic_pairs.py` | atlas store `tian2023_brain` |
 | `yuan2026_retina/`: Yuan 2026 snm3C-seq contacts of human macula, peripheral retina and RPE (every well of 36 plates, 13,824) | 11.3 GB (contacts only; the methylation files are not fetched) | fetch `yuan2026_retina`; recipe `build_schic_pairs.py` | atlas store `yuan2026_eye` |
 | `chen2025_snm3c/`: Chen 2025 snm3C-seq3 contacts of human subcutaneous adipose tissue (6,652 nuclei of five donors) | 16.2 GB (one tarball; the methylation tables are not fetched) | fetch `chen2025_snm3c`; recipe `build_schic_pairs.py` | atlas store `chen2025_adipose` |
+| `zemke2026_snm3c/`: Zemke 2026 snm3C-seq contacts of the human hippocampus (22,240 nuclei of 40 donors, pooled per donor; split per nucleus once) | 34.1 GB (contacts only; the methylation files are not fetched) | fetch `zemke2026_snm3c`; recipe `build_schic_pairs.py` | atlas store `zemke2026_hippocampus` |
 | `tan2023_cerebellum/`: Tan 2023 Dip-C of the mouse cerebellum, P0-P637 (6,432 cells; structures of 675) | 27.7 GB (all-cell pairs) + 13.3 GB (structures and their pairs) | fetch `tan2023_cerebellum`, `tan2023_cerebellum_3d`; recipes `build_schic_pairs.py`, `build_dipc_structures.py` | atlas stores `tan2023_cerebellum`, `tan2023_cerebellum_3d` |
 | `spacea_ma2026/`: Ma 2026 SpaceA, spatial SPRITE of 9 mouse embryo sections, E11.5-E14.5 (5 libraries, 17 runs) | 2.7 TB fastq; C6 run 1 alone: clusters 87 MB, store 550 MB with the derived maps | fetch `ma2026_spacea_<library>` (GSA, academic use); recipe `spacea_ma2026/slurm/` (a compute cluster) | per-spot check of `ChromData.clusters` (U-Chrom PR #153); the browser's cluster track; not in the atlas |
 | `wu2025_scmicroc/`: Wu 2025 scMicro-C GM12878, 12 deepest cells | 3.1 GB (102 GB streamed) | fetch `wu2025_scmicroc` | EMber deep development and test (PREREG §11); Fig. 3a / S8 |
@@ -698,6 +699,7 @@ brain cells).
 | `tian2023_brain` | 34,915 | `tian2023_snm3c/tian2023_brain.chromdata.zarr` | `build_schic_pairs.py tian2023_snm3c` | `tian2023_snm3c` |
 | `yuan2026_eye` | 1,216 | `yuan2026_retina/yuan2026_eye.chromdata.zarr` | `build_schic_pairs.py yuan2026_retina` | `yuan2026_retina` |
 | `chen2025_adipose` | 2,034 | `chen2025_snm3c/chen2025_adipose.chromdata.zarr` | `build_schic_pairs.py chen2025_snm3c` | `chen2025_snm3c` |
+| `zemke2026_hippocampus` | 8,138 | `zemke2026_snm3c/zemke2026_hippocampus.chromdata.zarr` | `build_schic_pairs.py zemke2026_snm3c` | `zemke2026_snm3c` |
 | `tan2023_cerebellum` | 1,610 | `tan2023_cerebellum/tan2023_cerebellum.chromdata.zarr` | `build_schic_pairs.py tan2023_cerebellum` | `tan2023_cerebellum` |
 | `flyamer2017_oocyte_zygote`, `collombet2020_embryo`, `zhou2024_mcf7`, `ulianov2021_bg3` | 52 / 171 / 43 / 6 | `flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `ulianov2021_snhic/` + `<id>.chromdata.zarr` | `build_schic_pairs.py <folder name>` | the folder names |
 | `gassler2017_zygote`, `nagano2013_th1` | 27 / 6 | `gassler2017_snhic/gassler2017_zygote.chromdata.zarr`, `nagano2013_th1/nagano2013_th1.chromdata.zarr` | `build_schic_pairs.py gassler2017_snhic`, `... nagano2013_th1` | `gassler2017_snhic`, `nagano2013_th1` |
@@ -1488,7 +1490,7 @@ cells without a contact on those chromosomes are dropped.  The GEO files of thes
   cell), five Leiden clusters (ARI 0.21 against the experiment; one holds 27 of the 32 SDS cells).  Atlas
   `wu2025_scmicroc_gm12878_3d`.
 
-### snm3C-seq: contacts of single nuclei with their methylation (`lee2019_snm3c/`, `lee2019_snm3c_lines/`, `tian2023_snm3c/`, `yuan2026_retina/`, `chen2025_snm3c/`)
+### snm3C-seq: contacts of single nuclei with their methylation (`lee2019_snm3c/`, `lee2019_snm3c_lines/`, `tian2023_snm3c/`, `yuan2026_retina/`, `chen2025_snm3c/`, `zemke2026_snm3c/`)
 
 snm3C-seq reads the contacts and the DNA methylation of the same nucleus; only the contacts are fetched (one
 table per nucleus).  `build_schic_pairs.py STUDY` bins them at 1 Mb per nucleus and pooled, with a
@@ -1546,6 +1548,26 @@ contact embedding and Leiden clusters, as for the single-cell Hi-C above.
   fill a cluster of their own (96-100 % of its nuclei); the adipocyte cluster also takes 62 of the 63 transition
   cells, and the myeloid cells fill two clusters; the donors mix (ARI 0.03).  Built in 63 min on 16 cores.  Atlas
   `chen2025_adipose`.
+- **Zemke 2026 hippocampus** (Zemke *et al.*, *Science* 393:eadt8307, 2026, doi:10.1126/science.adt8307; preprint
+  bioRxiv doi:10.1101/2024.10.14.618338; GEO GSE299139): snm3C-seq of the hippocampus of 40 donors aged 20-95 (ten per
+  age group 20-40 / 40-60 / 60-80 / 80-100, five women and five men each; hg38).  The contacts are deposited pooled,
+  one `GSM*_hc<donor>.3C.contact.tsv.gz` per donor (34.1 GB; juicer short + the nucleus' well in column 9, rows grouped
+  by nucleus; `<n>_<well>` in the four donors whose library multiplexes two samples), split by the recipe into one
+  table per nucleus once (`raw/split/`, 5 min on 16 cores); the authors' cell table
+  (`GSE299139_human_aging_snm3C_metadata.csv.gz`: 22,240 nuclei, the number the paper maps, with sub-type (15),
+  class (7), doublet call, donor, age, sex, contact counts, mCG / mCH; `zemke2026_snm3c`).  Its `cell` column is not
+  unique (143 pairs: the renaming of the donor prefixes to `hc` also renamed wells of rows K and M), so the cell ids
+  are `<sample>-<index>`.  Every nucleus of the table is in the deposit (8,478 further wells of the tables, not in
+  the table, are left out); the deposited rows of each nucleus equal the table's `CisLongContact + TransContact`
+  exactly (the short-range cis contacts are not deposited), so the store holds 3.12 billion contacts, median 116,000
+  per nucleus (the table's `TotalContacts` median 377,000), 60 % cis (the table's 60 %), 99.0 % of the deposited rows
+  (chrM and unplaced contigs dropped).  The 5,023 nuclei the authors call doublets are kept and flagged
+  (`is_doublet`).  The Leiden clusters agree with the classes at ARI 0.35 (sub-types 0.29; donors 0.02, age groups
+  0.02, doublet call 0.00): astrocytes (2,395 of 2,497), microglia (2,542 of 2,604), OPCs (1,058 of 1,118) and
+  endothelial / VLMC cells (185 of 240) each fill a cluster of their own; excitatory and inhibitory neurons share one
+  cluster (2,525 of 2,593) in which their sub-types mix; the oligodendrocytes (13,060 of 13,188) split over four
+  clusters by depth (median 55,000-181,000 contacts), which keeps the ARI low; 32 nuclei with 12 % cis form a cluster
+  of their own.  Built in 2 h 32 min on 16 cores.  Atlas `zemke2026_hippocampus`.
 
 ## Figure 3 datasets — bridges between contacts and geometry
 

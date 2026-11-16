@@ -1147,6 +1147,21 @@ DATASETS = {
         "description": "Chen 2025 snm3C-seq3 of human subcutaneous adipose tissue (5 donors): every nucleus' contacts "
                        "(hg38) and the authors' cell table (GSE297262)",
     },
+    # Zemke et al. 2026 (Science 393:eadt8307, doi:10.1126/science.adt8307; preprint bioRxiv 10.1101/2024.10.14.618338),
+    # GEO GSE299139: snm3C-seq of the human hippocampus of 40 donors aged 20-95 (hg38); the contacts of each donor
+    # library pooled in one table (juicer short + the nucleus' well in column 9) and the authors' cell table of the
+    # 22,240 nuclei (sub-type, class, doublet call, donor, age, sex, contact counts).  The per-cell-type methylation
+    # (allc) files of the series are not fetched
+    "zemke2026_snm3c": {
+        "files": lambda: ([(f"zemke2026_snm3c/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE299139", r"\.3C\.contact\.tsv\.gz$")]
+            + [(f"zemke2026_snm3c/raw/{n}", _gse("GSE299139", n)) for n in ("GSE299139_human_aging_snm3C_metadata.csv.gz",)]),
+        "size_mb": 34150,
+        "default": False,
+        "parallel": 4,
+        "description": "Zemke 2026 snm3C-seq of the human hippocampus (40 donors aged 20-95): contacts pooled per donor "
+                       "(hg38) and the authors' cell table of 22,240 nuclei (GSE299139)",
+    },
     # Lee L. et al. 2023 (Brief Bioinform 24:bbad315, doi:10.1093/bib/bbad315; SnapHiC-D), GEO GSE210585: single-nucleus Hi-C of 94 mouse ESC
     # and 188 neural progenitor cells (129/Sv x CAST, mm10), the valid pairs of each cell (hotspots removed; juicer
     # medium: readID str1 chr1 pos1 frag1 str2 chr2 pos2 frag2 mapq1 mapq2); cell types from the series matrix

@@ -1783,5 +1783,24 @@
   "resolution": 100000,
   "fill": 0.995,
   "map": "chen2026_charm_brain_3d.map.webp"
+ },
+ "zemke2026_hippocampus": {
+  "section": null,
+  "color_by": "cell_class",
+  "layout": "embedding",
+  "layout_key": "hic_umap",
+  "caption": "Nuclei on the contact embedding, by cell class",
+  "n": 22240,
+  "categories": 7,
+  "grid": false,
+  "space": "zemke2026_hippocampus.space.webp",
+  "map_key": "bulk",
+  "map_label": "All 22,240 cells (merged)",
+  "chrom": "chr2",
+  "start": 36300000,
+  "end": 76400000,
+  "resolution": 100000,
+  "fill": 1.0,
+  "map": "zemke2026_hippocampus.map.webp"
  }
 }
