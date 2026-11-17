@@ -163,6 +163,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `yuan2026_retina/`: Yuan 2026 snm3C-seq contacts of human macula, peripheral retina and RPE (every well of 36 plates, 13,824) | 11.3 GB (contacts only; the methylation files are not fetched) | fetch `yuan2026_retina`; recipe `build_schic_pairs.py` | atlas store `yuan2026_eye` |
 | `chen2025_snm3c/`: Chen 2025 snm3C-seq3 contacts of human subcutaneous adipose tissue (6,652 nuclei of five donors) | 16.2 GB (one tarball; the methylation tables are not fetched) | fetch `chen2025_snm3c`; recipe `build_schic_pairs.py` | atlas store `chen2025_adipose` |
 | `heffel2024_snm3c/`: Heffel 2024 snm3C-seq3 contacts of the developing human prefrontal cortex and hippocampus (35 samples; the 49,742 nuclei of the authors' annotation table are used) | 133 GB (one tarball per sample; the methylation files, 2.5 TB, are not fetched) | fetch `heffel2024_snm3c` (a compute cluster); recipe `build_schic_pairs.py` | atlas store `heffel2024_brain` |
+| `zhou2026_snm3c/`: Zhou J. 2026 snm3C-seq contacts of 16 adult human tissues (256 plates; the 86,689 nuclei of the authors' cell table are used) | 317 GB (one tarball per plate; the methylation files are not fetched) | fetch `zhou2026_snm3c` (a compute cluster); recipe `build_schic_pairs.py` | atlas store `zhou2026_body` |
 | `tan2023_cerebellum/`: Tan 2023 Dip-C of the mouse cerebellum, P0-P637 (6,432 cells; structures of 675) | 27.7 GB (all-cell pairs) + 13.3 GB (structures and their pairs) | fetch `tan2023_cerebellum`, `tan2023_cerebellum_3d`; recipes `build_schic_pairs.py`, `build_dipc_structures.py` | atlas stores `tan2023_cerebellum`, `tan2023_cerebellum_3d` |
 | `spacea_ma2026/`: Ma 2026 SpaceA, spatial SPRITE of 9 mouse embryo sections, E11.5-E14.5 (5 libraries, 17 runs) | 2.7 TB fastq; C6 run 1 alone: clusters 87 MB, store 550 MB with the derived maps | fetch `ma2026_spacea_<library>` (GSA, academic use); recipe `spacea_ma2026/slurm/` (a compute cluster) | per-spot check of `ChromData.clusters` (U-Chrom PR #153); the browser's cluster track; not in the atlas |
 | `wu2025_scmicroc/`: Wu 2025 scMicro-C GM12878, 12 deepest cells | 3.1 GB (102 GB streamed) | fetch `wu2025_scmicroc` | EMber deep development and test (PREREG §11); Fig. 3a / S8 |
@@ -700,6 +701,7 @@ brain cells).
 | `yuan2026_eye` | 1,216 | `yuan2026_retina/yuan2026_eye.chromdata.zarr` | `build_schic_pairs.py yuan2026_retina` | `yuan2026_retina` |
 | `chen2025_adipose` | 2,034 | `chen2025_snm3c/chen2025_adipose.chromdata.zarr` | `build_schic_pairs.py chen2025_snm3c` | `chen2025_snm3c` |
 | `heffel2024_brain` | 8,090 | `heffel2024_snm3c/heffel2024_brain.chromdata.zarr` | `build_schic_pairs.py heffel2024_snm3c` | `heffel2024_snm3c` |
+| `zhou2026_body` | 21,814 | `zhou2026_snm3c/zhou2026_body.chromdata.zarr` | `build_schic_pairs.py zhou2026_snm3c` | `zhou2026_snm3c` |
 | `tan2023_cerebellum` | 1,610 | `tan2023_cerebellum/tan2023_cerebellum.chromdata.zarr` | `build_schic_pairs.py tan2023_cerebellum` | `tan2023_cerebellum` |
 | `flyamer2017_oocyte_zygote`, `collombet2020_embryo`, `zhou2024_mcf7`, `ulianov2021_bg3` | 52 / 171 / 43 / 6 | `flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `ulianov2021_snhic/` + `<id>.chromdata.zarr` | `build_schic_pairs.py <folder name>` | the folder names |
 | `gassler2017_zygote`, `nagano2013_th1` | 27 / 6 | `gassler2017_snhic/gassler2017_zygote.chromdata.zarr`, `nagano2013_th1/nagano2013_th1.chromdata.zarr` | `build_schic_pairs.py gassler2017_snhic`, `... nagano2013_th1` | `gassler2017_snhic`, `nagano2013_th1` |
@@ -1491,7 +1493,7 @@ cells without a contact on those chromosomes are dropped.  The GEO files of thes
   `wu2025_scmicroc_gm12878_3d`.
 
 ### snm3C-seq: contacts of single nuclei with their methylation (`lee2019_snm3c/`, `lee2019_snm3c_lines/`, `tian2023_snm3c/`, `yuan2026_retina/`, `chen2025_snm3c/`,
-`heffel2024_snm3c/`)
+`heffel2024_snm3c/`, `zhou2026_snm3c/`)
 
 snm3C-seq reads the contacts and the DNA methylation of the same nucleus; only the contacts are fetched (one
 table per nucleus).  `build_schic_pairs.py STUDY` bins them at 1 Mb per nucleus and pooled, with a
@@ -1567,6 +1569,25 @@ contact embedding and Leiden clusters, as for the single-cell Hi-C above.
   one 12,800 adult and infant neurons of every type, one the late-gestation and infant neurons.  Built in 11 h 22 min
   on 20 cores (binning 36 min, maps 1.5 h, embedding 8.7 h with the incremental PCA of Tian 2023, embedded copy
   32 min).  Atlas `heffel2024_brain`.
+- **Zhou 2026 human body** (Zhou J *et al.*, *Science* 393:eadx0673, 2026, doi:10.1126/science.adx0673; GEO
+  GSE326618): snm3C-seq of 16 adult tissues (adrenal gland, breast, esophagus muscularis mucosa, lung, left
+  ventricle, right atrial appendage, primary motor cortex, tibial nerve, placenta, peripheral blood, pancreatic
+  islets, ileum Peyer's patch, stomach, suprapubic skin, gastrocnemius, transverse colon), two donors each.  One
+  tarball per plate (256, 317 GB) of per-nucleus `.3C.contact.rmbkl.tsv.gz` (Juicer short format, hg38, blacklisted
+  regions removed), read as streams.  GEO has no cell types; the authors' cell table (86,689 nuclei that passed their
+  QC: tissue, donor, major type, sub-type, mCG / mCH, long-range cis contacts) and the names of the 35 major and 206
+  sub-types are their Hugging Face dataset `zhoujt1994/HumanCellEpigenomeAtlas_metadata` (MIT licence; fetched at a
+  pinned revision); tissue names from GEO's sample characteristics (`ZHOU2026_TISSUES`).  One nucleus of the table
+  (`SkGcn_C1MKW_Plate7-6-L18-L24`) has no table in its plate's tarball, so the store holds 86,688.  31.0 billion
+  contacts, median 346,000 per nucleus, 55 % cis.  The deposited tables have no cis pairs under 2.5 kb; their cis
+  contacts are 92 % (median per nucleus) of the authors' long-range cis count.  The Leiden clusters (12) agree with
+  the major types at ARI 0.38 (tissue 0.24, donor 0.10, plate 0.02): lymphocytes (B, NK and T cells: 13,921 of
+  14,415), neurons (4,876 of 4,994), trophoblast (4,658 of 5,228), adrenal cortex (3,095 of 3,296), skeletal muscle
+  (3,725 of 3,973, with vascular endothelial and perivascular cells) and enteric epithelium (2,897 of 3,334) each
+  fill a cluster, the myeloid cells two (6,887 of 8,306); the fibroblasts of every tissue share one (11,463 of
+  14,906), the glia one with the islet endocrine, Schwann and basal breast cells, and the other epithelia (acinar,
+  ductal, alveolar, gastric, keratinocyte) one.  Built in 10 h 54 min on 20 cores (binning 61 min, maps 2.5 h,
+  embedding 6.7 h, embedded copy 41 min).  Atlas `zhou2026_body`.
 
 ## Figure 3 datasets — bridges between contacts and geometry
 
