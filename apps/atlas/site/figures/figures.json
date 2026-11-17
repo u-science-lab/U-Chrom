@@ -1783,5 +1783,24 @@
   "resolution": 100000,
   "fill": 0.995,
   "map": "chen2026_charm_brain_3d.map.webp"
+ },
+ "zeng2026_aging_brain": {
+  "section": null,
+  "color_by": "major_type",
+  "layout": "embedding",
+  "layout_key": "hic_umap",
+  "caption": "Nuclei on the contact embedding, by cell type",
+  "n": 61999,
+  "categories": 36,
+  "grid": false,
+  "space": "zeng2026_aging_brain.space.webp",
+  "map_key": "bulk",
+  "map_label": "All 61,999 cells (merged)",
+  "chrom": "chr2",
+  "start": 27300000,
+  "end": 67400000,
+  "resolution": 100000,
+  "fill": 1.0,
+  "map": "zeng2026_aging_brain.map.webp"
  }
 }
