@@ -162,6 +162,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `tian2023_snm3c/`: Tian 2023 snm3C-seq contacts of the adult human brain (145,070 nuclei; the 143,760 of the authors' cell table are used) | 556 GB (contacts only; the methylation files are not fetched) | fetch `tian2023_snm3c` (NeMO, a compute cluster); recipe `build_schic_pairs.py` | atlas store `tian2023_brain` |
 | `yuan2026_retina/`: Yuan 2026 snm3C-seq contacts of human macula, peripheral retina and RPE (every well of 36 plates, 13,824) | 11.3 GB (contacts only; the methylation files are not fetched) | fetch `yuan2026_retina`; recipe `build_schic_pairs.py` | atlas store `yuan2026_eye` |
 | `chen2025_snm3c/`: Chen 2025 snm3C-seq3 contacts of human subcutaneous adipose tissue (6,652 nuclei of five donors) | 16.2 GB (one tarball; the methylation tables are not fetched) | fetch `chen2025_snm3c`; recipe `build_schic_pairs.py` | atlas store `chen2025_adipose` |
+| `heffel2024_snm3c/`: Heffel 2024 snm3C-seq3 contacts of the developing human prefrontal cortex and hippocampus (35 samples; the 49,742 nuclei of the authors' annotation table are used) | 133 GB (one tarball per sample; the methylation files, 2.5 TB, are not fetched) | fetch `heffel2024_snm3c` (a compute cluster); recipe `build_schic_pairs.py` | atlas store `heffel2024_brain` |
 | `tan2023_cerebellum/`: Tan 2023 Dip-C of the mouse cerebellum, P0-P637 (6,432 cells; structures of 675) | 27.7 GB (all-cell pairs) + 13.3 GB (structures and their pairs) | fetch `tan2023_cerebellum`, `tan2023_cerebellum_3d`; recipes `build_schic_pairs.py`, `build_dipc_structures.py` | atlas stores `tan2023_cerebellum`, `tan2023_cerebellum_3d` |
 | `spacea_ma2026/`: Ma 2026 SpaceA, spatial SPRITE of 9 mouse embryo sections, E11.5-E14.5 (5 libraries, 17 runs) | 2.7 TB fastq; C6 run 1 alone: clusters 87 MB, store 550 MB with the derived maps | fetch `ma2026_spacea_<library>` (GSA, academic use); recipe `spacea_ma2026/slurm/` (a compute cluster) | per-spot check of `ChromData.clusters` (U-Chrom PR #153); the browser's cluster track; not in the atlas |
 | `wu2025_scmicroc/`: Wu 2025 scMicro-C GM12878, 12 deepest cells | 3.1 GB (102 GB streamed) | fetch `wu2025_scmicroc` | EMber deep development and test (PREREG §11); Fig. 3a / S8 |
@@ -698,6 +699,7 @@ brain cells).
 | `tian2023_brain` | 34,915 | `tian2023_snm3c/tian2023_brain.chromdata.zarr` | `build_schic_pairs.py tian2023_snm3c` | `tian2023_snm3c` |
 | `yuan2026_eye` | 1,216 | `yuan2026_retina/yuan2026_eye.chromdata.zarr` | `build_schic_pairs.py yuan2026_retina` | `yuan2026_retina` |
 | `chen2025_adipose` | 2,034 | `chen2025_snm3c/chen2025_adipose.chromdata.zarr` | `build_schic_pairs.py chen2025_snm3c` | `chen2025_snm3c` |
+| `heffel2024_brain` | 8,090 | `heffel2024_snm3c/heffel2024_brain.chromdata.zarr` | `build_schic_pairs.py heffel2024_snm3c` | `heffel2024_snm3c` |
 | `tan2023_cerebellum` | 1,610 | `tan2023_cerebellum/tan2023_cerebellum.chromdata.zarr` | `build_schic_pairs.py tan2023_cerebellum` | `tan2023_cerebellum` |
 | `flyamer2017_oocyte_zygote`, `collombet2020_embryo`, `zhou2024_mcf7`, `ulianov2021_bg3` | 52 / 171 / 43 / 6 | `flyamer2017_snhic/`, `collombet2020_snhic/`, `zhou2024_mcf7/`, `ulianov2021_snhic/` + `<id>.chromdata.zarr` | `build_schic_pairs.py <folder name>` | the folder names |
 | `gassler2017_zygote`, `nagano2013_th1` | 27 / 6 | `gassler2017_snhic/gassler2017_zygote.chromdata.zarr`, `nagano2013_th1/nagano2013_th1.chromdata.zarr` | `build_schic_pairs.py gassler2017_snhic`, `... nagano2013_th1` | `gassler2017_snhic`, `nagano2013_th1` |
@@ -1488,7 +1490,8 @@ cells without a contact on those chromosomes are dropped.  The GEO files of thes
   cell), five Leiden clusters (ARI 0.21 against the experiment; one holds 27 of the 32 SDS cells).  Atlas
   `wu2025_scmicroc_gm12878_3d`.
 
-### snm3C-seq: contacts of single nuclei with their methylation (`lee2019_snm3c/`, `lee2019_snm3c_lines/`, `tian2023_snm3c/`, `yuan2026_retina/`, `chen2025_snm3c/`)
+### snm3C-seq: contacts of single nuclei with their methylation (`lee2019_snm3c/`, `lee2019_snm3c_lines/`, `tian2023_snm3c/`, `yuan2026_retina/`, `chen2025_snm3c/`,
+`heffel2024_snm3c/`)
 
 snm3C-seq reads the contacts and the DNA methylation of the same nucleus; only the contacts are fetched (one
 table per nucleus).  `build_schic_pairs.py STUDY` bins them at 1 Mb per nucleus and pooled, with a
@@ -1546,6 +1549,24 @@ contact embedding and Leiden clusters, as for the single-cell Hi-C above.
   fill a cluster of their own (96-100 % of its nuclei); the adipocyte cluster also takes 62 of the 63 transition
   cells, and the myeloid cells fill two clusters; the donors mix (ARI 0.03).  Built in 63 min on 16 cores.  Atlas
   `chen2025_adipose`.
+- **Heffel 2024 developing brain** (Heffel MG *et al.*, *Nature* 635:481, 2024, doi:10.1038/s41586-024-08030-7; GEO
+  GSE213950): snm3C-seq3 of the prefrontal cortex and hippocampus of 19 specimens from the second trimester to
+  adulthood.  One tarball per sample (35, 133 GB) of plain per-nucleus tables (`<cell>_..._no_less_2_contacts.txt`:
+  `chrom1 pos1 chrom2 pos2 strand1 strand2`, hg38), read as streams, and the paper's specimen table (Supplementary
+  Table 1: age, sex) and cell annotation (Supplementary Table 3: four levels of cell types, region, age group,
+  mCG / mCH, contact count; `heffel2024_snm3c`).  The series' gene-score AnnData has no annotations and the
+  methylation files (2.5 TB) are not fetched.  `build_schic_pairs.py heffel2024_snm3c` keeps the 49,742 nuclei of
+  the table in the 33 deposited samples it names (`HEFFEL2024`: sample -> tarball, specimen); the table's 3,321 nuclei
+  of Lee et al. 2019 (`Lee_UMB5577`, `Lee_UMB5580`) are not in this deposit, and two deposited samples
+  (220223-UCSF2020-005-PFC, 220705-UA18-22-HPC) have no nucleus in the table.  10.9 billion contacts, median
+  204,000 per nucleus, 60 % cis; 99.98 % of the authors' `TotalInt` (sum and median per nucleus).  The Leiden
+  clusters agree with the ten major types at ARI 0.22 (cell class 0.27, age group 0.28, region 0.005): microglia
+  (1,452 of 1,542) and vascular cells (1,105 of 1,325) share one cluster, oligodendrocytes (2,363 of 2,895) fill one,
+  astrocytes (3,531 of 3,841) and OPCs (1,319 of 1,613) another; the neurons and radial glia split by developmental
+  stage rather than by type: two clusters hold 14,898 of the 17,863 second-trimester nuclei (radial glia, neurons),
+  one 12,800 adult and infant neurons of every type, one the late-gestation and infant neurons.  Built in 11 h 22 min
+  on 20 cores (binning 36 min, maps 1.5 h, embedding 8.7 h with the incremental PCA of Tian 2023, embedded copy
+  32 min).  Atlas `heffel2024_brain`.
 
 ## Figure 3 datasets — bridges between contacts and geometry
 

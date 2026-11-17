@@ -1147,6 +1147,39 @@ DATASETS = {
         "description": "Chen 2025 snm3C-seq3 of human subcutaneous adipose tissue (5 donors): every nucleus' contacts "
                        "(hg38) and the authors' cell table (GSE297262)",
     },
+    # Heffel et al. 2024 (Nature 635:481, doi:10.1038/s41586-024-08030-7), GEO GSE213950: snm3C-seq3 of the developing
+    # human prefrontal cortex and hippocampus (hg38); one tarball per sample of per-cell contact tables (35 samples,
+    # chrom1 pos1 chrom2 pos2 strand1 strand2, plain text) and the paper's specimen (S1) and cell annotation (S3)
+    # tables.  The methylation (allc, 2.5 TB) and gene-score files of the series are not fetched
+    "heffel2024_snm3c": {
+        "files": lambda: ([(f"heffel2024_snm3c/raw/contacts/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE213950", r"_contacts\.tar\.gz$")]
+            + [(f"heffel2024_snm3c/raw/{n}", "https://static-content.springer.com/esm/"
+                f"art%3A10.1038%2Fs41586-024-08030-7/MediaObjects/{n}") for n in (
+                "41586_2024_8030_MOESM3_ESM.xlsx", "41586_2024_8030_MOESM5_ESM.xlsx")]),
+        "size_mb": 133400,
+        "default": False,
+        "parallel": 6,
+        "description": "Heffel 2024 snm3C-seq3 of the developing human prefrontal cortex and hippocampus: per-cell "
+                       "contacts of 35 samples (hg38, GSE213950) and the authors' specimen and cell-type tables",
+    },
+    # Zhou J. et al. 2026 (Science, doi:10.1126/science.adx0673), GEO GSE326618: snm3C-seq of 16 adult human tissues,
+    # two donors each (hg38); one tarball per plate of per-cell contact tables (256 plates, .3C.contact.rmbkl.tsv.gz,
+    # juicer short, blacklisted regions removed).  GEO has no cell types: the authors' cell table (86,689 nuclei:
+    # tissue, donor, major type, sub-type) and the names of the types are their Hugging Face dataset (MIT licence),
+    # pinned to a revision.  The methylation (allc) files of the series are not fetched
+    "zhou2026_snm3c": {
+        "files": lambda: ([(f"zhou2026_snm3c/raw/contacts/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE326618", r"\.contact\.rmbkl\.tar\.gz$")]
+            + [(f"zhou2026_snm3c/raw/{n}", "https://huggingface.co/datasets/zhoujt1994/HumanCellEpigenomeAtlas_metadata/"
+                f"resolve/83d5e38e64612c26df9347a4826ee44177e6bb20/{n}") for n in (
+                "5kCG100k3C_summary.csv.gz", "L1color.tsv", "subtype_meta.tsv")]),
+        "size_mb": 317100,
+        "default": False,
+        "parallel": 8,
+        "description": "Zhou 2026 snm3C-seq of 16 human tissues: per-cell contacts of 256 plates (hg38, GSE326618) and "
+                       "the authors' cell table (86,689 nuclei, Hugging Face)",
+    },
     # Lee L. et al. 2023 (Brief Bioinform 24:bbad315, doi:10.1093/bib/bbad315; SnapHiC-D), GEO GSE210585: single-nucleus Hi-C of 94 mouse ESC
     # and 188 neural progenitor cells (129/Sv x CAST, mm10), the valid pairs of each cell (hotspots removed; juicer
     # medium: readID str1 chr1 pos1 frag1 str2 chr2 pos2 frag2 mapq1 mapq2); cell types from the series matrix
