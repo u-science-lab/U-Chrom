@@ -387,12 +387,14 @@ ZENG2026_AGES = ["8wk", "9mo", "18mo"]
 
 def _zeng_extract(tar: Path) -> list:
     """The per-nucleus contact files of one Zeng 2026 tarball written to ``raw/cells`` (once; a marker file names
-    the members) -> [(member file name, tarball name)]."""
+    the members) -> [(member file name, tarball name)].  The GEO files are gzipped twice (a .tar.gz, gzipped again)."""
     out = tar.parent.parent / "cells"
     done = out / f".{tar.name}.members"
     if not done.exists():
         names = []
-        with tarfile.open(tar, "r|gz") as t:
+        with gzip.open(tar) as outer:                   # the deposit gzips the .tar.gz once more
+            nested = outer.read(2) == b"\x1f\x8b"
+        with gzip.open(tar) if nested else open(tar, "rb") as fh, tarfile.open(fileobj=fh, mode="r|gz") as t:
             for mem in t:
                 if mem.isfile():
                     base = Path(mem.name).name
