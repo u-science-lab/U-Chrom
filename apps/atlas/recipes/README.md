@@ -160,6 +160,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `lee2019_snm3c/`: Lee 2019 snm3C-seq contacts of the human prefrontal cortex (4,238 nuclei of two donors) | 44 GB (contacts only; the methylation files are not fetched) | fetch `lee2019_snm3c`; recipe `build_schic_pairs.py` | atlas store `lee2019_pfc` |
 | `lee2019_snm3c_lines/`: Lee 2019 snm3C-seq contacts of cell lines (144 GM12878, 351 E14 mESC, 96 NMuMG, 28 multiplets) | 1.4 GB (contacts only; the methylation files and the bulk mESC 3C / Hi-C / m3C are not fetched) | fetch `lee2019_snm3c_lines`; recipe `build_schic_pairs.py` | atlas stores `lee2019_gm12878`, `lee2019_mesc_nmumg` |
 | `tian2023_snm3c/`: Tian 2023 snm3C-seq contacts of the adult human brain (145,070 nuclei; the 143,760 of the authors' cell table are used) | 556 GB (contacts only; the methylation files are not fetched) | fetch `tian2023_snm3c` (NeMO, a compute cluster); recipe `build_schic_pairs.py` | atlas store `tian2023_brain` |
+| `liu2023_snm3c/`: Liu H. 2023 snm3C-seq contacts of the whole adult mouse brain (171,418 nuclei; the 170,785 of the authors' cell table are used) | 457 GB (contacts only; the methylation files and the cell-group maps are not fetched) | fetch `liu2023_snm3c` (NeMO, a compute cluster); recipe `build_schic_pairs.py` | atlas store `liu2023_brain` |
 | `zeng2026_snm3c/`: Zeng 2026 snm3C-seq contacts of the aging mouse brain (female, 8 weeks, 9 and 18 months, eight regions; 61,999 nuclei in 108 tarballs) | 274 GB (contacts only; the allc files and the male series GSE313770 are not fetched) | fetch `zeng2026_snm3c` (a compute cluster); recipe `build_schic_pairs.py` | atlas store `zeng2026_aging_brain` |
 | `yuan2026_retina/`: Yuan 2026 snm3C-seq contacts of human macula, peripheral retina and RPE (every well of 36 plates, 13,824) | 11.3 GB (contacts only; the methylation files are not fetched) | fetch `yuan2026_retina`; recipe `build_schic_pairs.py` | atlas store `yuan2026_eye` |
 | `chen2025_snm3c/`: Chen 2025 snm3C-seq3 contacts of human subcutaneous adipose tissue (6,652 nuclei of five donors) | 16.2 GB (one tarball; the methylation tables are not fetched) | fetch `chen2025_snm3c`; recipe `build_schic_pairs.py` | atlas store `chen2025_adipose` |
@@ -697,6 +698,7 @@ brain cells).
 | `lee2019_pfc` | 1,538 | `lee2019_snm3c/lee2019_pfc.chromdata.zarr` | `build_schic_pairs.py lee2019_snm3c` | `lee2019_snm3c` |
 | `lee2019_gm12878`, `lee2019_mesc_nmumg` | 81 / 194 | `lee2019_snm3c_lines/<id>.chromdata.zarr` | `build_schic_pairs.py lee2019_snm3c_lines` | `lee2019_snm3c_lines` |
 | `tian2023_brain` | 34,915 | `tian2023_snm3c/tian2023_brain.chromdata.zarr` | `build_schic_pairs.py tian2023_snm3c` | `tian2023_snm3c` |
+| `liu2023_brain` | 27,482 | `liu2023_snm3c/liu2023_brain.chromdata.zarr` | `build_schic_pairs.py liu2023_snm3c` | `liu2023_snm3c` |
 | `zeng2026_aging_brain` | 17,152 | `zeng2026_snm3c/zeng2026_aging_brain.chromdata.zarr` | `build_schic_pairs.py zeng2026_snm3c` | `zeng2026_snm3c` |
 | `yuan2026_eye` | 1,216 | `yuan2026_retina/yuan2026_eye.chromdata.zarr` | `build_schic_pairs.py yuan2026_retina` | `yuan2026_retina` |
 | `chen2025_adipose` | 2,034 | `chen2025_snm3c/chen2025_adipose.chromdata.zarr` | `build_schic_pairs.py chen2025_snm3c` | `chen2025_snm3c` |
@@ -1490,7 +1492,7 @@ cells without a contact on those chromosomes are dropped.  The GEO files of thes
   cell), five Leiden clusters (ARI 0.21 against the experiment; one holds 27 of the 32 SDS cells).  Atlas
   `wu2025_scmicroc_gm12878_3d`.
 
-### snm3C-seq: contacts of single nuclei with their methylation (`lee2019_snm3c/`, `lee2019_snm3c_lines/`, `tian2023_snm3c/`, `zeng2026_snm3c/`, `yuan2026_retina/`, `chen2025_snm3c/`)
+### snm3C-seq: contacts of single nuclei with their methylation (`lee2019_snm3c/`, `lee2019_snm3c_lines/`, `tian2023_snm3c/`, `liu2023_snm3c/`, `zeng2026_snm3c/`, `yuan2026_retina/`, `chen2025_snm3c/`)
 
 snm3C-seq reads the contacts and the DNA methylation of the same nucleus; only the contacts are fetched (one
 table per nucleus).  `build_schic_pairs.py STUDY` bins them at 1 Mb per nucleus and pooled, with a
@@ -1515,6 +1517,23 @@ contact embedding and Leiden clusters, as for the single-cell Hi-C above.
   cells each fall in clusters of their own; the neurons fall in three clusters that mix their types.  The build took
   29 h on 20 cores (binning 1 h, maps 8 h, embedding 20 h); the per-cell maps (19.9 billion pixels) are 35 GB in the
   store.  Atlas `tian2023_brain`.
+- **Liu H. 2023 adult mouse brain** (Liu H *et al.*, *Nature* 624:366, 2023, doi:10.1038/s41586-023-06805-y; NeMO
+  dat-sig83t9; GEO GSE213262 holds the methylation only): the snm3C-seq half of the authors' whole-brain atlas, 117
+  dissected regions of male mice at 8 weeks, one `.tar` per nucleus holding its `.3C.contact.tsv.gz` (Juicer short
+  format, mm10; 171,418 nuclei, 457 GB, `liu2023_snm3c`, listed by the NeMO bag of the publication; NeMO answers 503
+  above about 7 requests a second, so the fetch ran 4 keep-alive streams, about 4 files a second, 12 h), with the
+  authors' cell table (Supplementary Table 3: 176,003 nuclei, dissection region, sample, subclass) and the class of each
+  of the 227 subclasses in the Allen whole-brain taxonomy (release 20231215; all 227 found).  `build_schic_pairs.py
+  liu2023_snm3c` keeps the 170,785 nuclei of the table with a contact file (5,218 of the table, plates
+  `CEMBA191126/7_*`, have none; 633 files are of nuclei not in the table): 50.7 billion contacts, median 294,000 per
+  nucleus, 63 % cis; the cis and trans counts equal the authors' `CisLongContact` and `TransContact` (median ratios
+  1.000 and 1.000: the deposited tables hold the long-range cis and the trans contacts).  The Leiden clusters agree
+  with the 30 classes at ARI 0.25 (subclass 0.18, major region 0.07, sample 0.03): oligodendrocyte-lineage cells
+  (18,892 of 23,318), astrocytes (6,824 of 6,974), cerebellar granule cells (9,875 of 9,987), immune cells (4,321 of
+  4,381) and vascular cells (2,120 of 2,358) each fall in a cluster of their own; the other neurons fall in four
+  clusters that mix their classes, one holding most of the midbrain, hindbrain, hypothalamic and thalamic neurons,
+  two most of the cortical (IT-ET, NP-CT-L6b) and striatal (CNU-LGE) ones.  Embedding as for Tian (`embed_kw`).  The
+  build took 26.3 h on 20 cores (binning 1.3 h, maps 5 h, embedding 19 h).  Atlas `liu2023_brain`.
 - **Zeng 2026 aging mouse brain** (Zeng Q *et al.*, *Cell* 189:2148, 2026, doi:10.1016/j.cell.2026.02.015; GEO
   GSE292803): the snm3C-seq of the authors' aging atlas, female C57BL/6J mice at 8 weeks, 9 and 18 months, eight
   regions (frontal and entorhinal cortex, anterior and posterior hippocampus, amygdala, nucleus accumbens, caudate
