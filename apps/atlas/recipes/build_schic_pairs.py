@@ -53,6 +53,12 @@ The studies (``python -m uchrom.datasets fetch NAME``; the raw files under ``<da
                        donor (cell in column 9), split per nucleus once (hg38); store zemke2026_hippocampus
   pang2022_schic       Pang et al. 2022, Genome Biol 23:121 (GEO GSE201919): single-cell Hi-C of ovarian cancer cells
                        (a PEO1 / HEYA8 mixture, OVCA429 shGRHL2), NucProcess ``.ncc`` (hg38)
+  heffel2024_snm3c     Heffel et al. 2024, Nature 635:481 (GEO GSE213950): snm3C-seq3 of the developing human prefrontal
+                       cortex and hippocampus, the cells of the authors' annotation table (one tarball of per-cell
+                       contact tables per sample, hg38); store heffel2024_brain
+  zhou2026_snm3c       Zhou J. et al. 2026, Science 393:eadx0673 (GEO GSE326618): snm3C-seq of 16 adult human tissues,
+                       the 86,689 nuclei of the authors' cell table (one tarball of per-cell contacts per plate, hg38);
+                       store zhou2026_body
 
 Every store (``<data>/<NAME>/<store>.chromdata.zarr``) holds no 3-D coordinates, only cells and linked maps:
 
@@ -797,6 +803,122 @@ def chen2026(raw: Path) -> dict:
                       "QC (homologs summed), the authors' cell table (cell types, cell-cycle phase) and RNA counts"}
 
 
+#: Heffel 2024: sample of the authors' cell table (Supplementary Table 3) -> (GEO contact tarball stem, specimen of
+#: Supplementary Table 1).  The table's 3,321 cells of 'Lee_UMB5577' / 'Lee_UMB5580' are Lee et al. 2019's (not in
+#: this deposit); two deposited tarballs (220223-UCSF2020-005-PFC, 220705-UA18-22-HPC) have no cell in the table
+HEFFEL2024 = {
+    "20191219_7mo": ("191219-7mo-PFC", "7mo"), "20210111_UMB1863": ("210111-UMB1863-PFC", "UMB1863"),
+    "20210224_GW18": ("210224-GW18-PFC", "GW18"), "20210224_GW20a": ("210224-GW20a-PFC", "GW20a"),
+    "20210224_GW20b": ("210224-GW20b-PFC", "GW20b"), "20210224_GW23": ("210224-GW23-PFC", "GW23"),
+    "20210224_UMB5577": ("210224-UMB5577-PFC", "UMB5577"), "20210316_GW20a": ("210316-GW20a-PFC", "GW20a"),
+    "20210316_UA1822": ("210316-UA18-22-PFC", "UA18-22"), "20210316_UA1922": ("210316-UA19-22-PFC", "UA1922"),
+    "20210316_UMB4267": ("210316-UMB4267-PFC", "UMB4267"), "20210505_UMB5577": ("210505-UMB5577-PFC", "UMB5577"),
+    "20210505_UMB6096": ("210505-UMB6096-PFC", "UMB6096"), "20210528_UMB5577": ("210528-UMB5577-PFC", "UMB5577"),
+    "20210528_UMB5621": ("210528-UMB5621-PFC", "UMB5621"), "210830-4267-HPC": ("210830-UMB4267-HPC", "UMB4267"),
+    "210830-6096-HPC": ("210830-UMB6096-HPC", "UMB6096"), "210830-GW18-Ant-HCX": ("210830-GW18-Ant-HPC", "GW18-Ant"),
+    "210830-GW18-Post-HCX": ("210830-GW18-Post-HPC", "GW18-Post"), "210830-GW20-HPC": ("210830-GW20-HPC", "GW20"),
+    "210830-UA19-27-HPC": ("210830-UA19-27-HPC", "UA19-27"), "211029-5551-HPC": ("211029-UMB5551-HPC", "UMB5551"),
+    "211029-UA19-22-HPC": ("211029-UA19-22-HPC", "UA19-22"), "211029-UA19-27-HPC": ("211029-UA19-27-HPC", "UA19-27"),
+    "211130-4267-HPC": ("211130-UMB4267-HPC", "UMB4267"), "211130-6096-HPC": ("211130-UMB6096-HPC", "UMB6096"),
+    "211130-GW18-Ant-HCX": ("211130-GW18-Ant-HPC", "GW18-Ant"),
+    "211130-GW18-Post-HCX": ("211130-GW18-Post-HPC", "GW18-Post"), "211130-GW20-HPC": ("211130-GW20-HPC", "GW20"),
+    "211130-UA19-22-HPC": ("211130-UA19-22-HPC", "UA19-22"), "211130-UA19-27-HPC": ("211130-UA19-27-HPC", "UA19-27"),
+    "211130-UA20-15-HPC": ("211130-UCSF2020-005-HPC", "UCSF2020-005"), "220314-GW23-HPC": ("220314-GW23-HPC", "GW23"),
+}
+
+
+def _heffel_cell(member: str) -> str:
+    """'20210224_GW18/20210224-GW18-preAb-PFC-B04_A10_indexed_all_merged_3split_..._no_less_2_contacts.txt' ->
+    '20210224-GW18-preAb-PFC-B04_A10' (the cell ids of the authors' table)."""
+    name = Path(member).name
+    if "_all_merged" not in name:
+        raise ValueError(member)
+    return re.sub(r"(_indexed)?_all_merged.*$", "", name)
+
+
+def heffel2024(raw: Path) -> dict:
+    """Heffel 2024 developing human PFC and hippocampus (GSE213950): the cells of the authors' annotation table
+    (Supplementary Table 3: L1-L4 types, region, age group) with the specimen's age and sex (Table 1); one tarball of
+    per-cell contact tables per sample, only those of the table's samples read."""
+    t3 = pd.read_excel(raw / "41586_2024_8030_MOESM5_ESM.xlsx", header=1)
+    t3 = t3[t3["Sample"].isin(list(HEFFEL2024))]
+    region = {"CTX": "prefrontal cortex", "HPC": "hippocampus"}
+    spec = {}
+    for sheet, reg in (("Prefrontal Cortex (PFC)", "CTX"), ("Hippocampus (HPC)", "HPC")):
+        s1 = pd.read_excel(raw / "41586_2024_8030_MOESM3_ESM.xlsx", sheet_name=sheet, header=2).dropna(subset=["Age"])
+        for _, r in s1.iterrows():
+            spec[(reg, str(r["Sample ID"]))] = (str(r["Age"]).replace("GW", "GW ").replace("  ", " "), r["Sex"])
+    sample = t3["Sample"].astype(str)
+    specimen = sample.map(lambda s: HEFFEL2024[s][1])
+    age_sex = [spec[(r, s)] for r, s in zip(t3["region"], specimen)]
+    cells = pd.DataFrame({"sample": sample.to_numpy(), "specimen": specimen.to_numpy(),
+                          "region": t3["region"].map(region).to_numpy(),
+                          "age_group": t3["age_groups"].map({"2T": "second trimester", "3T": "third trimester",
+                                                             "infant": "infant", "adult": "adult"}).to_numpy(),
+                          "age": [a for a, _ in age_sex], "sex": [s for _, s in age_sex],
+                          "cell_class": t3["L1 annotation"].to_numpy(), "major_type": t3["L2 annotation"].to_numpy(),
+                          "sub_type": t3["L3 annotation"].to_numpy(), "stage_type": t3["L4 annotation"].to_numpy(),
+                          "n_contacts_published": t3["TotalInt"].to_numpy(), "mCG": t3["mCG/CG"].to_numpy(),
+                          "mCH": t3["mCH/CH"].to_numpy()}, index=t3["Cell ID"].astype(str).to_numpy())
+    cells["cell_type"] = cells["major_type"]
+    cells.index.name = "cell_id"
+    tars = {s: raw / "contacts" / f for s, (stem, _) in HEFFEL2024.items()
+            for f in [p.name for p in (raw / "contacts").glob(f"GSM*_{stem}_contacts.tar.gz")]}
+    missing = sorted(set(HEFFEL2024) - set(tars))
+    if missing:                                         # a build of their cells fails (KeyError) when read
+        log(f"heffel2024: no contact tarball of {missing}")
+    log(f"heffel2024: {len(cells):,} cells of the authors' table in {cells['sample'].nunique()} deposited samples")
+    return {"stores": {"heffel2024_brain": cells}, "tar": tars, "tar_key": "sample", "tar_name": _heffel_cell,
+            "format": "chrpos", "assembly": "hg38", "embed_kw": {"n_per_chrom": 20, "pca": "incremental", "n_threads": 32},
+            "source": "Heffel et al. 2024, Nature 635:481 (snm3C-seq3 of the developing human prefrontal cortex and "
+                      "hippocampus, second trimester to adult; GEO GSE213950): the contacts of the cells of the authors' "
+                      "annotation table (Supplementary Table 3: cell types at four levels, region, age group) with "
+                      "the specimen's age and sex (Supplementary Table 1)"}
+
+
+#: Zhou 2026: tissue codes of the cell names -> tissue (GEO's sample characteristics)
+ZHOU2026_TISSUES = {"AG": "adrenal gland", "B": "breast", "EG": "esophagus muscularis mucosa", "LG": "lung",
+                    "LV": "left ventricle", "M1C": "primary motor cortex", "NTb": "tibial nerve", "P": "placenta",
+                    "PBMC": "peripheral blood", "PI": "pancreatic islet", "RAA": "right atrial appendage",
+                    "SB": "ileum Peyer's patch", "ST": "stomach", "Sk": "suprapubic skin",
+                    "SkGcn": "gastrocnemius medialis", "TrCo": "transverse colon"}
+
+
+def zhou2026(raw: Path) -> dict:
+    """Zhou 2026 human body atlas (GSE326618): the 86,689 nuclei of the authors' cell table (Hugging Face
+    HumanCellEpigenomeAtlas_metadata: tissue, donor, major type, sub-type), one tarball of per-cell contact tables
+    per plate, only those of the table's plates read."""
+    meta = pd.read_csv(raw / "5kCG100k3C_summary.csv.gz", index_col=0)
+    l1 = pd.read_csv(raw / "L1color.tsv", sep="\t", index_col=0)
+    sub = pd.read_csv(raw / "subtype_meta.tsv", sep="\t", index_col=0)
+    plate = meta.index.str.split("-").str[0]
+    cells = pd.DataFrame({"plate": plate, "tissue": meta["Tissue"].map(ZHOU2026_TISSUES).to_numpy(),
+                          "tissue_code": meta["Tissue"].to_numpy(), "donor": meta["Donor"].astype(str).to_numpy(),
+                          "major_type": l1["L1_abbr"].reindex(meta["majortype"]).to_numpy(),
+                          "major_type_name": l1["L1_annot"].reindex(meta["majortype"]).to_numpy(),
+                          "sub_type": sub["celltype_L2_both_abbr"].reindex(meta["subtype"]).to_numpy(),
+                          "n_cis_long_published": meta["CisLongContact"].to_numpy(),
+                          "mCG": meta["mCGFrac"].to_numpy(), "mCH": meta["mCHFrac"].to_numpy()}, index=meta.index)
+    for col in ("tissue", "major_type", "sub_type"):
+        if cells[col].isna().any():
+            raise ValueError(f"zhou2026: {int(cells[col].isna().sum())} cells without {col}")
+    cells["cell_type"] = cells["major_type"]
+    cells.index.name = "cell_id"
+    tars = {}
+    for p in (raw / "contacts").glob("GSM*.contact.rmbkl.tar.gz"):
+        tars[re.match(r"^GSM\d+_(.+)\.contact\.rmbkl\.tar\.gz$", p.name)[1]] = p
+    missing = sorted(set(cells["plate"]) - set(tars))
+    if missing:                                         # a build of their cells fails (KeyError) when read
+        log(f"zhou2026: no contact tarball of {len(missing)} plates: {missing[:5]}")
+    log(f"zhou2026: {len(cells):,} nuclei of the authors' table on {cells['plate'].nunique()} plates, {len(tars)} tarballs")
+    return {"stores": {"zhou2026_body": cells}, "tar": tars, "tar_key": "plate", "format": "juicer", "assembly": "hg38",
+            "embed_kw": {"n_per_chrom": 20, "pca": "incremental", "n_threads": 32},
+            "source": "Zhou J. et al. 2026, Science 393:eadx0673 (snm3C-seq of 16 adult human tissues, two donors each; GEO "
+                      "GSE326618): the contacts of the 86,689 nuclei of the authors' cell table (blacklisted regions "
+                      "removed, .contact.rmbkl) with tissue, donor, major type and sub-type (Hugging Face "
+                      "zhoujt1994/HumanCellEpigenomeAtlas_metadata)"}
+
+
 STUDIES = {"flyamer2017_snhic": flyamer2017, "collombet2020_snhic": collombet2020, "zhou2024_mcf7": zhou2024,
            "tan2023_cerebellum": tan2023, "gassler2017_snhic": gassler2017, "nagano2013_th1": nagano2013,
            "lu2025_scnanohic2": lu2025, "lee2019_snm3c": lee2019, "yuan2026_retina": yuan2026,
@@ -804,7 +926,8 @@ STUDIES = {"flyamer2017_snhic": flyamer2017, "collombet2020_snhic": collombet202
            "lee2023_snhic": lee2023, "lin2022_scidlo": lin2022, "wu2025_scmicroc_gm12878": wu2025, "qu2023_sccareseq": qu2023,
            "lagunov2026_lampbrush": lagunov2026, "du2020_snhic": du2020, "dequeker2022_snhic": dequeker2022,
            "silva2020_snhic": silva2020, "pang2022_schic": pang2022,
-           "chen2026_charm": chen2026, "zemke2026_snm3c": zemke2026}
+           "chen2026_charm": chen2026, "zemke2026_snm3c": zemke2026, "heffel2024_snm3c": heffel2024,
+           "zhou2026_snm3c": zhou2026}
 
 
 # -- binning -----------------------------------------------------------------------------------------------------
@@ -919,7 +1042,10 @@ def _tar_cells(tars, index: pd.Index, name=None):
 def bin_contacts(cells: pd.DataFrame, study: dict, stem: Path, sizes: dict, workers: int):
     binner = ContactBinner(sizes, cells.index, stem.parent / f".{stem.name}_bins", cell_res=CELL_RES)
     if "tar" in study:
-        jobs = _tar_cells(study["tar"], binner.cell_index, study.get("tar_name"))
+        tars = study["tar"]
+        if isinstance(tars, dict):                      # one tarball per sample: only those of these cells
+            tars = [tars[k] for k in sorted(cells[study["tar_key"]].unique())]
+        jobs = _tar_cells(tars, binner.cell_index, study.get("tar_name"))
     else:
         jobs = [(int(binner.cell_index.get_loc(c)), study["files"][c]) for c in cells.index]
     n_cis = np.zeros(len(binner.cells), np.int64)

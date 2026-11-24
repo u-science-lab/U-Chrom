@@ -1846,5 +1846,43 @@
   "categories": 14,
   "grid": false,
   "space": "cheng2026_tonsil.space.webp"
+ },
+ "heffel2024_brain": {
+  "section": null,
+  "color_by": "major_type",
+  "layout": "embedding",
+  "layout_key": "hic_umap",
+  "caption": "Nuclei on the contact embedding, by major type",
+  "n": 49742,
+  "categories": 10,
+  "grid": false,
+  "space": "heffel2024_brain.space.webp",
+  "map_key": "bulk",
+  "map_label": "All 49,742 cells (merged)",
+  "chrom": "chr2",
+  "start": 36300000,
+  "end": 76400000,
+  "resolution": 100000,
+  "fill": 1.0,
+  "map": "heffel2024_brain.map.webp"
+ },
+ "zhou2026_body": {
+  "section": null,
+  "color_by": "tissue",
+  "layout": "embedding",
+  "layout_key": "hic_umap",
+  "caption": "Nuclei on the contact embedding, by tissue",
+  "n": 86688,
+  "categories": 16,
+  "grid": false,
+  "space": "zhou2026_body.space.webp",
+  "map_key": "bulk",
+  "map_label": "All 86,688 cells (merged)",
+  "chrom": "chr2",
+  "start": 36300000,
+  "end": 76400000,
+  "resolution": 100000,
+  "fill": 1.0,
+  "map": "zhou2026_body.map.webp"
  }
 }
