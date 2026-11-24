@@ -1802,5 +1802,49 @@
   "resolution": 100000,
   "fill": 1.0,
   "map": "zemke2026_hippocampus.map.webp"
+ },
+ "cheng2026_bcell_lines": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "Ramos_rep2_55_92",
+  "caption": "One Ramos cell, every traced chromosome copy",
+  "n": 870,
+  "categories": 18,
+  "grid": false,
+  "space": "cheng2026_bcell_lines.space.webp"
+ },
+ "cheng2026_ramos_igh_igl": {
+  "section": null,
+  "color_by": "genomic position",
+  "layout": "structure",
+  "layout_key": "0hr_t575",
+  "caption": "IGH at 10-kb steps, one untreated cell",
+  "n": 48,
+  "categories": 1,
+  "grid": false,
+  "space": "cheng2026_ramos_igh_igl.space.webp"
+ },
+ "cheng2026_ramos_3rr": {
+  "section": null,
+  "color_by": "genomic position",
+  "layout": "structure",
+  "layout_key": "6hr_t330",
+  "caption": "The eight 3'RR bins of IGH, one cell",
+  "n": 8,
+  "categories": 1,
+  "grid": false,
+  "space": "cheng2026_ramos_3rr.space.webp"
+ },
+ "cheng2026_tonsil": {
+  "section": "rep4_fov47",
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "rep1_8_237",
+  "caption": "One dark-zone B cell, every traced chromosome copy",
+  "n": 511,
+  "categories": 14,
+  "grid": false,
+  "space": "cheng2026_tonsil.space.webp"
  }
 }

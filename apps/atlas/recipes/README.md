@@ -51,6 +51,7 @@ rebuilt when the loader's version changes; each checked to give what the tutoria
 | `takei2021_brain_4dn`, `liu2020_mina`, `hung2024_orca`, `huang2021_4dn` | `<name>/<name>.chromdata.zarr` | the same names (4DN FOF-CT) | Takei 2021 mouse cortex DNA seqFISH+ (2,762 cells, 1 Mb and 25 kb loci as traces `c1-` / `c2-`, cell types), Liu 2020 MINA of fetal liver (13,306 cells, chr19 with lamina / nucleolus distances, RNA per cell), Hung 2024 ORCA of Pitx1 in limb buds (103,820 traces), Huang 2021 Sox2 in mESC (8,364 traces, allele and transcription per trace) — see *4DN chromatin-tracing studies* | — |
 | `bintu2018_4dn`, `mateo2019_orca`, `hafner2023_orca`, `murphy2024_orca` | `<name>/<name>.chromdata.zarr` | the same names (4DN FOF-CT) | every experiment of a 4DN chromatin-tracing study in one object (`uchrom.io.read_4dn_tracing`; `cells`: `set`, `condition` = the set's 4DN description, `biosample`; the companion tables as `spot_tracks` / `traces` / `cells` columns) — see *4DN chromatin-tracing studies* | — |
 | `huang2021_sox2` | `huang2021_sox2/huang2021_sox2.chromdata.zarr` | `huang2021_sox2` | Huang 2021 mESC Sox2 tracing (SnapFISH-IMPUTE tables, `uchrom.io.read_snapfish`): 1,416 cells × 2 alleles × 41 loci of 5 kb, undetected loci as NaN | tutorial `fish_imputation` |
+| `cheng2026_tonsil`, `cheng2026_bcell_lines`, `cheng2026_ramos_igh_igl`, `cheng2026_ramos_3rr` | `cheng2026_mina/<id>.chromdata.zarr` | `cheng2026_mina` (the supplement downloaded by hand) | Cheng 2026 MINA of human tonsil (211,107 cells, 1,151 loci + 447 RNAs), Ramos / TMD8 genome-wide tracing, 10-kb IGH / IGL / 3'RR tracing in RAD21-degron Ramos cells — see *`cheng2026_mina/`* | — |
 | `rao2014_imr90_chr21` | `rao2014_imr90/rao2014_imr90_chr21.chromdata.zarr` | `rao2014_imr90_chr21` (built from GEO) | Rao 2014 IMR90 Hi-C chr21 at 5 kb (hg19, raw counts), the map linked as `bulk` | tutorials `bulk_reconstruction`, `gem_fish_reconstruction`, `hic_structures` |
 | `kim2020_scihic` | `kim2020_scihic/kim2020_scihic.chromdata.zarr` + `.scool` | `kim2020_scihic` | Kim 2020 sci-Hi-C, H1 ES + HFF: 1,931 cells with cell types, 500 kb maps per cell (linked `.scool`, key `per_cell`; the hg19 bin numbering checked) | tutorial `higashi_embedding` |
 | `tan2018_gm12878` | `tan2018_gm12878/tan2018_gm12878.chromdata.zarr` + `tan2018_gm12878_5kb.scool` (44 MB) | `tan2018_gm12878` | Tan 2018 Dip-C GM12878: the 14 cells with hickit pairs, 5 kb maps per cell (hg19, homologs summed; key `per_cell`), contacts / cis fraction per cell; the authors' Dip-C structures (20 kb particles, one trace per cell × chromosome × homolog, 3.83 M particles; the replicate runs `rep1` / `rep2` as layers, replicate RMSD per cell and per particle; store ~320 MB) | tutorial `sc_structures`; uchrom-reproducibility `supp_table3/hic_structures/pseudobulk_gm12878.py`; uchrom-reproducibility `supp_table3/sc_structures/structures_*.py` |
@@ -716,6 +717,7 @@ brain cells).
 | `xu2025_sperm_human`, `xu2025_sperm_mouse` | 1,017 / 704 | `xu2025_sperm/<id>.chromdata.zarr` | `build_dipc_structures.py xu2025_sperm`, `derive_embeddings.py --hic per_cell --leiden` | `xu2025_sperm` |
 | `payne2021_igs_embryo`, `payne2021_igs_pgp1` | 23 / 3 | `payne2021_igs/<id>.chromdata.zarr` | loaders of the same names (see *`payne2021_igs/`*); traces are sets of reads (`trace_kind` `set`), the thumbnails dots | `payne2021_igs` |
 | `beckwith2025_mitosis`, `beckwith2025_looptrace`, `beckwith2025_looptrace_fish` | 177 / 186 / 57 | `beckwith2025/<id>.chromdata.zarr` | loaders of the same names (see *`beckwith2025/`*) | `beckwith2025_mitosis`, `beckwith2025_looptrace` |
+| `cheng2026_tonsil`, `cheng2026_bcell_lines`, `cheng2026_ramos_igh_igl`, `cheng2026_ramos_3rr` | 800 / 138 / 69 / 8 | `cheng2026_mina/<id>.chromdata.zarr` | loaders of the same names (see *`cheng2026_mina/`*) | `cheng2026_mina` |
 | `lando2024_mesc`, `zhou2019_rice` | 71 / 15 | `<name>/<name>.chromdata.zarr` | `build_nuc_structures.py <name>`, `derive_embeddings.py --hic per_cell` (`--leiden` for Lando) | the same names |
 
 Sizes are those of the published stores with their embedded copies (`python -m uchrom.datasets atlas`,
@@ -2364,6 +2366,53 @@ Each experiment of a set is a *core* table (spots) with optional companions keye
   15-25 % above the paper's (QC-passed) ones for MEOX1.
 - **Used by**: the loaders; the atlas (`beckwith2025_mitosis`, `beckwith2025_looptrace`,
   `beckwith2025_looptrace_fish`); test fixtures `packages/uchrom/tests/fixtures/looptrace/`.
+
+## `cheng2026_mina/`: Cheng 2026 MINA and chromatin tracing of human tonsil and B cells (2.65 GB; fetch `cheng2026_mina`; load `cheng2026_tonsil`, `cheng2026_bcell_lines`, `cheng2026_ramos_igh_igl`, `cheng2026_ramos_3rr`)
+
+- **Source**: Cheng Y, Wang J, Zhang Y *et al.* "A 3D genome atlas of human tonsil and the role of loop extrusion in B
+  cell somatic hypermutation", *Science* 393:eadw4243 (2026), doi:10.1126/science.adw4243.  Zenodo
+  [19959235](https://doi.org/10.5281/zenodo.19959235) (CC BY 4.0): `Imaging_analyzed_data.zip` (2,631,175,245 B, md5
+  `abc999e01d060241a63b794a8809e998`; Deflate64, unpacked with the system `unzip`); the record's Droplet Hi-C,
+  bigWig and code archives are not fetched.  The supplement `science.adw4243_data_s1_to_s7.zip` (16,837,858 B, md5
+  `284575adfbe53377d777452469e242a1`) from
+  https://www.science.org/doi/suppl/10.1126/science.adw4243/suppl_file/science.adw4243_data_s1_to_s7.zip: the
+  publisher refuses scripted downloads, so download it in a browser and put it in `cheng2026_mina/raw/` (`fetch`
+  then checks its md5).
+- **Content**: MATLAB v7.3 structs of the Wang lab (`uchrom.io.read_mina_mat`): per cell (`ChrFOV`) for the
+  genome-wide DNA-MERFISH of five tonsil sections (64 fields each; three children aged 2-5, Data S5) and of Ramos /
+  TMD8 cells (two replicates each), with each tonsil cell's RNA MERFISH counts (`CellListRNA_250602.mat`, 447 genes
+  in the order of Data S2, which equals the authors' codebook) and zone scores / cell type after the authors' zone
+  filter (`CellListRNA_RemovedMislocated.mat`); per trace (`ChrAll`) for the 10-kb tracing of IGH (48 bins), IGL
+  (25 bins, the same cells) and the dedicated 3'RR library (IGH bins 7-10 and 19-22) in RAD21-degron Ramos cells
+  after 0, 2, 6 and 12 h of dTAGV-1 (time points barcoded and imaged together).  Coordinates in µm of the field of
+  view; undetected loci (`r = 0`) are left out.
+- **Loci**: the 10-kb bins are named with their coordinates in Data S3 (bins numbered in genomic order).  The
+  genome-wide targets have **no coordinates in the deposit or the supplement**; they were derived from the authors'
+  probe sequences (Data S1: 460,400 probes `..._Target<n>_..._Code<50 bits>`, 140 nt = primer, readout, 40-nt
+  targeting region, two readouts, primer) by `apps/atlas/recipes/cheng2026_mina/map_probes.py`: exact matches of
+  each targeting region on hg38 (both strands).  460,317 probes match exactly once, 83 nowhere, none more than once;
+  every probe of a target lies within its locus (17-100 kb, the paper's "central 100-kb region") and on one
+  chromosome; the loci do not overlap (median spacing 1.7 Mb); the targets per chromosome (107 on chr1 ... 23 on X)
+  equal the trace lengths of the files.  The table is
+  `packages/uchrom/uchrom/datasets/cheng2026_targets_hg38.tsv` (`chrom_id`, `locus` = the index in the traces,
+  target number, probe counts, code).
+- **Quirks**: the merged `ChrAll` files concatenate two replicates whose fields are each numbered from 0 (split where
+  the numbering restarts: `replicate`); cell ids are `<time>_r<rep>_<FOV>_<CellID>`, tonsil `rep<n>_<FOV>_<CellID>`,
+  lines `<line>_rep<n>_<FOV>_<CellID>`.  Tonsil cell centres are in pixels (× 0.108 µm = the traces' frame, checked:
+  slope 0.108, r = 1.000).
+- **Checks** (2026-11-24): tonsil 211,107 cells with traces (37,910 / 42,102 / 56,432 / 32,143 / 42,520 per section),
+  2,254,144 traces, 32.0 M spots, 159,226 with a cell type; the authors' filter of the genome-wide analyses (a type
+  other than `unknown`, 3 < TraceNum < 30; `in_paper_analysis`) leaves 121,373 cells, the paper's N exactly, and
+  26,039 DZ / 24,136 LZ / 11,183 naive B cells (Fig. 3's numbers); 33 % of a chromosome's loci per trace; mean
+  distance against genomic distance has exponent 0.125 over 1 Mb (paper 0.13); 212 RNA molecules and 74 genes per cell
+  on average (paper 201 / 80, before their filters).  B-cell lines: 15,680 cells (9,824 Ramos, 5,856 TMD8), 350,553
+  traces, 36 % of loci per trace, exponent 0.18; every chromosome's log distance correlates with log genomic distance
+  (r 0.30-0.47), which confirms the locus order.  IGH / IGL: 36,089 cells, 7,256 / 11,850 / 12,006 / 4,977 at 0 / 2 /
+  6 / 12 h (the paper's N exactly), 101,982 traces, 67 % (IGH) / 59 % (IGL) of bins detected.  3'RR: 20,779 cells
+  (3,722 / 7,299 / 6,739 / 3,019), 34,245 traces, 79 % detected (no N in the paper).  Built in 2 h 35 min (tonsil), 17 min
+  (lines), 6 min (IGH / IGL, 3'RR each) on one core.
+- **Used by**: the loaders; the atlas (`cheng2026_tonsil`, `cheng2026_bcell_lines`, `cheng2026_ramos_igh_igl`,
+  `cheng2026_ramos_3rr`).
 
 ## Pre-staging data (optional)
 

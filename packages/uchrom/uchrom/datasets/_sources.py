@@ -356,6 +356,26 @@ DATASETS = {
         "description": "Beckwith 2025 (Nat Commun) LoopTrace: RPE-1 / HeLa Kyoto with RAD21, CTCF or WAPL depleted, "
                        "and denaturing vs non-denaturing FISH (figshare 27613239)",
     },
+    # Cheng et al. 2026 (Science 393:eadw4243, doi:10.1126/science.adw4243), Zenodo 19959235 (CC BY 4.0): the
+    # analysed imaging data (MATLAB v7.3 structs: genome-wide DNA-MERFISH traces of five tonsil sections with the
+    # cells' RNA MERFISH counts, of Ramos and TMD8 cells; 10-kb tracing of IGH, IGL and the IGH 3'RRs in RAD21-degron
+    # Ramos cells); the record's Hi-C, bigWig and code archives are not fetched.  The supplement (Data S1-S7: probe
+    # sequences, fine-scale probe coordinates, donors) gives the locus coordinates: science.org refuses scripted
+    # downloads, so download it in a browser from the URL below and put it at the path listed (md5 checked)
+    "cheng2026_mina": {
+        "files": [("cheng2026_mina/raw/Imaging_analyzed_data.zip",
+                   "https://zenodo.org/records/19959235/files/Imaging_analyzed_data.zip"),
+                  ("cheng2026_mina/raw/science.adw4243_data_s1_to_s7.zip",
+                   "https://www.science.org/doi/suppl/10.1126/science.adw4243/suppl_file/"
+                   "science.adw4243_data_s1_to_s7.zip")],
+        "md5": {"cheng2026_mina/raw/Imaging_analyzed_data.zip": "abc999e01d060241a63b794a8809e998",
+                "cheng2026_mina/raw/science.adw4243_data_s1_to_s7.zip": "284575adfbe53377d777452469e242a1"},
+        "size_mb": 2650,
+        "default": False,
+        "description": "Cheng 2026 MINA / DNA-MERFISH of human tonsil and B-cell lymphoma lines, 10-kb IGH / IGL / 3'RR "
+                       "tracing in RAD21-degron Ramos cells (Zenodo 19959235 imaging data; the Science supplement "
+                       "Data S1-S7, downloaded by hand)",
+    },
     "bintu_imr90": {
         "filename": "IMR90_chr21-18-20Mb.csv",
         "url": (

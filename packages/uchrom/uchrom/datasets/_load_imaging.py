@@ -188,3 +188,229 @@ register(Loader(
     store="beckwith2025/beckwith2025_looptrace_fish.chromdata.zarr", sources=("beckwith2025_looptrace",),
     description="Beckwith 2025 LoopTrace, RPE-1 traced with non-denaturing vs denaturing FISH (hg38): 36,277 traces "
                 "of six regions in 4,666 nuclei"))
+
+
+# -- Cheng et al. 2026 (Science 393:eadw4243): MINA / DNA-MERFISH of human tonsil, B-cell lines, 10-kb Ig tracing --
+
+_CHENG2026 = ("Cheng et al. 2026, Science 393:eadw4243 (doi:10.1126/science.adw4243), Zenodo 19959235 (CC BY 4.0)")
+#: the 10-kb libraries (Data S3; bins numbered from 1 in genomic order): name -> (chrom, first start, bins)
+CHENG2026_FINE = {"IGH": ("chr14", 105_496_000, 48), "IGL": ("chr22", 22_657_531, 25)}
+#: the 3'RR library: bins 7-10 (3'RR2) and 19-22 (3'RR1) of the IGH library
+CHENG2026_3RR_BINS = (7, 8, 9, 10, 19, 20, 21, 22)
+CHENG2026_TIMES = ("0hr", "2hr", "6hr", "12hr")
+
+
+def _cheng2026_raw(root: Path) -> Path:
+    """The two archives fetched and unpacked once (``raw/Imaging_analyzed_data/``, ``raw/supp/``)."""
+    from . import fetch
+
+    fetch("cheng2026_mina", root=root)
+    raw = root / "cheng2026_mina" / "raw"
+    for archive, dest in (("Imaging_analyzed_data.zip", raw), ("science.adw4243_data_s1_to_s7.zip", raw / "supp")):
+        done = raw / f".{archive}.unpacked"
+        if not done.exists():                    # the imaging zip is Deflate64 (Windows), which zipfile cannot read
+            import subprocess
+
+            dest.mkdir(parents=True, exist_ok=True)
+            subprocess.run(["unzip", "-q", "-o", str(raw / archive), "-d", str(dest)], check=True)
+            done.touch()
+    return raw
+
+
+def cheng2026_targets() -> pd.DataFrame:
+    """The 1,151 genome-wide targets with their hg38 coordinates as derived from the authors' probe sequences
+    (``apps/atlas/recipes/cheng2026_mina/map_probes.py``): ``chrom_id`` (1-22, X = 23) and ``locus`` (1-based,
+    genomic order within the chromosome) index the traces of the ``.mat`` files."""
+    t = pd.read_csv(Path(__file__).with_name("cheng2026_targets_hg38.tsv"), sep="\t")
+    return t.sort_values(["chrom_id", "locus"]).reset_index(drop=True)
+
+
+def _cheng2026_fine_loci(library: str) -> pd.DataFrame:
+    if library == "3RR":
+        chrom, first, _ = CHENG2026_FINE["IGH"]
+        starts = [first + (b - 1) * 10_000 for b in CHENG2026_3RR_BINS]
+        names = [f"IGH bin {b}" for b in CHENG2026_3RR_BINS]
+    else:
+        chrom, first, n = CHENG2026_FINE[library]
+        starts = [first + i * 10_000 for i in range(n)]
+        names = [f"{library} bin {i + 1}" for i in range(n)]
+    return pd.DataFrame({"chrom": chrom, "start": starts, "end": [s + 10_000 for s in starts], "name": names})
+
+
+def _cheng2026_cell_lists(raw: Path, rep: int, prefix: str):
+    """Cells of a tonsil section: the authors' RNA cell list (all segmented cells) joined with the zone-filtered
+    list (zone scores, the cell type kept after removing mislocated cells); RNA counts of the 447 genes (Data S2
+    order = the codebook order)."""
+    import h5py
+    from uchrom.io.mina_mat import mat_struct
+
+    folder = raw / "Imaging_analyzed_data" / "Tonsil_DNAMER" / f"Rep{rep}" / "CellList_WithRNA"
+    s2 = pd.read_excel(raw / "supp" / "science.adw4243_data_s2.xlsx", sheet_name=0)
+    genes = list(dict.fromkeys(s2["Name"].str.extract(r"^\d+_T\d+_([^_]+)_.*_Code[01]+$")[0].dropna()))
+    rows, rna = [], []
+    with h5py.File(folder / "CellListRNA_250602.mat", "r") as f:
+        for e in mat_struct(f, f["CellListRNA"]):
+            fov, cid = int(np.ravel(e["FOV"])[0]), int(np.ravel(e["CellID"])[0])
+            c = np.ravel(e["Center"])
+            rows.append({"cell_id": f"{prefix}{fov}_{cid}", "center_px_1": c[0], "center_px_2": c[1],
+                         "on_edge": bool(np.ravel(e["OnEdge"])[0]),
+                         "n_rna": float(np.ravel(e["TotalRNACopyNumber"])[0]),
+                         "cell_type_rna": e["seurat_midgroup"] if isinstance(e["seurat_midgroup"], str) else None})
+            rna.append(np.ravel(e["RNACopyNumber"])[:len(genes)])
+    cells = pd.DataFrame(rows).set_index("cell_id")
+    counts = pd.DataFrame(np.asarray(rna, np.float32), index=cells.index, columns=[f"rna.{g}" for g in genes])
+    zone = []
+    with h5py.File(folder / "CellListRNA_RemovedMislocated.mat", "r") as f:
+        for e in mat_struct(f, f["CellListRNA"]):
+            fov, cid = int(np.ravel(e["FOV"])[0]), int(np.ravel(e["CellID"])[0])
+            zone.append({"cell_id": f"{prefix}{fov}_{cid}", "cell_type": e["seurat_midgroup"],
+                         "dz_zone_score": float(np.ravel(e["DZ_ZoneScore"])[0]),
+                         "lz_zone_score": float(np.ravel(e["LZ_ZoneScore"])[0]),
+                         "mz_zone_score": float(np.ravel(e["MZ_ZoneScore"])[0])})
+    zone = pd.DataFrame(zone).set_index("cell_id")
+    return cells.join(zone), counts
+
+
+def build_cheng2026_tonsil(root: Path, out: Path):  # noqa: D401
+    """Cheng 2026 genome-wide DNA-MERFISH (MINA) of five human tonsil sections (three donors; Data S5): every cell
+    with a trace, 1,151 loci of 100 kb on chromosomes 1-22 and X (hg38 coordinates derived from the probe
+    sequences), one trace per chromosome copy, µm in the field of view; the cells' RNA MERFISH counts of 447 genes
+    (``rna.<gene>``), the authors' cell type after their zone filter (``cell_type``; missing for the cells they
+    removed as mislocated or that have no RNA cell) and the dark / light / mantle zone scores."""
+    from uchrom.io import read_mina_mat
+
+    raw = _cheng2026_raw(root)
+    loci = cheng2026_targets()
+    donors = {1: ("tonsil 1", "5 years", "male"), 2: ("tonsil 2", "2 years", "male"), 3: ("tonsil 2", "2 years", "male"),
+              4: ("tonsil 3", "2 years", "male"), 5: ("tonsil 3", "2 years", "male")}     # Data S5
+    parts = []
+    for rep in range(1, 6):
+        folder = raw / "Imaging_analyzed_data" / "Tonsil_DNAMER" / f"Rep{rep}" / "ChrList"
+        files = sorted(folder.glob("ChrFOV_withAnnotation_*.mat"), key=lambda p: int(p.stem.rsplit("_", 1)[1]))
+        cd = read_mina_mat(files, loci, cell_prefix=f"rep{rep}_", cell_fields=("TraceNum",))
+        info, counts = _cheng2026_cell_lists(raw, rep, f"rep{rep}_")
+        cells = cd.cells.join(info, how="left").join(counts, how="left")
+        tonsil, age, sex = donors[rep]
+        cells.insert(0, "replicate", f"Rep-{rep}")
+        cells.insert(1, "tonsil", tonsil)
+        cells.insert(2, "donor_age", age)
+        cells.insert(3, "donor_sex", sex)
+        cells["region"] = [f"rep{rep}_fov{f}" for f in cells["fov"]]
+        cd.cells = cells
+        parts.append(cd)
+    cd = _concat(parts)
+    cd.uns.update({"genome_assembly": "hg38", "xyz_unit": "micron",
+                   "loci": "hg38 coordinates of the 1,151 targets derived from the authors' probe sequences (Data S1) "
+                           "by exact matching; see apps/atlas/recipes/cheng2026_mina/map_probes.py",
+                   "source": f"{_CHENG2026}: Tonsil_DNAMER Rep1-5 (ChrList, CellList_WithRNA)"})
+    return cheng2026_tonsil_finish(cd)
+
+
+#: µm per pixel of the tonsil images (the authors' code: ``UmPerPxl = 0.108``); the cell centres of the cell lists
+#: are in pixels of the field of view, the traces in µm of the same frame
+CHENG2026_UM_PER_PX = 0.108
+
+
+def cheng2026_tonsil_finish(cd):
+    """Cell centres (µm, the field of view's frame: the traces' frame) and the flag of the cells the paper's
+    genome-wide analyses use (``in_paper_analysis``: a cell type other than ``unknown`` and 3 < ``TraceNum`` < 30, the
+    authors' filter in ``runMerge_8_RadialScore.m``; 121,373 cells, the paper's N)."""
+    c = cd.cells
+    c["in_paper_analysis"] = (c["cell_type"].notna() & (c["cell_type"].astype(str) != "unknown")
+                              & (c["TraceNum"] > 3) & (c["TraceNum"] < 30))
+    pos = c[["center_px_1", "center_px_2"]] * CHENG2026_UM_PER_PX
+    has = pos.notna().all(axis=1)
+    cd.set_cell_positions(pos[has].to_numpy(), cell_ids=list(pos.index[has]), unit="um", frame="fov",
+                          region_col="region", in_coords_frame=True, status="measured",
+                          source="the authors' cell centres (CellListRNA_250602.mat, pixels x 0.108 µm)")
+    return cd
+
+
+def _concat(parts):
+    """Concatenate ChromData objects with the same bins (cells / traces / spots stacked)."""
+    from chromdata import ChromData
+
+    bins = parts[0].bins
+    for p in parts[1:]:
+        if not p.bins.equals(bins):
+            raise ValueError("cheng2026: parts with different bins")
+    spots = pd.concat([p.spots[["trace_id", "cell_id", "bin_id"]].astype({"trace_id": str, "cell_id": str})
+                       for p in parts], ignore_index=True)
+    return ChromData(coords=np.concatenate([p.coords for p in parts]), spots=spots, bins=bins,
+                     cells=pd.concat([p.cells for p in parts]), traces=pd.concat([p.traces for p in parts]),
+                     uns=dict(parts[0].uns))
+
+
+def build_cheng2026_bcell_lines(root: Path, out: Path):
+    """Cheng 2026 genome-wide DNA-MERFISH of Ramos (Burkitt lymphoma) and TMD8 (diffuse large B-cell lymphoma)
+    cells, two replicates each: 1,151 loci (hg38, derived from the probe sequences), one trace per chromosome copy."""
+    from uchrom.io import read_mina_mat
+
+    raw = _cheng2026_raw(root)
+    loci = cheng2026_targets()
+    parts = []
+    for line in ("Ramos", "TMD8"):
+        for rep in (1, 2):
+            path = raw / "Imaging_analyzed_data" / "BCellLine_DNAMER" / line / f"ChrFOV_{line}_Rep{rep}.mat"
+            cd = read_mina_mat(path, loci, cell_prefix=f"{line}_rep{rep}_", cell_fields=("TraceNum",))
+            cd.cells.insert(0, "cell_line", line)
+            cd.cells.insert(1, "replicate", f"Rep-{rep}")
+            parts.append(cd)
+    cd = _concat(parts)
+    cd.uns.update({"genome_assembly": "hg38", "xyz_unit": "micron",
+                   "source": f"{_CHENG2026}: BCellLine_DNAMER (Ramos, TMD8; Rep1, Rep2)"})
+    return cd
+
+
+def _build_cheng2026_fine(libraries):
+    def build(root: Path, out: Path):
+        from uchrom.io import read_mina_mat
+
+        raw = _cheng2026_raw(root)
+        parts = []
+        for t in CHENG2026_TIMES:
+            paths, loci = [], []
+            for lib in libraries:
+                folder = (raw / "Imaging_analyzed_data" / "Ramos_3PRR_10kb" if lib == "3RR"
+                          else raw / "Imaging_analyzed_data" / "Ramos_IgG_10kb" / lib)
+                paths.append(folder / f"ChrAll_{t}.mat")
+                loci.append(_cheng2026_fine_loci(lib))
+            cd = read_mina_mat(paths, loci, cell_prefix=f"{t}_", replicates_by_fov_order=True)
+            cd.cells.insert(0, "dtag_time", t.replace("hr", " h"))
+            cd.cells["replicate"] = "Rep-" + cd.cells["replicate"].astype(str)
+            parts.append(cd)
+        cd = _concat(parts)
+        names = pd.concat([_cheng2026_fine_loci(lib) for lib in libraries]).drop_duplicates(["chrom", "start"])
+        cd.bins["name"] = cd.bins.merge(names, on=["chrom", "start", "end"], how="left")["name"].to_numpy()
+        cd.traces["library"] = np.where(cd.traces["chrom"].astype(str) == "chr22", "IGL", "IGH") \
+            if "IGL" in libraries else "3'RR"
+        cd.uns.update({"genome_assembly": "hg38", "xyz_unit": "micron",
+                       "source": f"{_CHENG2026}: {', '.join(libraries)} 10-kb tracing of RAD21-degron RASH-1C Ramos "
+                                 "cells, 0 / 2 / 6 / 12 h of dTAGV-1 (barcoded cells imaged together; two replicates "
+                                 "merged by the authors, told apart by the field numbering); bins from Data S3"})
+        return cd
+    return build
+
+
+build_cheng2026_ramos_igh_igl = _build_cheng2026_fine(("IGH", "IGL"))
+build_cheng2026_ramos_3rr = _build_cheng2026_fine(("3RR",))
+
+register(Loader(
+    name="cheng2026_tonsil", build=build_cheng2026_tonsil, store="cheng2026_mina/cheng2026_tonsil.chromdata.zarr",
+    sources=("cheng2026_mina",),
+    description="Cheng 2026 MINA of five human tonsil sections: genome-wide DNA-MERFISH (1,151 loci, hg38 derived from "
+                "the probes), RNA MERFISH of 447 genes and the authors' cell types and zone scores per cell"))
+register(Loader(
+    name="cheng2026_bcell_lines", build=build_cheng2026_bcell_lines,
+    store="cheng2026_mina/cheng2026_bcell_lines.chromdata.zarr", sources=("cheng2026_mina",),
+    description="Cheng 2026 genome-wide DNA-MERFISH of Ramos and TMD8 lymphoma cells (1,151 loci, hg38)"))
+register(Loader(
+    name="cheng2026_ramos_igh_igl", build=build_cheng2026_ramos_igh_igl,
+    store="cheng2026_mina/cheng2026_ramos_igh_igl.chromdata.zarr", sources=("cheng2026_mina",),
+    description="Cheng 2026 10-kb tracing of IGH (48 bins) and IGL (25 bins) in RAD21-degron Ramos cells, 0-12 h of "
+                "RAD21 degradation"))
+register(Loader(
+    name="cheng2026_ramos_3rr", build=build_cheng2026_ramos_3rr,
+    store="cheng2026_mina/cheng2026_ramos_3rr.chromdata.zarr", sources=("cheng2026_mina",),
+    description="Cheng 2026 10-kb tracing of the IGH 3'RR super-enhancers (8 bins) in RAD21-degron Ramos cells, 0-12 h "
+                "of RAD21 degradation"))
