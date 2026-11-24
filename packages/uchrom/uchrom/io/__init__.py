@@ -25,6 +25,7 @@ _EXPORTS = {
     "read_seqfish_detections": (".seqfish_detections", "read_seqfish_detections"),
     "read_igs": (".igs", "read_igs"),
     "read_looptrace": (".looptrace", "read_looptrace"),
+    "read_mina_mat": (".mina_mat", "read_mina_mat"),
     "read_seqfish_multiomics": (".seqfish_multiomics", "read_seqfish_multiomics"),
     "read_seqfish_transcriptome": (".seqfish_multiomics", "read_seqfish_transcriptome"),
     "load_seqfish_multiomics_linked": (".seqfish_multiomics", "load_seqfish_multiomics_linked"),

@@ -48,8 +48,23 @@ The studies (``python -m uchrom.datasets fetch NAME``; the raw files under ``<da
                        MCM loading, wild type and Wapl knockout; the authors' 10 kb ``.cool`` (mm9)
   silva2020_snhic      Silva et al. 2020, J Cell Biol 219:e201906100 (GEO GSE132264): snHi-C of Scc1 and Wapl knockout
                        oocytes and their controls; the authors' 10 kb ``.cool`` (mm9)
+  zemke2026_snm3c      Zemke et al. 2026, Science 393:eadt8307 (GEO GSE299139): snm3C-seq of the human hippocampus of 40
+                       donors aged 20-95, the 22,240 nuclei of the authors' cell table; contacts deposited pooled per
+                       donor (cell in column 9), split per nucleus once (hg38); store zemke2026_hippocampus
+  liu2023_snm3c        Liu H. et al. 2023, Nature 624:366 (NeMO dat-sig83t9): snm3C-seq of the whole adult mouse brain,
+                       the nuclei of the authors' cell table with a contact file (one .tar per nucleus, mm10), subclass
+                       and Allen class; store liu2023_brain
+  zeng2026_snm3c       Zeng et al. 2026, Cell 189:2148 (GEO GSE292803): snm3C-seq of the aging mouse brain (female, 8
+                       weeks, 9 and 18 months), the nuclei of the authors' cell table in the 108 tarballs (one per cell
+                       type and age, mm10); store zeng2026_aging_brain
   pang2022_schic       Pang et al. 2022, Genome Biol 23:121 (GEO GSE201919): single-cell Hi-C of ovarian cancer cells
                        (a PEO1 / HEYA8 mixture, OVCA429 shGRHL2), NucProcess ``.ncc`` (hg38)
+  heffel2024_snm3c     Heffel et al. 2024, Nature 635:481 (GEO GSE213950): snm3C-seq3 of the developing human prefrontal
+                       cortex and hippocampus, the cells of the authors' annotation table (one tarball of per-cell
+                       contact tables per sample, hg38); store heffel2024_brain
+  zhou2026_snm3c       Zhou J. et al. 2026, Science 393:eadx0673 (GEO GSE326618): snm3C-seq of 16 adult human tissues,
+                       the 86,689 nuclei of the authors' cell table (one tarball of per-cell contacts per plate, hg38);
+                       store zhou2026_body
 
 Every store (``<data>/<NAME>/<store>.chromdata.zarr``) holds no 3-D coordinates, only cells and linked maps:
 
@@ -344,6 +359,103 @@ def tian2023(raw: Path) -> dict:
                       "cell table with their region, donor and cell type (tables S3-S5)"}
 
 
+def liu2023(raw: Path) -> dict:
+    """Liu 2023 adult mouse brain: the snm3C nuclei of the authors' cell table (Supplementary Table 3: the 176,003
+    that passed their QC) with a contact file on NeMO, with dissection region, sample, subclass and the class of
+    that subclass in the Allen whole-brain taxonomy; one .tar per nucleus holding its contacts."""
+    meta = pd.read_csv(raw / "41586_2023_6805_MOESM6_ESM.csv", index_col=0, low_memory=False)
+    tax = pd.read_csv(raw / "cluster_to_cluster_annotation_membership_pivoted.csv")
+    strip = lambda s: re.sub(r"^\d+ ", "", s)                 # noqa: E731  ('037 DG Glut' -> 'DG Glut')
+    cls = pd.Series(tax["class"].map(strip).to_numpy(), index=tax["subclass"].map(strip)).groupby(level=0).first()
+    missing = set(meta["Subclass"]) - set(cls.index)
+    if missing:
+        raise ValueError(f"liu2023: subclasses not in the Allen taxonomy: {sorted(missing)[:5]}")
+    cells = pd.DataFrame({"major_region": meta["MajorRegion"], "sub_region": meta["SubRegion"],
+                          "dissection_region": meta["DissectionRegion"], "cemba_region": meta["CEMBARegion"],
+                          "sample": meta["Sample"], "plate": meta["Plate"], "subclass": meta["Subclass"],
+                          "cell_class": meta["Subclass"].map(cls), "cell_group": meta["CellGroup"],
+                          "mCG": meta["mCGFrac"], "mCH": meta["mCHFrac"],
+                          "n_cis_long_published": meta["CisLongContact"], "n_trans_published": meta["TransContact"]},
+                         index=meta.index)
+    cells["cell_type"] = cells["subclass"]
+    cells.index.name = "cell_id"
+    files = {c: raw / "cells" / f"{c}.3C.contact.tsv.tar" for c in cells.index}
+    files = {c: p for c, p in files.items() if p.exists()}
+    log(f"liu2023: {len(cells):,} nuclei in the cell table, {len(files):,} with contacts; "
+        f"{cells['subclass'].nunique()} subclasses, {cells['cell_class'].nunique()} classes")
+    return {"stores": {"liu2023_brain": cells}, "files": files, "format": "juicer", "assembly": "mm10",
+            "embed_kw": {"n_per_chrom": 20, "pca": "incremental", "n_threads": 32},
+            "source": "Liu et al. 2023, Nature 624:366 (snm3C-seq of the whole adult mouse brain, 117 dissected regions, "
+                      "male, 8 weeks; NeMO dat-sig83t9): the contacts of the nuclei of the authors' cell table "
+                      "(Supplementary Table 3) with their dissection region and subclass, and the class of each "
+                      "subclass in the Allen whole-brain taxonomy (Yao et al. 2023, release 20231215)"}
+
+
+ZENG2026_AGES = ["8wk", "9mo", "18mo"]
+
+
+def _zeng_extract(tar: Path) -> list:
+    """The per-nucleus contact files of one Zeng 2026 tarball written to ``raw/cells`` (once; a marker file names
+    the members) -> [(member file name, tarball name)].  The GEO files are gzipped twice (a .tar.gz, gzipped again)."""
+    out = tar.parent.parent / "cells"
+    done = out / f".{tar.name}.members"
+    if not done.exists():
+        names = []
+        with gzip.open(tar) as outer:                   # the deposit gzips the .tar.gz once more
+            nested = outer.read(2) == b"\x1f\x8b"
+        with gzip.open(tar) if nested else open(tar, "rb") as fh, tarfile.open(fileobj=fh, mode="r|gz") as t:
+            for mem in t:
+                if mem.isfile():
+                    base = Path(mem.name).name
+                    tmp = out / f"{base}.part"
+                    tmp.write_bytes(t.extractfile(mem).read())
+                    tmp.replace(out / base)
+                    names.append(base)
+        done.write_text("\n".join(names) + "\n")
+    return [(n, tar.name) for n in done.read_text().split()]
+
+
+def zeng2026(raw: Path) -> dict:
+    """Zeng 2026 aging mouse brain: the snm3C nuclei of the authors' cell table (Table S4: 72,666 nuclei of female
+    mice at 8 weeks, 9 and 18 months, eight regions) whose contacts are in the 108 GEO tarballs (one per cell type and
+    age), with age, region, replicate and the authors' cell types; the tarballs are unpacked into ``raw/cells`` once."""
+    meta = pd.read_excel(raw / "1-s2.0-S0092867426002229-mmc4.xlsx").set_index("cell")
+    (raw / "cells").mkdir(exist_ok=True)
+    tars = sorted((raw / "tars").glob("GSM*.contact.tsv.gz.tar.gz"))
+    with Pool(min(8, len(tars) or 1)) as pool:
+        members = [m for ms in pool.map(_zeng_extract, tars) for m in ms]
+    tar_of = {n.split(".")[0]: t for n, t in members}
+    files = {n.split(".")[0]: raw / "cells" / n for n, _ in members}
+    region = {"Frontal_Cortex": "frontal cortex", "Caudate_Putamen": "caudate putamen", "Amygdala": "amygdala",
+              "PAG-PCG": "PAG / PCG", "Nucleus_accumbens": "nucleus accumbens", "Entorhinal_Cortex": "entorhinal cortex",
+              "Anterior_Hippocampus": "anterior hippocampus", "Posterior_Hippocampus": "posterior hippocampus"}
+    cells = pd.DataFrame({"age": pd.Categorical(meta["Age"], categories=ZENG2026_AGES),
+                          "region": meta["Region"].map(region), "cemba_region": meta["CEMBARegion"],
+                          "replicate": meta["Replicate"], "plate": meta["Plate"],
+                          "major_type": meta["AgingMajorType"], "subclass": meta["CellSubclass"],
+                          "cell_class": meta["Class"], "mCG": meta["mCGFrac"], "mCH": meta["mCHFrac"],
+                          "n_contacts_published": meta["DeduppedContacts"]}, index=meta.index)
+    tar = cells.index.map(tar_of)
+    cells["geo_sample"] = tar.str.split("_").str[0]
+    cells["cell_type"] = cells["major_type"]
+    cells.index.name = "cell_id"
+    # the tarball's group ('GSM8865580_L23_IT_CTX_Glut.18mo...') against the cell's type and age ('L2/3 IT CTX Glut')
+    group = pd.Series(tar.str.split("_", n=1).str[1].str.removesuffix(".contact.tsv.gz.tar.gz"), index=cells.index)
+    expect = (cells["major_type"].str.replace("/", "").str.replace(" ", "_") + "." + cells["age"].astype(str))
+    have = group.notna()
+    bad = group[have] != expect[have]
+    log(f"zeng2026: {len(cells):,} nuclei in the cell table, {len(members):,} contact files in {len(tars)} tarballs, "
+        f"{int(have.sum()):,} of the table with contacts; {int(bad.sum())} in a tarball of another type / age; "
+        f"{len(set(files) - set(cells.index)):,} files not in the table")
+    files = {c: p for c, p in files.items() if c in cells.index}
+    return {"stores": {"zeng2026_aging_brain": cells}, "files": files, "format": "juicer", "assembly": "mm10",
+            "embed_kw": {"n_per_chrom": 20, "pca": "incremental", "n_threads": 32},
+            "source": "Zeng et al. 2026, Cell 189:2148 (snm3C-seq of the aging mouse brain, female C57BL/6J mice at 8 "
+                      "weeks, 9 and 18 months, eight regions; GEO GSE292803): the contacts of the nuclei of the "
+                      "authors' cell table (Table S4) deposited in the per-type tarballs, with age, region, replicate "
+                      "and the authors' cell types"}
+
+
 def _lee2019_lines_meta(raw: Path) -> pd.DataFrame:
     """GSM -> title and cell line of the three series matrices of GSE124391 (one per platform)."""
     m = _series_matrix(sorted(raw.glob("GSE124391-GPL*_series_matrix.txt.gz")))
@@ -400,6 +512,100 @@ def chen2025(raw: Path) -> dict:
                       "donors; GEO GSE297262): the contacts of the 6,652 nuclei of the authors' cell table "
                       "(.contact.rmbkl.tsv.gz, blacklisted regions removed), their cell types (joint, contact-only and "
                       "methylation-only annotations), contact counts and methylation levels"}
+
+
+def _zemke_split(args) -> dict:
+    """Split one donor's pooled contact table (juicer short + the cell's well in column 9, rows grouped by cell) into
+    one gzipped table per cell, ``<out>/<cell id>.contact.tsv.gz``; ``ids``: column 9 -> cell id (cells not in it
+    are counted, not written).  Returns column 9 -> rows; done once (a ``.done`` file keeps the counts)."""
+    import json
+    import subprocess
+
+    src, out, ids = args
+    done = out / f".{src.name}.done"
+    if done.exists():
+        return json.loads(done.read_text())
+    counts, cur, buf = {}, None, []
+
+    def flush():
+        if cur is None:
+            return
+        key = cur.decode()
+        if key in counts:
+            raise ValueError(f"zemke2026: {src.name}: the rows of {key} are not contiguous")
+        counts[key] = len(buf)
+        if key in ids:
+            dest = out / f"{ids[key]}.contact.tsv.gz"
+            dest.with_suffix(".part").write_bytes(gzip.compress(b"".join(buf), compresslevel=1))
+            dest.with_suffix(".part").rename(dest)
+
+    with subprocess.Popen(["gzip", "-dc", str(src)], stdout=subprocess.PIPE, bufsize=1 << 24) as proc:
+        for line in proc.stdout:
+            key = line[line.rfind(b"\t") + 1:].rstrip(b"\r\n")
+            if key != cur:
+                flush()
+                cur, buf = key, []
+            buf.append(line)
+        flush()
+    if proc.returncode:
+        raise RuntimeError(f"zemke2026: gzip -dc {src.name} failed ({proc.returncode})")
+    done.write_text(json.dumps(counts))
+    return counts
+
+
+def zemke2026(raw: Path) -> dict:
+    """Zemke 2026 human hippocampus (GSE299139): the 22,240 nuclei of the authors' cell table (40 donors aged 20-95;
+    their sub-type, class, doublet call, donor, age, sex).  The contacts are deposited pooled, one table per donor
+    library with the nucleus' well in column 9 (``<well>``; ``<n>_<well>`` in the four libraries that multiplex two
+    samples of a donor), split into one table per nucleus once.  The cell ids are ``<sample>-<index>`` (the table's
+    ``cell`` column is not unique: its renaming of the donor prefixes also hit wells of rows K and M)."""
+    import os
+
+    meta = pd.read_csv(raw / "GSE299139_human_aging_snm3C_metadata.csv.gz")
+    sample = meta["sample"].astype(str)
+    ids = (sample + "-" + meta["index"]).to_numpy()
+    if not pd.Index(ids).is_unique:
+        raise ValueError("zemke2026: <sample>-<index> is not unique")
+    # the key of column 9 in the donor's file: the index, prefixed by the sample's number when multiplexed
+    multiplexed = sample.str.contains("_")
+    col9 = np.where(multiplexed, sample.str.split("_").str[1] + "_" + meta["index"], meta["index"])
+    digits = meta["donor"].str.replace(r"\D", "", regex=True)
+    cells = pd.DataFrame({"donor": meta["donor"].to_numpy(), "sample": sample.to_numpy(),
+                          "age": meta["age"].to_numpy(), "age_group": meta["group"].to_numpy(),
+                          "sex": meta["gender"].to_numpy(), "cell_type": meta["cluster"].to_numpy(),
+                          "cell_class": meta["class"].to_numpy(), "is_doublet": meta["is_doublet"].astype(bool).to_numpy(),
+                          "doublet_score": meta["doublet_score"].to_numpy(),
+                          "n_contacts_published": meta["TotalContacts"].to_numpy(),
+                          "n_trans_published": meta["TransContact"].to_numpy(),
+                          "mCG": meta["mCGFrac"].to_numpy(), "mCH": meta["mCHFrac"].to_numpy()},
+                         index=pd.Index(ids, name="cell_id"))
+    pooled = sorted((raw / "cells").glob("GSM*.3C.contact.tsv.gz"))
+    jobs, out = [], raw / "split"
+    out.mkdir(exist_ok=True)
+    for p in pooled:
+        d = re.match(r"^GSM\d+_hc(\d+)\.3C\.contact\.tsv\.gz$", p.name)[1]
+        sel = (digits == d).to_numpy()
+        if not sel.any():
+            raise ValueError(f"zemke2026: no donor of the cell table for {p.name}")
+        jobs.append((p, out, dict(zip(col9[sel], ids[sel]))))
+    with Pool(min(len(jobs), int(os.environ.get("SLURM_CPUS_PER_TASK", 8)))) as pool:
+        counts = pool.map(_zemke_split, jobs, chunksize=1)
+    n_rows, extra = {}, 0
+    for (p, _, idmap), c in zip(jobs, counts):
+        extra += sum(1 for k in c if k not in idmap)
+        n_rows.update({idmap[k]: n for k, n in c.items() if k in idmap})
+    cells["n_rows_deposited"] = pd.Series(n_rows).reindex(cells.index)
+    missing = cells.index[cells["n_rows_deposited"].isna()]
+    log(f"zemke2026: {len(pooled)} donor tables, {len(n_rows):,} of {len(cells):,} nuclei of the cell table found, "
+        f"{extra} other wells in the tables; missing {list(missing[:5])}")
+    same = (cells["n_rows_deposited"] == cells["n_contacts_published"]).mean()
+    log(f"zemke2026: rows per nucleus = the table's TotalContacts for {same:.1%} of the nuclei")
+    files = {c: out / f"{c}.contact.tsv.gz" for c in n_rows}
+    return {"stores": {"zemke2026_hippocampus": cells}, "files": files, "format": "juicer", "assembly": "hg38",
+            "source": "Zemke et al. 2026, Science 393:eadt8307 (snm3C-seq of the human hippocampus, 40 donors aged "
+                      "20-95; GEO GSE299139): the contacts of the 22,240 nuclei of the authors' cell table (deposited "
+                      "pooled per donor, split by the well column), their sub-type, class, doublet call, donor, age "
+                      "and sex, contact counts and methylation levels"}
 
 
 def lee2023(raw: Path) -> dict:
@@ -700,6 +906,122 @@ def chen2026(raw: Path) -> dict:
                       "QC (homologs summed), the authors' cell table (cell types, cell-cycle phase) and RNA counts"}
 
 
+#: Heffel 2024: sample of the authors' cell table (Supplementary Table 3) -> (GEO contact tarball stem, specimen of
+#: Supplementary Table 1).  The table's 3,321 cells of 'Lee_UMB5577' / 'Lee_UMB5580' are Lee et al. 2019's (not in
+#: this deposit); two deposited tarballs (220223-UCSF2020-005-PFC, 220705-UA18-22-HPC) have no cell in the table
+HEFFEL2024 = {
+    "20191219_7mo": ("191219-7mo-PFC", "7mo"), "20210111_UMB1863": ("210111-UMB1863-PFC", "UMB1863"),
+    "20210224_GW18": ("210224-GW18-PFC", "GW18"), "20210224_GW20a": ("210224-GW20a-PFC", "GW20a"),
+    "20210224_GW20b": ("210224-GW20b-PFC", "GW20b"), "20210224_GW23": ("210224-GW23-PFC", "GW23"),
+    "20210224_UMB5577": ("210224-UMB5577-PFC", "UMB5577"), "20210316_GW20a": ("210316-GW20a-PFC", "GW20a"),
+    "20210316_UA1822": ("210316-UA18-22-PFC", "UA18-22"), "20210316_UA1922": ("210316-UA19-22-PFC", "UA1922"),
+    "20210316_UMB4267": ("210316-UMB4267-PFC", "UMB4267"), "20210505_UMB5577": ("210505-UMB5577-PFC", "UMB5577"),
+    "20210505_UMB6096": ("210505-UMB6096-PFC", "UMB6096"), "20210528_UMB5577": ("210528-UMB5577-PFC", "UMB5577"),
+    "20210528_UMB5621": ("210528-UMB5621-PFC", "UMB5621"), "210830-4267-HPC": ("210830-UMB4267-HPC", "UMB4267"),
+    "210830-6096-HPC": ("210830-UMB6096-HPC", "UMB6096"), "210830-GW18-Ant-HCX": ("210830-GW18-Ant-HPC", "GW18-Ant"),
+    "210830-GW18-Post-HCX": ("210830-GW18-Post-HPC", "GW18-Post"), "210830-GW20-HPC": ("210830-GW20-HPC", "GW20"),
+    "210830-UA19-27-HPC": ("210830-UA19-27-HPC", "UA19-27"), "211029-5551-HPC": ("211029-UMB5551-HPC", "UMB5551"),
+    "211029-UA19-22-HPC": ("211029-UA19-22-HPC", "UA19-22"), "211029-UA19-27-HPC": ("211029-UA19-27-HPC", "UA19-27"),
+    "211130-4267-HPC": ("211130-UMB4267-HPC", "UMB4267"), "211130-6096-HPC": ("211130-UMB6096-HPC", "UMB6096"),
+    "211130-GW18-Ant-HCX": ("211130-GW18-Ant-HPC", "GW18-Ant"),
+    "211130-GW18-Post-HCX": ("211130-GW18-Post-HPC", "GW18-Post"), "211130-GW20-HPC": ("211130-GW20-HPC", "GW20"),
+    "211130-UA19-22-HPC": ("211130-UA19-22-HPC", "UA19-22"), "211130-UA19-27-HPC": ("211130-UA19-27-HPC", "UA19-27"),
+    "211130-UA20-15-HPC": ("211130-UCSF2020-005-HPC", "UCSF2020-005"), "220314-GW23-HPC": ("220314-GW23-HPC", "GW23"),
+}
+
+
+def _heffel_cell(member: str) -> str:
+    """'20210224_GW18/20210224-GW18-preAb-PFC-B04_A10_indexed_all_merged_3split_..._no_less_2_contacts.txt' ->
+    '20210224-GW18-preAb-PFC-B04_A10' (the cell ids of the authors' table)."""
+    name = Path(member).name
+    if "_all_merged" not in name:
+        raise ValueError(member)
+    return re.sub(r"(_indexed)?_all_merged.*$", "", name)
+
+
+def heffel2024(raw: Path) -> dict:
+    """Heffel 2024 developing human PFC and hippocampus (GSE213950): the cells of the authors' annotation table
+    (Supplementary Table 3: L1-L4 types, region, age group) with the specimen's age and sex (Table 1); one tarball of
+    per-cell contact tables per sample, only those of the table's samples read."""
+    t3 = pd.read_excel(raw / "41586_2024_8030_MOESM5_ESM.xlsx", header=1)
+    t3 = t3[t3["Sample"].isin(list(HEFFEL2024))]
+    region = {"CTX": "prefrontal cortex", "HPC": "hippocampus"}
+    spec = {}
+    for sheet, reg in (("Prefrontal Cortex (PFC)", "CTX"), ("Hippocampus (HPC)", "HPC")):
+        s1 = pd.read_excel(raw / "41586_2024_8030_MOESM3_ESM.xlsx", sheet_name=sheet, header=2).dropna(subset=["Age"])
+        for _, r in s1.iterrows():
+            spec[(reg, str(r["Sample ID"]))] = (str(r["Age"]).replace("GW", "GW ").replace("  ", " "), r["Sex"])
+    sample = t3["Sample"].astype(str)
+    specimen = sample.map(lambda s: HEFFEL2024[s][1])
+    age_sex = [spec[(r, s)] for r, s in zip(t3["region"], specimen)]
+    cells = pd.DataFrame({"sample": sample.to_numpy(), "specimen": specimen.to_numpy(),
+                          "region": t3["region"].map(region).to_numpy(),
+                          "age_group": t3["age_groups"].map({"2T": "second trimester", "3T": "third trimester",
+                                                             "infant": "infant", "adult": "adult"}).to_numpy(),
+                          "age": [a for a, _ in age_sex], "sex": [s for _, s in age_sex],
+                          "cell_class": t3["L1 annotation"].to_numpy(), "major_type": t3["L2 annotation"].to_numpy(),
+                          "sub_type": t3["L3 annotation"].to_numpy(), "stage_type": t3["L4 annotation"].to_numpy(),
+                          "n_contacts_published": t3["TotalInt"].to_numpy(), "mCG": t3["mCG/CG"].to_numpy(),
+                          "mCH": t3["mCH/CH"].to_numpy()}, index=t3["Cell ID"].astype(str).to_numpy())
+    cells["cell_type"] = cells["major_type"]
+    cells.index.name = "cell_id"
+    tars = {s: raw / "contacts" / f for s, (stem, _) in HEFFEL2024.items()
+            for f in [p.name for p in (raw / "contacts").glob(f"GSM*_{stem}_contacts.tar.gz")]}
+    missing = sorted(set(HEFFEL2024) - set(tars))
+    if missing:                                         # a build of their cells fails (KeyError) when read
+        log(f"heffel2024: no contact tarball of {missing}")
+    log(f"heffel2024: {len(cells):,} cells of the authors' table in {cells['sample'].nunique()} deposited samples")
+    return {"stores": {"heffel2024_brain": cells}, "tar": tars, "tar_key": "sample", "tar_name": _heffel_cell,
+            "format": "chrpos", "assembly": "hg38", "embed_kw": {"n_per_chrom": 20, "pca": "incremental", "n_threads": 32},
+            "source": "Heffel et al. 2024, Nature 635:481 (snm3C-seq3 of the developing human prefrontal cortex and "
+                      "hippocampus, second trimester to adult; GEO GSE213950): the contacts of the cells of the authors' "
+                      "annotation table (Supplementary Table 3: cell types at four levels, region, age group) with "
+                      "the specimen's age and sex (Supplementary Table 1)"}
+
+
+#: Zhou 2026: tissue codes of the cell names -> tissue (GEO's sample characteristics)
+ZHOU2026_TISSUES = {"AG": "adrenal gland", "B": "breast", "EG": "esophagus muscularis mucosa", "LG": "lung",
+                    "LV": "left ventricle", "M1C": "primary motor cortex", "NTb": "tibial nerve", "P": "placenta",
+                    "PBMC": "peripheral blood", "PI": "pancreatic islet", "RAA": "right atrial appendage",
+                    "SB": "ileum Peyer's patch", "ST": "stomach", "Sk": "suprapubic skin",
+                    "SkGcn": "gastrocnemius medialis", "TrCo": "transverse colon"}
+
+
+def zhou2026(raw: Path) -> dict:
+    """Zhou 2026 human body atlas (GSE326618): the 86,689 nuclei of the authors' cell table (Hugging Face
+    HumanCellEpigenomeAtlas_metadata: tissue, donor, major type, sub-type), one tarball of per-cell contact tables
+    per plate, only those of the table's plates read."""
+    meta = pd.read_csv(raw / "5kCG100k3C_summary.csv.gz", index_col=0)
+    l1 = pd.read_csv(raw / "L1color.tsv", sep="\t", index_col=0)
+    sub = pd.read_csv(raw / "subtype_meta.tsv", sep="\t", index_col=0)
+    plate = meta.index.str.split("-").str[0]
+    cells = pd.DataFrame({"plate": plate, "tissue": meta["Tissue"].map(ZHOU2026_TISSUES).to_numpy(),
+                          "tissue_code": meta["Tissue"].to_numpy(), "donor": meta["Donor"].astype(str).to_numpy(),
+                          "major_type": l1["L1_abbr"].reindex(meta["majortype"]).to_numpy(),
+                          "major_type_name": l1["L1_annot"].reindex(meta["majortype"]).to_numpy(),
+                          "sub_type": sub["celltype_L2_both_abbr"].reindex(meta["subtype"]).to_numpy(),
+                          "n_cis_long_published": meta["CisLongContact"].to_numpy(),
+                          "mCG": meta["mCGFrac"].to_numpy(), "mCH": meta["mCHFrac"].to_numpy()}, index=meta.index)
+    for col in ("tissue", "major_type", "sub_type"):
+        if cells[col].isna().any():
+            raise ValueError(f"zhou2026: {int(cells[col].isna().sum())} cells without {col}")
+    cells["cell_type"] = cells["major_type"]
+    cells.index.name = "cell_id"
+    tars = {}
+    for p in (raw / "contacts").glob("GSM*.contact.rmbkl.tar.gz"):
+        tars[re.match(r"^GSM\d+_(.+)\.contact\.rmbkl\.tar\.gz$", p.name)[1]] = p
+    missing = sorted(set(cells["plate"]) - set(tars))
+    if missing:                                         # a build of their cells fails (KeyError) when read
+        log(f"zhou2026: no contact tarball of {len(missing)} plates: {missing[:5]}")
+    log(f"zhou2026: {len(cells):,} nuclei of the authors' table on {cells['plate'].nunique()} plates, {len(tars)} tarballs")
+    return {"stores": {"zhou2026_body": cells}, "tar": tars, "tar_key": "plate", "format": "juicer", "assembly": "hg38",
+            "embed_kw": {"n_per_chrom": 20, "pca": "incremental", "n_threads": 32},
+            "source": "Zhou J. et al. 2026, Science 393:eadx0673 (snm3C-seq of 16 adult human tissues, two donors each; GEO "
+                      "GSE326618): the contacts of the 86,689 nuclei of the authors' cell table (blacklisted regions "
+                      "removed, .contact.rmbkl) with tissue, donor, major type and sub-type (Hugging Face "
+                      "zhoujt1994/HumanCellEpigenomeAtlas_metadata)"}
+
+
 STUDIES = {"flyamer2017_snhic": flyamer2017, "collombet2020_snhic": collombet2020, "zhou2024_mcf7": zhou2024,
            "tan2023_cerebellum": tan2023, "gassler2017_snhic": gassler2017, "nagano2013_th1": nagano2013,
            "lu2025_scnanohic2": lu2025, "lee2019_snm3c": lee2019, "yuan2026_retina": yuan2026,
@@ -707,7 +1029,8 @@ STUDIES = {"flyamer2017_snhic": flyamer2017, "collombet2020_snhic": collombet202
            "lee2023_snhic": lee2023, "lin2022_scidlo": lin2022, "wu2025_scmicroc_gm12878": wu2025, "qu2023_sccareseq": qu2023,
            "lagunov2026_lampbrush": lagunov2026, "du2020_snhic": du2020, "dequeker2022_snhic": dequeker2022,
            "silva2020_snhic": silva2020, "pang2022_schic": pang2022,
-           "chen2026_charm": chen2026}
+           "chen2026_charm": chen2026, "zemke2026_snm3c": zemke2026, "heffel2024_snm3c": heffel2024,
+           "zhou2026_snm3c": zhou2026, "liu2023_snm3c": liu2023, "zeng2026_snm3c": zeng2026}
 
 
 # -- binning -----------------------------------------------------------------------------------------------------
@@ -822,7 +1145,10 @@ def _tar_cells(tars, index: pd.Index, name=None):
 def bin_contacts(cells: pd.DataFrame, study: dict, stem: Path, sizes: dict, workers: int):
     binner = ContactBinner(sizes, cells.index, stem.parent / f".{stem.name}_bins", cell_res=CELL_RES)
     if "tar" in study:
-        jobs = _tar_cells(study["tar"], binner.cell_index, study.get("tar_name"))
+        tars = study["tar"]
+        if isinstance(tars, dict):                      # one tarball per sample: only those of these cells
+            tars = [tars[k] for k in sorted(cells[study["tar_key"]].unique())]
+        jobs = _tar_cells(tars, binner.cell_index, study.get("tar_name"))
     else:
         jobs = [(int(binner.cell_index.get_loc(c)), study["files"][c]) for c in cells.index]
     n_cis = np.zeros(len(binner.cells), np.int64)

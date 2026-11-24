@@ -356,6 +356,26 @@ DATASETS = {
         "description": "Beckwith 2025 (Nat Commun) LoopTrace: RPE-1 / HeLa Kyoto with RAD21, CTCF or WAPL depleted, "
                        "and denaturing vs non-denaturing FISH (figshare 27613239)",
     },
+    # Cheng et al. 2026 (Science 393:eadw4243, doi:10.1126/science.adw4243), Zenodo 19959235 (CC BY 4.0): the
+    # analysed imaging data (MATLAB v7.3 structs: genome-wide DNA-MERFISH traces of five tonsil sections with the
+    # cells' RNA MERFISH counts, of Ramos and TMD8 cells; 10-kb tracing of IGH, IGL and the IGH 3'RRs in RAD21-degron
+    # Ramos cells); the record's Hi-C, bigWig and code archives are not fetched.  The supplement (Data S1-S7: probe
+    # sequences, fine-scale probe coordinates, donors) gives the locus coordinates: science.org refuses scripted
+    # downloads, so download it in a browser from the URL below and put it at the path listed (md5 checked)
+    "cheng2026_mina": {
+        "files": [("cheng2026_mina/raw/Imaging_analyzed_data.zip",
+                   "https://zenodo.org/records/19959235/files/Imaging_analyzed_data.zip"),
+                  ("cheng2026_mina/raw/science.adw4243_data_s1_to_s7.zip",
+                   "https://www.science.org/doi/suppl/10.1126/science.adw4243/suppl_file/"
+                   "science.adw4243_data_s1_to_s7.zip")],
+        "md5": {"cheng2026_mina/raw/Imaging_analyzed_data.zip": "abc999e01d060241a63b794a8809e998",
+                "cheng2026_mina/raw/science.adw4243_data_s1_to_s7.zip": "284575adfbe53377d777452469e242a1"},
+        "size_mb": 2650,
+        "default": False,
+        "description": "Cheng 2026 MINA / DNA-MERFISH of human tonsil and B-cell lymphoma lines, 10-kb IGH / IGL / 3'RR "
+                       "tracing in RAD21-degron Ramos cells (Zenodo 19959235 imaging data; the Science supplement "
+                       "Data S1-S7, downloaded by hand)",
+    },
     "bintu_imr90": {
         "filename": "IMR90_chr21-18-20Mb.csv",
         "url": (
@@ -1108,6 +1128,47 @@ DATASETS = {
         "description": "Tian 2023 snm3C-seq of the adult human brain: contacts of 145,070 nuclei (hg38, NeMO) and the "
                        "authors' cell table, taxonomy and donors",
     },
+    # Liu H. et al. 2023 (Nature 624:366), the snm3C-seq half of the adult mouse brain atlas (NeMO dat-sig83t9; GEO
+    # GSE213262 holds the methylation only): one .tar per nucleus holding its contacts (.3C.contact.tsv.gz, juicer
+    # short, mm10), 171,418 nuclei, 457 GB, listed by the NeMO bag of the publication (its methylation, allc, and the
+    # cell-group maps are not fetched); the authors' cell table with the subclass of each nucleus (Supplementary
+    # Table 3) and the Allen whole-brain taxonomy (subclass -> class, release 20231215)
+    "liu2023_snm3c": {
+        "files": lambda: ([(f"liu2023_snm3c/raw/cells/{n}", u) for n, u in _nemo_bag_files(
+            "https://data.nemoarchive.org/publication_release/ecker_sn_mCseq_2023/"
+            "Analysis_bag_1_ecker_sn_mCseq_2023_analysis.tgz", r"\.3C\.contact\.tsv\.tar$")]
+            + [("liu2023_snm3c/raw/41586_2023_6805_MOESM6_ESM.csv",
+                "https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-023-06805-y/MediaObjects/"
+                "41586_2023_6805_MOESM6_ESM.csv"),
+               ("liu2023_snm3c/raw/cluster_to_cluster_annotation_membership_pivoted.csv",
+                "https://allen-brain-cell-atlas.s3.us-west-2.amazonaws.com/metadata/WMB-taxonomy/20231215/views/"
+                "cluster_to_cluster_annotation_membership_pivoted.csv")]),
+        "md5": {"liu2023_snm3c/raw/41586_2023_6805_MOESM6_ESM.csv": "094cb38ea2392fc80fd6d87c77c5950f",
+                "liu2023_snm3c/raw/cluster_to_cluster_annotation_membership_pivoted.csv":
+                    "06a0f8cd2b2181fed0fc6e3597af5c20"},
+        "size_mb": 457500,
+        "default": False,
+        "parallel": 24,
+        "description": "Liu 2023 snm3C-seq of the whole adult mouse brain: contacts of 171,418 nuclei (mm10, NeMO), the "
+                       "authors' cell table (Supplementary Table 3) and the Allen whole-brain taxonomy",
+    },
+    # Zeng et al. 2026 (Cell 189:2148), the snm3C-seq of the aging mouse brain atlas, GEO GSE292803 (female mice, 2, 9
+    # and 18 months, eight regions): one tarball per cell type and age (108) holding the contacts of every nucleus of
+    # that group (.3C.contact.tsv.gz, juicer short, mm10), 274 GB; the methylation (allc) files of the same samples
+    # and the male series GSE313770 (allc only) are not fetched.  The authors' snm3C cell table (Table S4, 72,666
+    # nuclei: age, region, replicate, cell types) from the publisher.
+    "zeng2026_snm3c": {
+        "files": lambda: ([(f"zeng2026_snm3c/raw/tars/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE292803", r"\.contact\.tsv\.gz\.tar\.gz$")]
+            + [("zeng2026_snm3c/raw/1-s2.0-S0092867426002229-mmc4.xlsx",
+                "https://ars.els-cdn.com/content/image/1-s2.0-S0092867426002229-mmc4.xlsx")]),
+        "md5": {"zeng2026_snm3c/raw/1-s2.0-S0092867426002229-mmc4.xlsx": "903d9b12a24301a9b0287e2e671bdfad"},
+        "size_mb": 274200,
+        "default": False,
+        "parallel": 6,
+        "description": "Zeng 2026 snm3C-seq of the aging mouse brain (female, 2 / 9 / 18 months, eight regions): "
+                       "contacts per cell type and age (108 tarballs, mm10, GSE292803) and the authors' cell table",
+    },
     # Yuan et al. 2026 (Sci Adv 12:eadv9162), GEO GSE277361: snm3C-seq of human macula, peripheral retina and RPE from four
     # donors; every well of the 36 plates is deposited (13,824; no per-cell cell types)
     "yuan2026_retina": {
@@ -1146,6 +1207,54 @@ DATASETS = {
         "default": False,
         "description": "Chen 2025 snm3C-seq3 of human subcutaneous adipose tissue (5 donors): every nucleus' contacts "
                        "(hg38) and the authors' cell table (GSE297262)",
+    },
+    # Zemke et al. 2026 (Science 393:eadt8307, doi:10.1126/science.adt8307; preprint bioRxiv 10.1101/2024.10.14.618338),
+    # GEO GSE299139: snm3C-seq of the human hippocampus of 40 donors aged 20-95 (hg38); the contacts of each donor
+    # library pooled in one table (juicer short + the nucleus' well in column 9) and the authors' cell table of the
+    # 22,240 nuclei (sub-type, class, doublet call, donor, age, sex, contact counts).  The per-cell-type methylation
+    # (allc) files of the series are not fetched
+    "zemke2026_snm3c": {
+        "files": lambda: ([(f"zemke2026_snm3c/raw/cells/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE299139", r"\.3C\.contact\.tsv\.gz$")]
+            + [(f"zemke2026_snm3c/raw/{n}", _gse("GSE299139", n)) for n in ("GSE299139_human_aging_snm3C_metadata.csv.gz",)]),
+        "size_mb": 34150,
+        "default": False,
+        "parallel": 4,
+        "description": "Zemke 2026 snm3C-seq of the human hippocampus (40 donors aged 20-95): contacts pooled per donor "
+                       "(hg38) and the authors' cell table of 22,240 nuclei (GSE299139)",
+    },
+    # Heffel et al. 2024 (Nature 635:481, doi:10.1038/s41586-024-08030-7), GEO GSE213950: snm3C-seq3 of the developing
+    # human prefrontal cortex and hippocampus (hg38); one tarball per sample of per-cell contact tables (35 samples,
+    # chrom1 pos1 chrom2 pos2 strand1 strand2, plain text) and the paper's specimen (S1) and cell annotation (S3)
+    # tables.  The methylation (allc, 2.5 TB) and gene-score files of the series are not fetched
+    "heffel2024_snm3c": {
+        "files": lambda: ([(f"heffel2024_snm3c/raw/contacts/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE213950", r"_contacts\.tar\.gz$")]
+            + [(f"heffel2024_snm3c/raw/{n}", "https://static-content.springer.com/esm/"
+                f"art%3A10.1038%2Fs41586-024-08030-7/MediaObjects/{n}") for n in (
+                "41586_2024_8030_MOESM3_ESM.xlsx", "41586_2024_8030_MOESM5_ESM.xlsx")]),
+        "size_mb": 133400,
+        "default": False,
+        "parallel": 6,
+        "description": "Heffel 2024 snm3C-seq3 of the developing human prefrontal cortex and hippocampus: per-cell "
+                       "contacts of 35 samples (hg38, GSE213950) and the authors' specimen and cell-type tables",
+    },
+    # Zhou J. et al. 2026 (Science, doi:10.1126/science.adx0673), GEO GSE326618: snm3C-seq of 16 adult human tissues,
+    # two donors each (hg38); one tarball per plate of per-cell contact tables (256 plates, .3C.contact.rmbkl.tsv.gz,
+    # juicer short, blacklisted regions removed).  GEO has no cell types: the authors' cell table (86,689 nuclei:
+    # tissue, donor, major type, sub-type) and the names of the types are their Hugging Face dataset (MIT licence),
+    # pinned to a revision.  The methylation (allc) files of the series are not fetched
+    "zhou2026_snm3c": {
+        "files": lambda: ([(f"zhou2026_snm3c/raw/contacts/{n}", _gsm(n)) for n in _geo_filelist(
+            "GSE326618", r"\.contact\.rmbkl\.tar\.gz$")]
+            + [(f"zhou2026_snm3c/raw/{n}", "https://huggingface.co/datasets/zhoujt1994/HumanCellEpigenomeAtlas_metadata/"
+                f"resolve/83d5e38e64612c26df9347a4826ee44177e6bb20/{n}") for n in (
+                "5kCG100k3C_summary.csv.gz", "L1color.tsv", "subtype_meta.tsv")]),
+        "size_mb": 317100,
+        "default": False,
+        "parallel": 8,
+        "description": "Zhou 2026 snm3C-seq of 16 human tissues: per-cell contacts of 256 plates (hg38, GSE326618) and "
+                       "the authors' cell table (86,689 nuclei, Hugging Face)",
     },
     # Lee L. et al. 2023 (Brief Bioinform 24:bbad315, doi:10.1093/bib/bbad315; SnapHiC-D), GEO GSE210585: single-nucleus Hi-C of 94 mouse ESC
     # and 188 neural progenitor cells (129/Sv x CAST, mm10), the valid pairs of each cell (hotspots removed; juicer
