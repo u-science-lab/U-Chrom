@@ -148,3 +148,56 @@ def test_a_cdz_of_the_store_carries_the_embedded_copies(stores):
         np.testing.assert_array_equal(x["matrix"], y["matrix"])
     assert "ssAB@100bp" in b._cell_bin_tracks()
     assert set(embedded.list_embedded_images(str(cdz))) == {"secA"}
+
+
+@pytest.mark.parametrize("kw", [
+    dict(key="bulk", chrom=None),
+    dict(key="bulk", chrom="chr1"),
+    dict(key="bulk", chrom="chr2", start=100, end=400),
+    dict(key="bulk", chrom="chr1", resolution=2 * RES),
+    dict(key="cells", chrom="chr1", cell_id="c1"),
+    dict(key="cells", chrom=None, group="field:cell_type=A"),
+    dict(key="cells", chrom="chr2", start=100, end=400, group="all"),
+    dict(key="cells", chrom="chr1", cell_id=None, group=None),
+])
+def test_stats_ps_embedded_equals_linked(stores, kw):
+    """Embedded bulk/per-cell P(s) matches linked .mcool/.cool/.scool identically (including default all-cells)."""
+    _, linked, emb = stores
+    a = DatasetStore().load(linked)
+    b = DatasetStore().load(emb)
+    pa, pb = a.stats_ps(**kw), b.stats_ps(**kw)
+    for k in ("key", "resolution", "chrom", "start", "end", "group", "cell_id", "n_cells"):
+        assert pa[k] == pb[k]
+    np.testing.assert_allclose(pa["sep_bp"], pb["sep_bp"], rtol=1e-12)
+    np.testing.assert_allclose(pa["p"], pb["p"], rtol=1e-12)
+    assert pa["n_pairs"] == pb["n_pairs"]
+    np.testing.assert_allclose(pa["n_contacts"], pb["n_contacts"], rtol=1e-12)
+    assert pa["total_cis_contacts"] == pytest.approx(pb["total_cis_contacts"], rel=1e-12)
+    if pb["slope"] is None:
+        assert pa["slope"] is None and pa["intercept"] is None
+    else:
+        assert pa["slope"] == pytest.approx(pb["slope"], rel=1e-12)
+        assert pa["intercept"] == pytest.approx(pb["intercept"], rel=1e-12)
+
+
+def test_stats_ps_embedded_needs_no_cooler_and_works_in_cdz(stores, monkeypatch):
+    import sys
+    from chromdata.zarrcd import _zip_tree
+
+    tmp_path, _, emb = stores
+    cdz = tmp_path / "ps_emb.cdz"
+    _zip_tree(emb, cdz)
+    for f in ("bulk.mcool", "bulk.cool", "cells.scool", "ssab.h5ad"):
+        (tmp_path / f).unlink()
+    monkeypatch.setitem(sys.modules, "cooler", None)
+    monkeypatch.setitem(sys.modules, "h5py", None)
+    ds = DatasetStore().load(cdz)
+    for kw in (
+        dict(key="bulk", chrom=None),
+        dict(key="bulk", chrom="chr1"),
+        dict(key="cells", chrom="chr1", cell_id="c1"),
+        dict(key="cells", chrom="chr1", group="field:cell_type=A"),
+        dict(key="cells", chrom="chr1"),
+    ):
+        res = ds.stats_ps(**kw)
+        assert res["total_cis_contacts"] > 0 and len(res["sep_bp"]) > 0

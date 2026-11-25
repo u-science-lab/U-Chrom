@@ -281,13 +281,27 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
 
     @app.get("/api/datasets/{dataset_id}/stats/rg")
     def stats_rg(dataset_id: str, chrom: Optional[str] = None, cell_id: Optional[str] = None,
-                 group: Optional[str] = None) -> Dict[str, Any]:
-        return _call(_dataset(dataset_id).stats_rg, chrom, cell_id, group)
+                 group: Optional[str] = None, start: Optional[int] = None,
+                 end: Optional[int] = None) -> Dict[str, Any]:
+        return _call(_dataset(dataset_id).stats_rg, chrom=chrom, cell_id=cell_id, group=group,
+                     start=start, end=end)
 
     @app.get("/api/datasets/{dataset_id}/stats/scaling")
     def stats_scaling(dataset_id: str, chrom: Optional[str] = None, cell_id: Optional[str] = None,
-                      group: Optional[str] = None) -> Dict[str, Any]:
-        return _call(_dataset(dataset_id).stats_scaling, chrom, cell_id, group=group)
+                      n_bins: int = 24, group: Optional[str] = None,
+                      start: Optional[int] = None, end: Optional[int] = None) -> Dict[str, Any]:
+        return _call(_dataset(dataset_id).stats_scaling, chrom=chrom, cell_id=cell_id,
+                     n_bins=n_bins, group=group, start=start, end=end)
+
+    @app.get("/api/datasets/{dataset_id}/stats/ps")
+    def stats_ps(dataset_id: str, key: Optional[str] = None, chrom: Optional[str] = None,
+                 start: Optional[int] = None, end: Optional[int] = None,
+                 resolution: Optional[int] = None, cell_id: Optional[str] = None,
+                 group: Optional[str] = None, n_bins: int = 24,
+                 smin: Optional[float] = None, smax: Optional[float] = None) -> Dict[str, Any]:
+        return _call(_dataset(dataset_id).stats_ps, key=key, chrom=chrom, start=start, end=end,
+                     resolution=resolution, cell_id=cell_id, group=group, n_bins=n_bins,
+                     smin=smin, smax=smax)
 
     @app.get("/api/datasets/{dataset_id}/embedding/{key}")
     def embedding(dataset_id: str, key: str, dims: str = "0,1") -> Dict[str, Any]:

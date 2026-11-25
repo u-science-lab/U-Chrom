@@ -1905,12 +1905,43 @@ class Dataset:
 
     # -- statistics -------------------------------------------------------
 
-    def _stats_spots(self, chrom=None, cell_id=None, group=None) -> np.ndarray:
+    def _stats_window(self, chrom=None, start=None, end=None, chrom_length: Optional[int] = None) -> Tuple[Optional[str], Optional[int], Optional[int]]:
+        """Validate and normalize (chrom, start, end) for /stats endpoints."""
+        c = None if chrom is None or str(chrom) == "" or str(chrom) == GENOME else str(chrom)
+        if start is None and end is None:
+            return c, None, None
+        if c is None:
+            raise ValueError("start and end require a single named chromosome (not all chromosomes)")
+        lo_raw = 0 if start is None else int(start)
+        hi_raw = None if end is None else int(end)
+        if start is not None and end is not None and hi_raw <= lo_raw:
+            raise ValueError("end must be greater than start")
+        lo = max(0, lo_raw)
+        if chrom_length is not None:
+            length = chrom_length
+        elif "chroms" in self._cache:
+            length = next((int(x["end"]) for x in self._cache["chroms"] if x["name"] == c), None)
+        elif self._index_segments():
+            ext = self._chrom_extent()
+            length = int(ext.at[c, "end"]) if c in ext.index else None
+        else:
+            length = next((int(x["end"]) for x in self.chrom_table() if x["name"] == c), None)
+        hi = length if hi_raw is None else (min(length, hi_raw) if length is not None else hi_raw)
+        if hi is not None and hi <= lo:
+            raise ValueError("empty region")
+        return c, lo, hi
+
+    def _stats_spots(self, chrom=None, cell_id=None, group=None, start=None, end=None) -> np.ndarray:
         a = self._arrays()
         _one_scope(cell_id, group)
+        chrom_norm, lo, hi = self._stats_window(chrom, start, end)
         mask = np.isfinite(self._coords()).all(axis=1)
-        if chrom:
-            mask &= a["chrom"] == str(chrom)
+        if chrom_norm:
+            mask &= a["chrom"] == chrom_norm
+        if lo is not None:
+            mask &= a["end"] > lo
+        if hi is not None:
+            mask &= a["start"] < hi
         if cell_id is not None and a["cell"] is not None:
             mask &= a["cell"] == str(cell_id)
         if group is not None:
@@ -1924,43 +1955,66 @@ class Dataset:
     def _stats_sample(self, chrom, cell_id, group):
         """Large stores: (in-memory Dataset of a random sample of the matching cells, note or None)."""
         cells = self._scope_cells(cell_id, group)
-        mask = self._run_mask([chrom] if chrom else None, cells)
+        chrom_norm = None if chrom is None or str(chrom) == "" or str(chrom) == GENOME else str(chrom)
+        mask = self._run_mask([chrom_norm] if chrom_norm else None, cells)
         ranges, n, n_cells, used, total = self._sample(mask, STATS_MAX_SPOTS)
         note = f"{n:,} of {n_cells:,} cells (random sample)" if used < total else None
         return self._part(ranges), note
 
-    def stats_rg(self, chrom=None, cell_id=None, group=None) -> Dict[str, Any]:
+    def stats_rg(self, chrom=None, cell_id=None, group=None, start=None, end=None) -> Dict[str, Any]:
+        _one_scope(cell_id, group)
+        chrom_norm, lo, hi = self._stats_window(chrom, start, end)
         if self._index_segments():
-            part, note = self._stats_sample(chrom, cell_id, group)
-            out = part.stats_rg(chrom)
+            part, note = self._stats_sample(chrom_norm, cell_id, group)
+            out = part.stats_rg(chrom_norm, start=lo, end=hi)
             out.update(group=group, note=note)
             return out
         a = self._arrays()
-        idx = self._stats_spots(chrom, cell_id, group)
+        idx = self._stats_spots(chrom_norm, cell_id, group, lo, hi)
         df = pd.DataFrame(self._coords()[idx], columns=["x", "y", "z"])
         df["trace"] = a["trace"][idx]
+        df["_idx"] = idx
+        if lo is not None or hi is not None:
+            df = df[df.groupby("trace", sort=False)["x"].transform("size") >= 2]
         g = df.groupby("trace", sort=False)
         cen = g[["x", "y", "z"]].transform("mean")
         df["d2"] = ((df[["x", "y", "z"]] - cen) ** 2).sum(axis=1)
         rg = np.sqrt(df.groupby("trace", sort=False)["d2"].mean())
-        first = pd.Series(idx).groupby(df["trace"].to_numpy(), sort=False).first().reindex(rg.index)
+        first = df.groupby("trace", sort=False)["_idx"].first().reindex(rg.index)
+        first_idx = first.to_numpy(dtype=np.int64) if len(first) else np.zeros(0, dtype=np.int64)
+        cell_ids = [None if a["cell"] is None else str(a["cell"][i]) for i in first_idx]
+        rg_vals = [float(v) for v in rg.to_numpy()]
+        per_cell_median: Optional[float] = None
+        if a["cell"] is not None and rg_vals:
+            pc_df = pd.DataFrame({"cell": cell_ids, "rg": rg_vals})
+            pc_df = pc_df[pc_df["cell"].notna() & np.isfinite(pc_df["rg"])]
+            if len(pc_df):
+                per_cell_median = float(pc_df.groupby("cell", sort=False)["rg"].median().median())
         unit = self.cd.uns.get("xyz_unit") if isinstance(self.cd.uns, dict) else None
         return {"trace_ids": [str(t) for t in rg.index],
-                "cell_ids": [None if a["cell"] is None else str(a["cell"][i]) for i in first.to_numpy()],
-                "chroms": [str(a["chrom"][i]) for i in first.to_numpy()],
-                "rg": [float(v) for v in rg.to_numpy()],
+                "cell_ids": cell_ids,
+                "chroms": [str(a["chrom"][i]) for i in first_idx],
+                "rg": rg_vals,
                 "n_spots": [int(v) for v in g.size().reindex(rg.index).to_numpy()],
-                "group": group, "n_cells": self._n_cells_of(idx),
-                "unit": None if unit is None else str(unit)}
+                "per_cell_median": per_cell_median,
+                "group": group, "n_cells": self._n_cells_of(df["_idx"].to_numpy(dtype=np.int64)),
+                "unit": None if unit is None else str(unit),
+                "note": None}
 
-    def stats_scaling(self, chrom=None, cell_id=None, n_bins: int = 24, group=None) -> Dict[str, Any]:
+    def stats_scaling(self, chrom=None, cell_id=None, n_bins: int = 24, group=None,
+                      start=None, end=None) -> Dict[str, Any]:
+        _one_scope(cell_id, group)
+        if not (1 <= int(n_bins) <= 200):
+            raise ValueError("n_bins must be between 1 and 200")
+        n_bins = int(n_bins)
+        chrom_norm, lo, hi = self._stats_window(chrom, start, end)
         if self._index_segments():
-            part, note = self._stats_sample(chrom, cell_id, group)
-            out = part.stats_scaling(chrom, n_bins=n_bins)
+            part, note = self._stats_sample(chrom_norm, cell_id, group)
+            out = part.stats_scaling(chrom_norm, n_bins=n_bins, start=lo, end=hi)
             out.update(group=group, note=note)
             return out
         a = self._arrays()
-        idx = self._stats_spots(chrom, cell_id, group)
+        idx = self._stats_spots(chrom_norm, cell_id, group, lo, hi)
         n_cells = self._n_cells_of(idx)
         order = np.lexsort((a["start"][idx], a["trace_code"][idx]))
         idx = idx[order]
@@ -1983,10 +2037,13 @@ class Dataset:
         unit = self.cd.uns.get("xyz_unit") if isinstance(self.cd.uns, dict) else None
         if not seps:
             return {"sep_bp": [], "median": [], "q25": [], "q75": [], "n_pairs": [],
-                    "group": group, "n_cells": n_cells, "unit": None if unit is None else str(unit)}
+                    "group": group, "n_cells": n_cells, "unit": None if unit is None else str(unit), "note": None}
         sep, dist = np.concatenate(seps), np.concatenate(dists)
         pos = sep > 0
         sep, dist = sep[pos], dist[pos]
+        if not len(sep):
+            return {"sep_bp": [], "median": [], "q25": [], "q75": [], "n_pairs": [],
+                    "group": group, "n_cells": n_cells, "unit": None if unit is None else str(unit), "note": None}
         edges = np.geomspace(sep.min(), sep.max() * 1.0001, n_bins + 1)
         which = np.digitize(sep, edges) - 1
         out = {"sep_bp": [], "median": [], "q25": [], "q75": [], "n_pairs": []}
@@ -2001,8 +2058,227 @@ class Dataset:
             out["q75"].append(float(q[2]))
             out["n_pairs"].append(int(len(d)))
         out["unit"] = None if unit is None else str(unit)
-        out["group"], out["n_cells"] = group, n_cells
+        out["group"], out["n_cells"], out["note"] = group, n_cells, None
         return out
+
+    def stats_ps(self, key: Optional[str] = None, chrom: Optional[str] = None,
+                 start: Optional[int] = None, end: Optional[int] = None,
+                 resolution: Optional[int] = None, cell_id: Optional[str] = None,
+                 group: Optional[str] = None, n_bins: int = 24,
+                 smin: Optional[float] = None, smax: Optional[float] = None) -> Dict[str, Any]:
+        """Raw cis contact probability decay P(s) and OLS log-log slope (0 cooler/h5py for embedded maps)."""
+        _one_scope(cell_id, group)
+        if not (1 <= int(n_bins) <= 200):
+            raise ValueError("n_bins must be between 1 and 200")
+        n_bins = int(n_bins)
+        if smin is not None and float(smin) <= 0:
+            raise ValueError("smin must be > 0")
+        if smax is not None and float(smax) <= 0:
+            raise ValueError("smax must be > 0")
+        if smin is not None and smax is not None and float(smin) > float(smax):
+            raise ValueError("smin must be <= smax")
+
+        maps = [m for m in self.contact_maps() if m.get("kind") != "error"]
+        if key is None:
+            if not maps:
+                raise LookupError("this dataset has no usable contact maps")
+            info = maps[0]
+        else:
+            info = next((m for m in maps if m["key"] == key), None)
+            if info is None:
+                raise KeyError(key)
+        map_key = str(info["key"])
+        per = info["kind"] == "scool"
+        chrom_lengths = {str(c["name"]): int(c["length"]) for c in info["chroms"]}
+        c_req = None if chrom is None or str(chrom) == "" or str(chrom) == GENOME else str(chrom)
+        chrom_len = None
+        if c_req is not None:
+            if c_req not in chrom_lengths:
+                raise ValueError(f"unknown chromosome {c_req!r} in contact map {map_key!r}")
+            chrom_len = chrom_lengths[c_req]
+        chrom_norm, lo, hi = self._stats_window(c_req, start, end, chrom_length=chrom_len)
+
+        resolutions = sorted(int(r) for r in info["resolutions"])
+        if resolution is not None:
+            res = int(resolution)
+            if res not in resolutions:
+                raise ValueError(f"resolution must be one of {resolutions}")
+        else:
+            span = (hi - lo) if (chrom_norm is not None and lo is not None and hi is not None) else (
+                chrom_len if chrom_norm is not None else sum(chrom_lengths.values()))
+            res = next((r for r in resolutions if r > 0 and span / r <= 25_000), resolutions[-1])
+
+        notes: List[str] = []
+        n_cells: Optional[int] = None
+        idx_cells: Optional[List[int]] = None
+        use_sum = False
+        scool_names: Optional[List[str]] = None
+
+        if per:
+            eff_group = ALL_CELLS if (cell_id is None and group is None) else group
+            if info.get("embedded"):
+                e = self._embedded_maps()[map_key]
+                index = self._cache.setdefault(("emb_cell_index", map_key), {c: i for i, c in enumerate(e.cells)})
+                token = Path(f"embedded:{map_key}")
+                if eff_group is not None:
+                    pool_cells = (self.group_cells(eff_group)
+                                  if (eff_group != ALL_CELLS or self.known_cells())
+                                  else sorted(index, key=natural_key))
+                    names = [c for c in pool_cells if c in index]
+                    if not names:
+                        raise LookupError(f"no cell of group {eff_group!r} has a map in {map_key!r} ({self._scool_coverage(token)})")
+                    use_sum = len(names) == len(index) and e.has_sum(res)
+                    if not use_sum and len(names) > PSEUDOBULK_MAX_CELLS:
+                        rng = np.random.default_rng(0)
+                        names = sorted(rng.choice(names, PSEUDOBULK_MAX_CELLS, replace=False).tolist(), key=natural_key)
+                        notes.append(f"sum over {PSEUDOBULK_MAX_CELLS} random cells of the group")
+                    n_cells = len(names)
+                    idx_cells = None if use_sum else [index[c] for c in names]
+                else:
+                    cid = str(cell_id)
+                    if cid not in index:
+                        raise KeyError(f"cell {cid!r} has no map in {map_key!r} ({self._scool_coverage(token)})")
+                    n_cells = 1
+                    idx_cells = [index[cid]]
+            else:
+                family = "linked_scool"
+                path = self.resolve(str(self._link_records(family)[map_key]["path"]))
+                available = self._scool_cells(path)
+                if eff_group is not None:
+                    pool_cells = (self.group_cells(eff_group)
+                                  if (eff_group != ALL_CELLS or self.known_cells())
+                                  else sorted((c.rsplit("/", 1)[-1] for c in available), key=natural_key))
+                    names = [c for c in pool_cells if f"/cells/{c}" in available]
+                    if not names:
+                        raise LookupError(f"no cell of group {eff_group!r} has a map in {map_key!r} ({self._scool_coverage(path)})")
+                    if len(names) > PSEUDOBULK_MAX_CELLS:
+                        rng = np.random.default_rng(0)
+                        names = sorted(rng.choice(names, PSEUDOBULK_MAX_CELLS, replace=False).tolist(), key=natural_key)
+                        notes.append(f"sum over {PSEUDOBULK_MAX_CELLS} random cells of the group")
+                    n_cells = len(names)
+                    scool_names = names
+                else:
+                    cid = str(cell_id)
+                    if f"/cells/{cid}" not in available:
+                        raise KeyError(f"cell {cid!r} has no map in {map_key!r} ({self._scool_coverage(path)})")
+                    n_cells = 1
+                    scool_names = [cid]
+        elif group is not None or cell_id is not None:
+            raise ValueError(f"contact map {map_key!r} is not per-cell: cell_id or group needs a per-cell (.scool) map")
+
+        target_chroms = [chrom_norm] if chrom_norm is not None else [str(c["name"]) for c in info["chroms"]]
+
+        if info.get("embedded"):
+            e = self._embedded_maps()[map_key]
+            csizes = e.chromsizes(res)
+            max_n = 0
+            ranges_by_chrom: Dict[str, Tuple[int, int, int]] = {}
+            for cname in target_chroms:
+                clen = int(csizes.get(cname, 0))
+                if clen <= 0:
+                    continue
+                n_cbins = -(-clen // res)
+                b0 = 0 if lo is None else int(lo) // res
+                b1 = n_cbins if hi is None else min(n_cbins, -(-int(hi) // res))
+                nc = max(0, b1 - b0)
+                ranges_by_chrom[cname] = (b0, b1, nc)
+                if nc > max_n:
+                    max_n = nc
+            diag_counts = np.zeros(max_n, dtype=np.float64)
+            pair_counts = np.zeros(max_n, dtype=np.int64)
+            for cname, (b0, b1, nc) in ranges_by_chrom.items():
+                if nc < 2:
+                    continue
+                ks = np.arange(nc, dtype=np.int64)
+                pair_counts[:nc] += (nc - ks)
+                part_name = f"cis/{cname}"
+                if part_name not in e.g[f"r{res}"]:
+                    continue
+                if use_sum:
+                    blocks = [e.sum_pixels(part_name, res)]
+                elif per:
+                    blocks = e.cell_pixel_blocks(part_name, idx_cells or [], res)
+                else:
+                    blocks = [e.region_pixels(cname, b0, b1, res)]
+                for d in blocks:
+                    if not len(d):
+                        continue
+                    ok = (d[:, 0] >= b0) & (d[:, 1] < b1) & (d[:, 1] >= d[:, 0])
+                    if not ok.any():
+                        continue
+                    diag_counts[:nc] += np.bincount(
+                        d[ok, 1] - d[ok, 0],
+                        weights=d[ok, 2].astype(np.float64),
+                        minlength=nc,
+                    )
+        else:
+            import cooler
+            import h5py
+
+            family = "linked_scool" if per else "linked_cool"
+            path = self.resolve(str(self._link_records(family)[map_key]["path"]))
+            if info["kind"] == "mcool":
+                first_uri = f"{path}::/resolutions/{res}"
+                h5_groups = [f"resolutions/{res}"]
+            elif per:
+                first_uri = f"{path}::/cells/{scool_names[0]}"
+                h5_groups = [f"cells/{c}" for c in scool_names]
+            else:
+                first_uri = str(path)
+                h5_groups = [""]
+            clr = cooler.Cooler(first_uri)
+            res = int(clr.binsize or res)
+            max_n = 0
+            extents: Dict[str, Tuple[int, int, int, int]] = {}
+            for cname in target_chroms:
+                if cname not in clr.chromsizes:
+                    continue
+                cb0, cb1 = clr.extent(cname)
+                n_cbins = cb1 - cb0
+                lb0 = 0 if lo is None else int(lo) // res
+                lb1 = n_cbins if hi is None else min(n_cbins, -(-int(hi) // res))
+                nc = max(0, lb1 - lb0)
+                extents[cname] = (cb0 + lb0, cb0 + lb1, cb0 + lb1 - (cb0 + lb0), cb0)
+                if nc > max_n:
+                    max_n = nc
+            diag_counts = np.zeros(max_n, dtype=np.float64)
+            pair_counts = np.zeros(max_n, dtype=np.int64)
+            active = [(cname, b0, b1, b1 - b0) for cname, (b0, b1, _, _) in extents.items() if (b1 - b0) >= 2]
+            for _, _, _, nc in active:
+                ks = np.arange(nc, dtype=np.int64)
+                pair_counts[:nc] += (nc - ks)
+            if active:
+                step = 2_000_000
+                with h5py.File(path, "r") as f:
+                    for gpath in h5_groups:
+                        grp = f[gpath] if gpath else f
+                        off_ds = grp["indexes/bin1_offset"]
+                        px = grp["pixels"]
+                        for _, b0, b1, nc in active:
+                            off = np.asarray(off_ds[b0: b1 + 1], dtype=np.int64)
+                            s0, s1 = int(off[0]), int(off[-1])
+                            for cur in range(s0, s1, step):
+                                stop = min(s1, cur + step)
+                                p1 = np.asarray(px["bin1_id"][cur:stop], dtype=np.int64)
+                                p2 = np.asarray(px["bin2_id"][cur:stop], dtype=np.int64)
+                                cnt = np.asarray(px["count"][cur:stop], dtype=np.float64)
+                                ok = (p2 >= p1) & (p2 < b1)
+                                if ok.any():
+                                    diag_counts[:nc] += np.bincount(p2[ok] - p1[ok], weights=cnt[ok], minlength=nc)
+
+        ps = _ps_from_diagonals(diag_counts, pair_counts, res, n_bins=n_bins, smin=smin, smax=smax)
+        return {
+            "key": map_key,
+            "resolution": int(res),
+            "chrom": chrom_norm,
+            "start": lo,
+            "end": hi,
+            **ps,
+            "group": group if per else None,
+            "cell_id": str(cell_id) if (per and cell_id is not None) else None,
+            "n_cells": n_cells,
+            "note": "; ".join(notes) or None,
+        }
 
     # ------------------------------------------------------------------
     # Geometry
@@ -2093,6 +2369,70 @@ def _box_sum(m: np.ndarray, k: int) -> np.ndarray:
 def _one_scope(cell_id, group) -> None:
     if cell_id is not None and group is not None:
         raise ValueError("pass either cell_id or group, not both")
+
+
+def _ps_from_diagonals(diag_counts: np.ndarray, pair_counts: np.ndarray, binsize: int,
+                       n_bins: int = 24, smin: Optional[float] = None,
+                       smax: Optional[float] = None) -> Dict[str, Any]:
+    """Compute depth-normalized P(s) curve and unbinned log-log OLS slope from diagonal sums."""
+    total_cis = float(diag_counts.sum()) if len(diag_counts) else 0.0
+    if len(diag_counts) < 2 or total_cis <= 0 or binsize <= 0:
+        return {"sep_bp": [], "p": [], "n_pairs": [], "n_contacts": [],
+                "slope": None, "intercept": None, "fit_range_bp": None,
+                "total_cis_contacts": total_cis}
+
+    k = np.arange(1, len(diag_counts), dtype=np.int64)
+    np_k = pair_counts[1:]
+    c_k = diag_counts[1:]
+    valid = np_k > 0
+    k_pos = k[valid]
+    if not len(k_pos):
+        return {"sep_bp": [], "p": [], "n_pairs": [], "n_contacts": [],
+                "slope": None, "intercept": None, "fit_range_bp": None,
+                "total_cis_contacts": total_cis}
+
+    np_pos = np_k[valid]
+    c_pos = c_k[valid]
+    s_pos = k_pos.astype(np.float64) * float(binsize)
+    p_pos = (c_pos / np_pos) / total_cis
+
+    fit_mask = (p_pos > 0) & np.isfinite(p_pos)
+    if smin is not None:
+        fit_mask &= s_pos >= float(smin)
+    if smax is not None:
+        fit_mask &= s_pos <= float(smax)
+    if int(fit_mask.sum()) >= 3:
+        sl, ic = np.polyfit(np.log10(s_pos[fit_mask]), np.log10(p_pos[fit_mask]), 1)
+        slope: Optional[float] = float(sl)
+        intercept: Optional[float] = float(ic)
+        fit_range_bp: Optional[List[int]] = [int(s_pos[fit_mask][0]), int(s_pos[fit_mask][-1])]
+    else:
+        slope, intercept, fit_range_bp = None, None, None
+
+    k_max = int(k_pos[-1])
+    edges = np.geomspace(1.0, float(k_max) + 1e-4, int(n_bins) + 1)
+    which = np.digitize(k_pos, edges) - 1
+    sep_bp: List[float] = []
+    p_out: List[float] = []
+    n_pairs_out: List[int] = []
+    n_contacts_out: List[float] = []
+    for b in range(int(n_bins)):
+        m = which == b
+        if not m.any():
+            continue
+        c_b = float(c_pos[m].sum())
+        if c_b <= 0:
+            continue
+        np_b = int(np_pos[m].sum())
+        s_min_b = float(k_pos[m][0] * binsize)
+        s_max_b = float(k_pos[m][-1] * binsize)
+        sep_bp.append(float(np.sqrt(s_min_b * s_max_b)))
+        p_out.append(float((c_b / np_b) / total_cis))
+        n_pairs_out.append(np_b)
+        n_contacts_out.append(c_b)
+    return {"sep_bp": sep_bp, "p": p_out, "n_pairs": n_pairs_out, "n_contacts": n_contacts_out,
+            "slope": slope, "intercept": intercept, "fit_range_bp": fit_range_bp,
+            "total_cis_contacts": total_cis}
 
 
 class warnings_ignored:
