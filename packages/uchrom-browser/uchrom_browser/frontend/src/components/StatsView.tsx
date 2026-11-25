@@ -293,38 +293,44 @@ export function StatsView({ pane }: { pane: Pane }) {
   const size = useSize(boxRef)
   const { chrom, start, end } = statsRegion(pane.chromScope, locus)
   const rgUnit = pane.rgUnit === 'cell' && (ds?.n_cells ?? 0) > 1 ? 'cell' : 'trace'
-  const [rg, setRg] = useState<RgStats | null>(null)
-  const [scaling, setScaling] = useState<{ pop: ScalingStats; cell: ScalingStats | null } | null>(null)
-  const [ps, setPs] = useState<{ pop: PsStats; cell: PsStats | null } | null>(null)
+  const psPerCell = !!psMap?.per_cell
+  const followFocus = kind === 'scaling' || (kind === 'ps' && psPerCell) ? focus : null
+  const compareKey = compare.join('\u0001')
+  const reqKey = JSON.stringify([ds?.id ?? null, kind, chrom, start, end, baseGroup, psKey, psPerCell, followFocus])
+  const ovKey = JSON.stringify([ds?.id ?? null, kind, chrom, start, end, compareKey, psKey, psPerCell])
+  const [rgState, setRgState] = useState<{ key: string; data: RgStats } | null>(null)
+  const [scalingState, setScalingState] = useState<{ key: string; data: { pop: ScalingStats; cell: ScalingStats | null } } | null>(null)
+  const [psState, setPsState] = useState<{ key: string; data: { pop: PsStats; cell: PsStats | null } } | null>(null)
   // overlaid groups: ref -> stats of the current kind
-  const [groupRg, setGroupRg] = useState<Record<string, RgStats>>({})
-  const [groupScaling, setGroupScaling] = useState<Record<string, ScalingStats>>({})
-  const [groupPs, setGroupPs] = useState<Record<string, PsStats>>({})
-  const [error, setError] = useState<string | null>(null)
+  const [groupRgState, setGroupRgState] = useState<{ key: string; data: Record<string, RgStats> }>({ key: '', data: {} })
+  const [groupScalingState, setGroupScalingState] = useState<{ key: string; data: Record<string, ScalingStats> }>({ key: '', data: {} })
+  const [groupPsState, setGroupPsState] = useState<{ key: string; data: Record<string, PsStats> }>({ key: '', data: {} })
+  const [errState, setErrState] = useState<{ key: string; msg: string } | null>(null)
+  const rg = rgState?.key === reqKey ? rgState.data : null
+  const scaling = scalingState?.key === reqKey ? scalingState.data : null
+  const ps = psState?.key === reqKey ? psState.data : null
+  const groupRg = groupRgState.key === ovKey ? groupRgState.data : {}
+  const groupScaling = groupScalingState.key === ovKey ? groupScalingState.data : {}
+  const groupPs = groupPsState.key === ovKey ? groupPsState.data : {}
+  const error = errState?.key === reqKey || errState?.key === ovKey ? errState.msg : null
   const [hover, setHover] = useState<{ x: number; y: number; text: string } | null>(null)
   const xs = useFieldValues(ds?.id, kind === 'hist' || kind === 'scatter' ? fx : null)
   const ys = useFieldValues(ds?.id, kind === 'scatter' ? fy : null)
-  const psPerCell = !!psMap?.per_cell
-  const followFocus = kind === 'scaling' || (kind === 'ps' && psPerCell) ? focus : null
 
   useEffect(() => {
     if (!ds || (kind !== 'rg' && kind !== 'scaling' && kind !== 'ps')) return
     let live = true
-    setError(null)
-    setRg(null)
-    setScaling(null)
-    setPs(null)
     if (kind === 'rg') {
       fetchRg(ds.id, { chrom, start, end, group: baseGroup })
-        .then((r) => live && setRg(r))
-        .catch((e: Error) => live && setError(e.message))
+        .then((r) => live && setRgState({ key: reqKey, data: r }))
+        .catch((e: Error) => live && setErrState({ key: reqKey, msg: e.message }))
     } else if (kind === 'scaling') {
       Promise.all([
         fetchScaling(ds.id, { chrom, start, end, group: baseGroup }),
         focus ? fetchScaling(ds.id, { chrom, start, end, cellId: focus }).catch(() => null) : Promise.resolve(null),
       ])
-        .then(([pop, cell]) => live && setScaling({ pop, cell }))
-        .catch((e: Error) => live && setError(e.message))
+        .then(([pop, cell]) => live && setScalingState({ key: reqKey, data: { pop, cell } }))
+        .catch((e: Error) => live && setErrState({ key: reqKey, msg: e.message }))
     } else if (psKey) {
       Promise.all([
         fetchPs(ds.id, { key: psKey, chrom, start, end, group: psPerCell ? baseGroup : null }),
@@ -332,40 +338,36 @@ export function StatsView({ pane }: { pane: Pane }) {
           ? fetchPs(ds.id, { key: psKey, chrom, start, end, cellId: focus }).catch(() => null)
           : Promise.resolve(null),
       ])
-        .then(([pop, cell]) => live && setPs({ pop, cell }))
-        .catch((e: Error) => live && setError(e.message))
+        .then(([pop, cell]) => live && setPsState({ key: reqKey, data: { pop, cell } }))
+        .catch((e: Error) => live && setErrState({ key: reqKey, msg: e.message }))
     }
     return () => {
       live = false
     }
-  }, [ds?.id, kind, chrom, start, end, baseGroup, psKey, psPerCell, followFocus]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ds?.id, kind, chrom, start, end, baseGroup, psKey, psPerCell, followFocus, reqKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const compareKey = compare.join('\u0001')
   useEffect(() => {
     if (!ds || (kind !== 'rg' && kind !== 'scaling' && kind !== 'ps')) return
     let live = true
-    setGroupRg({})
-    setGroupScaling({})
-    setGroupPs({})
     if (kind === 'ps' && (!psPerCell || !psKey)) return
     for (const g of compare) {
       if (kind === 'rg')
         fetchRg(ds.id, { chrom, start, end, group: g })
-          .then((r) => live && setGroupRg((m) => ({ ...m, [g]: r })))
-          .catch((e: Error) => live && setError(e.message))
+          .then((r) => live && setGroupRgState((prev) => ({ key: ovKey, data: { ...(prev.key === ovKey ? prev.data : {}), [g]: r } })))
+          .catch((e: Error) => live && setErrState({ key: ovKey, msg: e.message }))
       else if (kind === 'scaling')
         fetchScaling(ds.id, { chrom, start, end, group: g })
-          .then((r) => live && setGroupScaling((m) => ({ ...m, [g]: r })))
-          .catch((e: Error) => live && setError(e.message))
+          .then((r) => live && setGroupScalingState((prev) => ({ key: ovKey, data: { ...(prev.key === ovKey ? prev.data : {}), [g]: r } })))
+          .catch((e: Error) => live && setErrState({ key: ovKey, msg: e.message }))
       else if (psKey)
         fetchPs(ds.id, { key: psKey, chrom, start, end, group: g })
-          .then((r) => live && setGroupPs((m) => ({ ...m, [g]: r })))
-          .catch((e: Error) => live && setError(e.message))
+          .then((r) => live && setGroupPsState((prev) => ({ key: ovKey, data: { ...(prev.key === ovKey ? prev.data : {}), [g]: r } })))
+          .catch((e: Error) => live && setErrState({ key: ovKey, msg: e.message }))
     }
     return () => {
       live = false
     }
-  }, [ds?.id, kind, chrom, start, end, compareKey, psKey, psPerCell]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ds?.id, kind, chrom, start, end, compareKey, psKey, psPerCell, ovKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // scatter geometry for hit-testing
   const scatter = useMemo(() => {

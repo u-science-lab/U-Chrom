@@ -47,12 +47,17 @@ def trace_table(cd, chrom=None, dedup: bool = False, start: int | None = None, e
         if start is not None and end is not None and hi_raw <= lo_raw:
             raise ValueError("end must be greater than start")
         lo = max(0, lo_raw)
-        bins = getattr(cd, "bins", None)
+        s_raw = cd.spots
+        sc = s_raw[s_raw["chrom"].astype(str) == str(chrom)] if len(s_raw) else s_raw
         clen = None
-        if bins is not None and len(bins):
-            bc = bins[bins["chrom"].astype(str) == str(chrom)]
-            if len(bc):
-                clen = int(bc["end"].max())
+        if len(sc):
+            clen = int(sc["end"].max())
+        else:
+            bins = getattr(cd, "bins", None)
+            if bins is not None and len(bins):
+                bc = bins[bins["chrom"].astype(str) == str(chrom)]
+                if len(bc):
+                    clen = int(bc["end"].max())
         hi = clen if hi_raw is None else (min(clen, hi_raw) if clen is not None else hi_raw)
         if hi is not None and hi <= lo:
             raise ValueError("empty region")
@@ -636,7 +641,7 @@ def main():
         is_cd = a.data.rstrip("/").endswith((".chromdata.zarr", ".cdz", ".zarr", ".h5cd"))
         cd = ChromData.read(a.data) if is_cd else None
         if cd is None:
-            clrs = [open_cooler(a.data, res=a.res)]
+            clrs = [open_cooler(a.data, res=a.res, chrom=a.chrom, start=a.start, end=a.end)]
             out = contact_ps(clrs, a.chrom, a.smin, a.smax, start=a.start, end=a.end)
         else:
             out = contact_ps(cd, a.chrom, a.smin, a.smax, cool=a.cool, res=a.res, cells=a.cells, start=a.start, end=a.end)

@@ -257,8 +257,19 @@ def test_structures_window_and_embedded_ps_parity(tmp_path, monkeypatch):
     sc = strc.scaling(cd, "chr1", start=100_000, end=500_000)
     assert sc["start"] == 100_000 and sc["end"] == 500_000
 
-    # Linked (non-embedded) scool with cells=None and windowed cells subset
+    # Trailing unused bins mismatch prevention + direct .mcool CLI span-aware resolution
+    cd_trail = ChromData(
+        np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+        pd.DataFrame({"chrom": ["chr1", "chr1"], "start": [0, 50], "end": [50, 100], "trace_id": ["t0", "t0"], "cell_id": ["c0", "c0"]}),
+        bins=pd.DataFrame({"chrom": ["chr1", "chr1", "chr1"], "start": [0, 50, 100], "end": [50, 100, 200]}),
+    )
+    with pytest.raises(ValueError, match="empty region"):
+        strc.trace_table(cd_trail, chrom="chr1", start=120, end=180)
+
+    # Linked (non-embedded) scool with cells=None and windowed cells subset + direct .mcool resolution
     linked_path, emb = linked_store(tmp_path)
+    mcool_clr = strc.open_cooler(str(linked_path.parent / "bulk.mcool"), chrom="chr1")
+    assert mcool_clr.binsize == LINKED_RES
     cd_linked = ChromData.read(linked_path, backed=True)
     ds_linked = DatasetStore().load(linked_path)
     assert strc.contact_ps(cd_linked, "chr1", cool="cells")["total_cis_contacts"] == pytest.approx(
