@@ -109,24 +109,24 @@ export function drawPsChart(
   )
 
   g.font = CHART.font
-  g.textAlign = 'left'
+  g.textAlign = 'right'
   const slopeStr = (s: PsStats) => (s.slope !== null ? `, slope=${s.slope.toFixed(2)}` : '')
-  const cellsStr = (s: PsStats) => (s.n_cells ? `, ${s.n_cells} cells` : '')
   const legend = [
     {
       color: baseColor,
-      text: `${baseGroup ? scopeLabel({ kind: 'group', group: baseGroup }, baseInfo) : 'population'} (${fmtBp(ps.pop.resolution)}${slopeStr(ps.pop)}${cellsStr(ps.pop)})`,
+      text: `${baseGroup ? scopeLabel({ kind: 'group', group: baseGroup }, baseInfo) : 'all'} (${fmtBp(ps.pop.resolution)}${slopeStr(ps.pop)})`,
     },
     ...overlays.map((o) => ({
       color: o.info?.color ?? strongColor,
-      text: `${o.info?.name ?? o.data.group ?? 'group'}${o.data.slope !== null ? ` (slope=${o.data.slope.toFixed(2)}${cellsStr(o.data)})` : ''}`,
+      text: `${o.info?.name ?? o.data.group ?? 'group'}${o.data.slope !== null ? ` (slope=${o.data.slope.toFixed(2)}${o.data.n_cells ? `, n=${o.data.n_cells}` : ''})` : ''}`,
     })),
     ...(ps.cell ? [{ color: strongColor, text: `cell ${focus}${slopeStr(ps.cell)}` }] : []),
   ]
   legend.forEach((l, i) => {
     g.fillStyle = l.color
-    g.fillText(l.text, plot.x + 8, plot.y + 10 + 14 * i)
+    g.fillText(l.text, plot.x + plot.w - 4, plot.y + 10 + 14 * i)
   })
+  g.textAlign = 'left'
 }
 
 function FieldSelect({ fields, value, onChange, title }: { fields: CellField[]; value: string; onChange(v: string): void; title: string }) {

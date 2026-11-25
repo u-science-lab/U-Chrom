@@ -184,12 +184,13 @@ export function trackRange(values: Iterable<unknown>): { lo: number; hi: number;
   return { lo: Math.min(0, mn), hi: mx, diverging: false }
 }
 
-/** Compact number for axes: 1.2k, 3.4M, 0.012. */
+/** Compact number for axes: 1.2k, 3.4M, 0.012, 1e-5. */
 export function fmtAxis(v: number): string {
   const a = Math.abs(v)
   if (a === 0) return '0'
   if (a >= 1e6) return `${+(v / 1e6).toFixed(2)}M`
   if (a >= 1e3) return `${+(v / 1e3).toFixed(2)}k`
   if (a >= 1) return `${+v.toFixed(2)}`
-  return `${+v.toPrecision(2)}`
+  if (a >= 1e-3) return `${+v.toPrecision(2)}`
+  return v.toExponential(1).replace(/\.0e/, 'e')
 }

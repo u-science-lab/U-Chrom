@@ -31,6 +31,7 @@ describe('histogram / scales', () => {
     expect(extent([])).toEqual([0, 1])
     expect(fmtAxis(1_500_000)).toBe('1.5M')
     expect(fmtAxis(0.01234)).toBe('0.012')
+    expect(fmtAxis(0.00001)).toBe('1e-5')
   })
   it('track ranges: symmetric for z-scores, from 0 otherwise', () => {
     expect(trackRange([-1, 0.5, 2])).toEqual({ lo: -2, hi: 2, diverging: true })
