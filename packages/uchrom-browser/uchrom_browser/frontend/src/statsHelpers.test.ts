@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extent, fmtAxis, histogram, integerBins, linear, logScale, mannWhitneyTwoSided, perCellMedians, statsChrom, statsRegion, trackRange } from './stats'
+import { extent, fmtAxis, hasOverlappingCells, histogram, integerBins, linear, logScale, mannWhitneyTwoSided, perCellMedians, statsChrom, statsRegion, trackRange } from './stats'
 import { binIndexAt, defaultTrackSelection, resolveTracks } from './tracks'
 import { defaultWorkspace, paneSignature, parseWorkspace, addPane, supportedPaneTypes, workspaceOf } from './workspace'
 import { resolveSource } from './components/MatrixView'
@@ -96,6 +96,9 @@ describe('perCellMedians and mannWhitneyTwoSided', () => {
     expect(partial.exploratory).toBe(false)
     expect(partial.p).toBeGreaterThan(0)
     expect(partial.p).toBeLessThanOrEqual(1)
+
+    expect(hasOverlappingCells(['c0', 'c1', null], ['c2', 'c3'])).toBe(false)
+    expect(hasOverlappingCells(['c0', 'c1'], ['c1', 'c2'])).toBe(true)
   })
 })
 

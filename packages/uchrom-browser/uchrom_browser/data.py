@@ -2122,7 +2122,7 @@ class Dataset:
                 token = Path(f"embedded:{map_key}")
                 if eff_group is not None:
                     pool_cells = (self.group_cells(eff_group)
-                                  if (eff_group != ALL_CELLS or self.known_cells())
+                                  if eff_group != ALL_CELLS
                                   else sorted(index, key=natural_key))
                     names = [c for c in pool_cells if c in index]
                     if not names:
@@ -2146,7 +2146,7 @@ class Dataset:
                 available = self._scool_cells(path)
                 if eff_group is not None:
                     pool_cells = (self.group_cells(eff_group)
-                                  if (eff_group != ALL_CELLS or self.known_cells())
+                                  if eff_group != ALL_CELLS
                                   else sorted((c.rsplit("/", 1)[-1] for c in available), key=natural_key))
                     names = [c for c in pool_cells if f"/cells/{c}" in available]
                     if not names:

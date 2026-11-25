@@ -67,6 +67,28 @@ def _store_location(cd, path=None):
     return None
 
 
+def _embedded_map_info(family: str, key: str, e, rec: dict | None = None) -> dict:
+    rec = rec or {}
+    resolutions = sorted(int(r) for r in e.resolutions)
+    first_res = resolutions[0] if resolutions else None
+    info = {
+        "family": family,
+        "key": key,
+        "format": rec.get("format", e.kind),
+        "label": rec.get("label", e.label),
+        "path": rec.get("path"),
+        "embedded": True,
+        "exists": True,
+        "resolutions": resolutions,
+        "has_sum": bool(e.has_sum(first_res)) if first_res is not None else False,
+    }
+    if first_res is not None:
+        info["chroms"] = list(e.chromsizes(first_res).keys())
+    if e.kind == "per_cell":
+        info["n_cells"] = len(e.cells)
+    return info
+
+
 def linked_maps(cd, path=None) -> dict:
     """Linked or embedded .cool / .mcool / .scool contact maps: resolutions, chroms, cell count."""
     out = {}
@@ -78,25 +100,17 @@ def linked_maps(cd, path=None) -> dict:
         emb_maps = open_all(loc)
 
     cooler = None
+    seen_emb: set[str] = set()
     for family in ("linked_cool", "linked_scool"):
         for key, rec in (cd.uns.get(family) or {}).items():
             rec = dict(rec)
-            info = {"family": family, "key": key, "format": rec.get("format"), "label": rec.get("label"),
-                    "path": rec.get("path"), "embedded": key in emb_maps or key in emb_names}
             if key in emb_maps:
-                e = emb_maps[key]
-                resolutions = sorted(int(r) for r in e.resolutions)
-                first_res = resolutions[0] if resolutions else None
-                info["exists"] = True
-                info["resolutions"] = resolutions
-                if first_res is not None:
-                    info["chroms"] = list(e.chromsizes(first_res).keys())
-                if e.kind == "per_cell":
-                    info["n_cells"] = len(e.cells)
-                info["has_sum"] = bool(e.has_sum(first_res)) if first_res is not None else False
-                out[f"{family}:{key}"] = info
+                seen_emb.add(key)
+                out[f"{family}:{key}"] = _embedded_map_info(family, key, emb_maps[key], rec)
                 continue
 
+            info = {"family": family, "key": key, "format": rec.get("format"), "label": rec.get("label"),
+                    "path": rec.get("path"), "embedded": key in emb_names}
             p = cd.resolve_link_path(rec["path"]) if rec.get("path") else None
             info["exists"] = bool(p and p.exists())
             if info["exists"]:
@@ -124,6 +138,10 @@ def linked_maps(cd, path=None) -> dict:
             if "resolutions" not in info and rec.get("bin_size"):
                 info["resolutions"] = [int(rec["bin_size"])]
             out[f"{family}:{key}"] = info
+
+    for key, e in emb_maps.items():
+        if key not in seen_emb:
+            out[f"embedded:{key}"] = _embedded_map_info("embedded", key, e)
     return out
 
 

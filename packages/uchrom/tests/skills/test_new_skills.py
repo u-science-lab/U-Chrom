@@ -239,6 +239,10 @@ def test_structures_window_and_embedded_ps_parity(tmp_path, monkeypatch):
     cd = _tracing(n_cells=4, loci=40, bin_bp=25_000)
     with pytest.raises(ValueError, match="chrom"):
         strc.trace_table(cd, start=100_000, end=400_000)
+    with pytest.raises(ValueError, match="chrom"):
+        strc.trace_table(cd, chrom="*", start=100_000, end=400_000)
+    with pytest.raises(ValueError, match="empty region"):
+        strc.trace_table(cd, chrom="chr1", start=10_000_000, end=20_000_000)
 
     win_rg = strc.rg_table(cd, min_spots=2, chrom="chr1", start=100_000, end=500_000)
     bds = Dataset(id="d", name="d", path="d", cd=cd)
@@ -263,6 +267,9 @@ def test_structures_window_and_embedded_ps_parity(tmp_path, monkeypatch):
     assert strc.contact_ps(cd_linked, "chr1", cool="cells", cells=["c0", "c1"], start=LINKED_RES, end=(LINKED_BINS - 2) * LINKED_RES)["total_cis_contacts"] == pytest.approx(
         ds_linked.stats_ps(key="cells", chrom="chr1", group="field:cell_type=A", start=LINKED_RES, end=(LINKED_BINS - 2) * LINKED_RES)["total_cis_contacts"]
     )
+    p_1bin = strc.contact_ps(cd_linked, "chr1", cool="bulk", start=0, end=LINKED_RES)
+    b_1bin = ds_linked.stats_ps(key="bulk", chrom="chr1", start=0, end=LINKED_RES)
+    assert p_1bin["total_cis_contacts"] == 0.0 and b_1bin["total_cis_contacts"] == 0.0
 
     # Embedded P(s) parity without cooler/h5py or external files
     embedded.embed_links(emb, verbose=False, trans_min_resolution=LINKED_RES)
@@ -296,3 +303,10 @@ def test_structures_window_and_embedded_ps_parity(tmp_path, monkeypatch):
         p_bulk = strc.contact_ps(cd_e, "chr2", cool="bulk", res=LINKED_RES)
         b_bulk = ds.stats_ps(key="bulk", chrom="chr2", resolution=LINKED_RES, n_bins=50)
         assert p_bulk["total_cis_contacts"] == pytest.approx(b_bulk["total_cis_contacts"])
+
+    # Directly embedded map without uns['linked_cool'/'linked_scool']
+    cd_nolink = ChromData.read(emb, backed=False)
+    cd_nolink.uns.pop("linked_cool", None)
+    cd_nolink.uns.pop("linked_scool", None)
+    s_direct = insp.summarize(cd_nolink, path=emb)
+    assert "embedded:cells" in s_direct["linked"] and s_direct["linked"]["embedded:cells"]["embedded"] is True

@@ -108,6 +108,14 @@ export function mannWhitneyTwoSided(a: readonly number[], b: readonly number[]):
   return { u, p, rankBiserial, exploratory }
 }
 
+/** True if two group cell-id lists share at least one non-null cell id. */
+export function hasOverlappingCells(a: readonly (string | null)[], b: readonly (string | null)[]): boolean {
+  const seen = new Set<string>()
+  for (const x of a) if (x) seen.add(x)
+  for (const x of b) if (x && seen.has(x)) return true
+  return false
+}
+
 export interface Histogram {
   edges: number[]
   counts: number[]

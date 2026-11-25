@@ -8,7 +8,7 @@ import { logTicks, niceTicks } from '../genome'
 import { nearestPoint } from '../render/embedding'
 import { scopeLabel, type GroupInfo } from '../groups'
 import { activeView, fieldKey, useStore } from '../store'
-import { extent, fmtAxis, histogram, integerBins, linear, logScale, mannWhitneyTwoSided, perCellMedians, statsRegion, type StatsChromScope } from '../stats'
+import { extent, fmtAxis, hasOverlappingCells, histogram, integerBins, linear, logScale, mannWhitneyTwoSided, perCellMedians, statsRegion, type StatsChromScope } from '../stats'
 import type { CellField, CellValue, ContactMapInfo, PsStats, RgStats, ScalingStats } from '../types'
 import { useLocus } from '../useLocus'
 import { useTheme } from '../useTheme'
@@ -311,6 +311,9 @@ export function StatsView({ pane }: { pane: Pane }) {
     if (!ds || (kind !== 'rg' && kind !== 'scaling' && kind !== 'ps')) return
     let live = true
     setError(null)
+    setRg(null)
+    setScaling(null)
+    setPs(null)
     if (kind === 'rg') {
       fetchRg(ds.id, { chrom, start, end, group: baseGroup })
         .then((r) => live && setRg(r))
@@ -471,13 +474,21 @@ export function StatsView({ pane }: { pane: Pane }) {
         ...overlayValsList.map((o) => statLine(o.info?.name ?? o.data.group ?? 'group', o.info?.color ?? pal.strong, o.vals, o.data)),
       ]
       if (rgUnit === 'cell' && overlayValsList.length === 1) {
-        const mw = mannWhitneyTwoSided(baseVals, overlayValsList[0].vals)
-        legend.push({
-          color: CHART.text,
-          text: mw
-            ? `MW p=${mw.p < 0.001 ? mw.p.toExponential(1) : mw.p.toPrecision(2)}, r=${mw.rankBiserial.toFixed(2)}${mw.exploratory ? ' (n<5 exploratory)' : ''}`
-            : 'MW p=n/a',
-        })
+        const overlapping = !baseGroup || hasOverlappingCells(rg.cell_ids, overlayValsList[0].data.cell_ids)
+        if (overlapping) {
+          legend.push({
+            color: CHART.muted,
+            text: !baseGroup ? 'MW skipped: all-cells base overlaps group' : 'MW skipped: overlapping groups',
+          })
+        } else {
+          const mw = mannWhitneyTwoSided(baseVals, overlayValsList[0].vals)
+          legend.push({
+            color: CHART.text,
+            text: mw
+              ? `MW p=${mw.p < 0.001 ? mw.p.toExponential(1) : mw.p.toPrecision(2)}, r=${mw.rankBiserial.toFixed(2)}${mw.exploratory ? ' (n<5 exploratory)' : ''}`
+              : 'MW p=n/a',
+          })
+        }
       }
       legend.forEach((l, i) => {
         g.fillStyle = l.color

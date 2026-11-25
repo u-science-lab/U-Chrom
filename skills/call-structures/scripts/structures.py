@@ -38,12 +38,24 @@ def trace_table(cd, chrom=None, dedup: bool = False, start: int | None = None, e
 
     Statistics keep every spot (the ``uchrom.fea`` convention); binning for the callers always dedups.
     Optional ``start`` / ``end`` filter spots by half-open overlap with [start, end) on ``chrom``."""
-    if (start is not None or end is not None) and (chrom is None or str(chrom) == ""):
-        raise ValueError("start and end require chrom")
-    lo = max(0, int(start)) if start is not None else 0
-    hi = int(end) if end is not None else None
-    if hi is not None and hi <= lo:
-        raise ValueError("end must be greater than start")
+    lo, hi = 0, None
+    if start is not None or end is not None:
+        if chrom is None or str(chrom) == "" or str(chrom) == "*":
+            raise ValueError("start and end require a single named chrom (not '*')")
+        lo_raw = 0 if start is None else int(start)
+        hi_raw = int(end) if end is not None else None
+        if start is not None and end is not None and hi_raw <= lo_raw:
+            raise ValueError("end must be greater than start")
+        lo = max(0, lo_raw)
+        bins = getattr(cd, "bins", None)
+        clen = None
+        if bins is not None and len(bins):
+            bc = bins[bins["chrom"].astype(str) == str(chrom)]
+            if len(bc):
+                clen = int(bc["end"].max())
+        hi = clen if hi_raw is None else (min(clen, hi_raw) if clen is not None else hi_raw)
+        if hi is not None and hi <= lo:
+            raise ValueError("empty region")
     s = cd.spots
     df = pd.DataFrame({"chrom": s["chrom"].astype(str).to_numpy(), "start": s["start"].to_numpy(np.int64),
                        "end": s["end"].to_numpy(np.int64), "trace_id": s["trace_id"].astype(str).to_numpy(),
@@ -438,7 +450,8 @@ def _embedded_ps(embs, chrom: str, smin: float | None = None, smax: float | None
                         end=hi if (start is not None or end is not None) else None)
 
 
-def open_cooler(spec: str, cd=None, res: float | None = None):
+def open_cooler(spec: str, cd=None, res: float | None = None, *,
+                chrom: str | None = None, start: int | None = None, end: int | None = None):
     """A cooler from a ``uns['linked_cool'|'linked_scool']`` key or a path/URI; ``res`` picks an mcool level."""
     import cooler
     path = spec
@@ -448,10 +461,22 @@ def open_cooler(spec: str, cd=None, res: float | None = None):
             if rec:
                 path = str(cd.resolve_link_path(rec["path"]))
     if "::" not in path and path.endswith(".mcool"):
-        levels = [int(u.rsplit("/", 1)[1]) for u in cooler.fileops.list_coolers(path)]
-        r = int(float(res)) if res else min(levels)
-        if r not in levels:
-            raise ValueError(f"{path} has resolutions {levels}, not {r}")
+        levels = sorted(int(u.rsplit("/", 1)[1]) for u in cooler.fileops.list_coolers(path))
+        if res is not None:
+            r = int(float(res))
+            if r not in levels:
+                raise ValueError(f"{path} has resolutions {levels}, not {r}")
+        elif chrom is not None and levels:
+            clen = int(cooler.Cooler(f"{path}::/resolutions/{levels[-1]}").chromsizes.get(chrom, 0))
+            if clen > 0:
+                lo = max(0, int(start)) if start is not None else 0
+                hi = min(clen, int(end)) if end is not None else clen
+                span = max(0, hi - lo)
+                r = next((lv for lv in levels if lv > 0 and span / lv <= 25_000), levels[-1])
+            else:
+                r = levels[-1]
+        else:
+            r = levels[0]
         path = f"{path}::/resolutions/{r}"
     return cooler.Cooler(path)
 
@@ -544,7 +569,7 @@ def contact_ps(coolers, chrom: str, smin: float | None = None, smax: float | Non
         if len(keys) == 1 and keys[0] in (cd.uns.get("linked_scool") or {}):
             p = str(cd.resolve_link_path(cd.uns["linked_scool"][keys[0]]["path"]))
             return _scool_ps(p, chrom, smin, smax, normalize, cells=cells, start=start, end=end)
-        coolers = [open_cooler(k, cd, res) for k in keys]
+        coolers = [open_cooler(k, cd, res, chrom=chrom, start=start, end=end) for k in keys]
 
     if not isinstance(coolers, (list, tuple)):
         coolers = [coolers]
@@ -566,8 +591,12 @@ def contact_ps(coolers, chrom: str, smin: float | None = None, smax: float | Non
     else:
         lo, hi = None, None
     nc = M.shape[0]
-    diag_counts = np.array([float(np.diagonal(M, kk).sum()) for kk in range(nc)], dtype=np.float64)
-    pair_counts = np.arange(nc, 0, -1, dtype=np.int64)
+    if nc < 2:
+        diag_counts = np.zeros(0, dtype=np.float64)
+        pair_counts = np.zeros(0, dtype=np.int64)
+    else:
+        diag_counts = np.array([float(np.diagonal(M, kk).sum()) for kk in range(nc)], dtype=np.float64)
+        pair_counts = np.arange(nc, 0, -1, dtype=np.int64)
     return _ps_finalize(diag_counts, pair_counts, bs, chrom, smin, smax, normalize, len(coolers), start=lo, end=hi)
 
 

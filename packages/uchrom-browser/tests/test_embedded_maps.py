@@ -201,3 +201,14 @@ def test_stats_ps_embedded_needs_no_cooler_and_works_in_cdz(stores, monkeypatch)
     ):
         res = ds.stats_ps(**kw)
         assert res["total_cis_contacts"] > 0 and len(res["sep_bp"]) > 0
+
+
+def test_stats_ps_all_pools_every_map_cell_even_if_cells_table_is_smaller(stores):
+    _, linked, emb = stores
+    ref = DatasetStore().load(emb).stats_ps(key="cells", chrom="chr1")
+    for store_path in (linked, emb):
+        cd = ChromData.read(store_path, backed=False)
+        cd.cells = cd.cells.iloc[:1].copy()
+        res = DatasetStore().add(cd, name="sub").stats_ps(key="cells", chrom="chr1")
+        assert res["n_cells"] == ref["n_cells"] == 3
+        assert res["total_cis_contacts"] == pytest.approx(ref["total_cis_contacts"])
