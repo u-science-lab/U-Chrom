@@ -28,17 +28,17 @@ are what the answer is judged on.
    python <skill dir>/scripts/inspect_data.py data.chromdata.zarr [--group cell_type]
    ```
    or `from inspect_data import summarize; s = summarize(ChromData.read(path))`.
-   It reports `counts`, `uns` (assembly, `xyz_unit`, `coordinate_status`), `cells` columns grouped by
+   It reports `counts`, `uns` (assembly, `xyz_unit`, `coordinate_status`, `trace_kind`), `cells` columns grouped by
    prefix, categorical columns with counts, `spot_tracks` / `bin_tracks`, `traces` columns, `cellm` embeddings with their
-   recipe, `linked` contact maps (existence, resolutions, number of cells in a `.scool`), `qc`, `checks`.
+   recipe, `clusters` (multi-way contact tables), `cell_spatial`, `linked` contact maps (embedded Zarr or external files, resolutions, chroms, cell counts), `qc`, `checks`.
 2. **Answer "how many" from the right table** (don't guess from one place):
    | question | where |
    |---|---|
    | cells | `len(cd.cells)`; cells with 3-D data: `cd.spots.cell_id.nunique()` (can differ) |
-   | traces / spots | `cd.n_traces`, `cd.n_spots` (a trace = one allele's copy of one chromosome/region) |
+   | traces / spots | `cd.n_traces`, `cd.n_spots` (a trace = one allele's copy of one chromosome/region; if `trace_kind == "set"`, unordered point set) |
    | IF antibody channels, genes | count the `cells` columns with the prefix (`if.`, `rna.`, `atac.`); `spot_tracks` may also hold non-antibody signals (repeat FISH, RNA, spot intensity, radial scores) — list and exclude them |
    | embeddings | `cd.cellm[key]` (n_cells × d) + `cd.uns["embeddings"][key]` (modality, method, input) |
-   | contact maps | `cd.uns["linked_scool"]` (per cell), `cd.uns["linked_cool"]` (pseudo-bulk / merged); open with `cooler` (`cooler.fileops.list_scool_cells`, `list_coolers` for `.mcool` levels) — the resolution is the cooler's `binsize` |
+   | contact maps | embedded Zarr (`cd.embedded_links()["contacts"]` / `chromdata.embedded.open_all`) or external `cd.uns["linked_scool"]` / `cd.uns["linked_cool"]`; inspect_data checks embedded copies first without requiring `cooler` |
    | units | `cd.uns["xyz_unit"]` — "model units" (NucDynamics etc.) are *not* µm; never convert |
 3. **Read `checks` and handle every item before analysis** (table below). Say in the answer which
    choice you made.

@@ -17,9 +17,9 @@ its functions). First run *load-data* if you have not looked at the dataset.
 ## Pick the method by data type
 | question | tracing / seqFISH+ (3-D coords) | contact maps (scHi-C, Hi-C) |
 |---|---|---|
-| distance at separation s | `structures.py dist-at data.chromdata.zarr --chrom <CHROM> --sep <SEP> --tol 0.1` | — |
-| scaling | `scaling --chrom chrN` (median distance per log bin, exponent of d ∝ s^α) | `ps` (P(s) slope) |
-| radius of gyration | `rg` (per trace; median per chromosome over traces and over cells) | — |
+| distance at separation s | `structures.py dist-at data.chromdata.zarr --chrom <CHROM> --sep <SEP> [--start A --end B] [--tol 0.1]` | — |
+| scaling | `scaling --chrom chrN [--start A --end B]` (median distance per log bin, exponent of d ∝ s^α) | `ps --chrom chrN [--start A --end B]` (P(s) slope; embedded Zarr or external cooler) |
+| radius of gyration | `rg [--chrom chrN --start A --end B]` (per trace; median per chromosome over traces and over cells) | — |
 | TADs | `tads --chrom chrN` → `uchrom.strc.tad.call_tads_by_pval` | `uchrom.strc.tad.get_domains` (directionality index) on a balanced matrix |
 | compartments | `comps --chrom chrN` → `uchrom.strc.comp.call_compartments_axes_pc` | eigenvector of the O/E correlation matrix (cooltools) |
 | loops | `uchrom.strc.loop.call_loops_axiswise_f` (needs dense ≤ 50 kb traces, ≥ ~100 traces) | a dot caller on ≥ 10 kb maps |
@@ -60,8 +60,8 @@ res = call_tads(cd, "<CHROM>", bin_size="auto", window_bins=4)   # res["n_domain
 
 ## Contact maps: P(s)
 ```bash
-python structures.py ps data.chromdata.zarr --cool <linked_cool key>[,<key2>,...] [--res <BIN>] --chrom <CHROM> --smin <S_MIN> --smax <S_MAX>
-python structures.py ps data.chromdata.zarr --cool <linked_scool key> --cells c1,c2,... ...   # sum chosen cells
+python structures.py ps data.chromdata.zarr --cool <linked_cool key>[,<key2>,...] [--res <BIN>] --chrom <CHROM> [--start A --end B] [--smin <S_MIN> --smax <S_MAX>]
+python structures.py ps data.chromdata.zarr --cool <linked_scool key> [--cells c1,c2,...] --chrom <CHROM> ...   # all cells (sum) or chosen cells; embedded Zarr works without cooler
 python structures.py ps file.mcool::/resolutions/<BIN> --chrom <CHROM> ...
 ```
 - Raw counts (`balance=False`; single-cell maps can't be balanced). P(s) per diagonal = mean contacts
