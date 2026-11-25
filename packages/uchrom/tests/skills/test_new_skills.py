@@ -253,8 +253,18 @@ def test_structures_window_and_embedded_ps_parity(tmp_path, monkeypatch):
     sc = strc.scaling(cd, "chr1", start=100_000, end=500_000)
     assert sc["start"] == 100_000 and sc["end"] == 500_000
 
+    # Linked (non-embedded) scool with cells=None and windowed cells subset
+    linked_path, emb = linked_store(tmp_path)
+    cd_linked = ChromData.read(linked_path, backed=True)
+    ds_linked = DatasetStore().load(linked_path)
+    assert strc.contact_ps(cd_linked, "chr1", cool="cells")["total_cis_contacts"] == pytest.approx(
+        ds_linked.stats_ps(key="cells", chrom="chr1")["total_cis_contacts"]
+    )
+    assert strc.contact_ps(cd_linked, "chr1", cool="cells", cells=["c0", "c1"], start=LINKED_RES, end=(LINKED_BINS - 2) * LINKED_RES)["total_cis_contacts"] == pytest.approx(
+        ds_linked.stats_ps(key="cells", chrom="chr1", group="field:cell_type=A", start=LINKED_RES, end=(LINKED_BINS - 2) * LINKED_RES)["total_cis_contacts"]
+    )
+
     # Embedded P(s) parity without cooler/h5py or external files
-    _, emb = linked_store(tmp_path)
     embedded.embed_links(emb, verbose=False, trans_min_resolution=LINKED_RES)
     cdz = tmp_path / "emb.cdz"
     _zip_tree(emb, cdz)

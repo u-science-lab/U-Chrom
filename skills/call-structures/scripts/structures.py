@@ -460,6 +460,66 @@ def _chrom_matrix(clr, chrom):
     return np.asarray(clr.matrix(balance=False, sparse=True).fetch(chrom).toarray(), dtype=float)
 
 
+def _scool_ps(path: str, chrom: str, smin: float | None = None, smax: float | None = None,
+              normalize: bool = True, *, cells: list[str] | str | None = None,
+              start: int | None = None, end: int | None = None) -> dict:
+    import cooler
+    import h5py
+
+    if isinstance(cells, str):
+        cell_list = [c for c in cells.split(",") if c]
+    elif cells is not None:
+        cell_list = [str(c) for c in cells]
+    else:
+        cell_list = None
+    if start is not None and end is not None and int(end) <= int(start):
+        raise ValueError("end must be greater than start")
+
+    with h5py.File(path, "r") as f:
+        avail = list(f["cells"])
+        if cell_list is None:
+            names = avail
+        else:
+            avail_set = set(avail)
+            names = [c for c in cell_list if c in avail_set]
+            if not names:
+                raise ValueError("none of the requested cells are in this scool file")
+        clr = cooler.Cooler(f"{path}::/cells/{names[0]}")
+        bs = int(clr.binsize)
+        clen = int(clr.chromsizes[chrom])
+        cb0, cb1 = clr.extent(chrom)
+        n_cbins = cb1 - cb0
+        lo = 0 if start is None else max(0, int(start))
+        hi = clen if end is None else min(clen, int(end))
+        if hi <= lo:
+            raise ValueError("empty region")
+        lb0 = 0 if (start is None and end is None) else lo // bs
+        lb1 = n_cbins if (start is None and end is None) else min(n_cbins, -(-hi // bs))
+        b0, b1 = cb0 + lb0, cb0 + lb1
+        nc = max(0, b1 - b0)
+        diag_counts = np.zeros(nc, dtype=np.float64)
+        ks = np.arange(nc, dtype=np.int64)
+        pair_counts = (nc - ks) if nc >= 2 else np.zeros(nc, dtype=np.int64)
+        if nc >= 2:
+            step = 2_000_000
+            for nm in names:
+                grp = f["cells"][nm]
+                off = np.asarray(grp["indexes/bin1_offset"][b0:b1 + 1], dtype=np.int64)
+                s0, s1 = int(off[0]), int(off[-1])
+                px = grp["pixels"]
+                for cur in range(s0, s1, step):
+                    stop = min(s1, cur + step)
+                    p1 = np.asarray(px["bin1_id"][cur:stop], dtype=np.int64)
+                    p2 = np.asarray(px["bin2_id"][cur:stop], dtype=np.int64)
+                    cnt = np.asarray(px["count"][cur:stop], dtype=np.float64)
+                    ok = (p2 >= p1) & (p2 < b1)
+                    if ok.any():
+                        diag_counts += np.bincount(p2[ok] - p1[ok], weights=cnt[ok], minlength=nc)
+    return _ps_finalize(diag_counts, pair_counts, bs, chrom, smin, smax, normalize, len(names),
+                        start=lo if (start is not None or end is not None) else None,
+                        end=hi if (start is not None or end is not None) else None)
+
+
 def contact_ps(coolers, chrom: str, smin: float | None = None, smax: float | None = None,
                normalize: bool = True, *, cool: str | None = None, res: float | None = None,
                cells: list[str] | str | None = None, start: int | None = None, end: int | None = None) -> dict:
@@ -481,14 +541,10 @@ def contact_ps(coolers, chrom: str, smin: float | None = None, smax: float | Non
             emb_map = open_all(loc)
             if all(k in emb_map for k in keys):
                 return _embedded_ps([emb_map[k] for k in keys], chrom, smin, smax, normalize, res=res, cells=cells, start=start, end=end)
-        if cells:
-            import cooler
-            scool_key = keys[0]
-            p = cd.resolve_link_path(cd.uns["linked_scool"][scool_key]["path"])
-            cell_list = [c for c in cells.split(",")] if isinstance(cells, str) else list(cells)
-            coolers = [cooler.Cooler(f"{p}::/cells/{c}") for c in cell_list]
-        else:
-            coolers = [open_cooler(k, cd, res) for k in keys]
+        if len(keys) == 1 and keys[0] in (cd.uns.get("linked_scool") or {}):
+            p = str(cd.resolve_link_path(cd.uns["linked_scool"][keys[0]]["path"]))
+            return _scool_ps(p, chrom, smin, smax, normalize, cells=cells, start=start, end=end)
+        coolers = [open_cooler(k, cd, res) for k in keys]
 
     if not isinstance(coolers, (list, tuple)):
         coolers = [coolers]
