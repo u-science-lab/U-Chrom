@@ -207,8 +207,9 @@ def test_stats_ps_all_pools_every_map_cell_even_if_cells_table_is_smaller(stores
     _, linked, emb = stores
     ref = DatasetStore().load(emb).stats_ps(key="cells", chrom="chr1")
     for store_path in (linked, emb):
-        cd = ChromData.read(store_path, backed=False)
-        cd.cells = cd.cells.iloc[:1].copy()
-        res = DatasetStore().add(cd, name="sub").stats_ps(key="cells", chrom="chr1")
+        ds = DatasetStore().load(store_path)
+        ds.cd.cells = ds.cd.cells.iloc[:1].copy()
+        ds._cache.clear()
+        res = ds.stats_ps(key="cells", chrom="chr1")
         assert res["n_cells"] == ref["n_cells"] == 3
         assert res["total_cis_contacts"] == pytest.approx(ref["total_cis_contacts"])
