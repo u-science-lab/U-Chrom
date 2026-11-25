@@ -72,16 +72,25 @@ describe('agent action state matches the browser', () => {
     expect((await ACTIONS.describe_workspace({}) as { locus: unknown }).locus).toEqual({ chrom: 'chr15', start: 0, end: 10_000 })
   })
 
-  it('lets an agent set and inspect the stats chromosome scope', async () => {
+  it('lets an agent set and inspect the stats chromosome scope, ps source, and rg unit', async () => {
     const tool = TOOLS.find((t) => t.name === 'open_view')!
-    const schema = tool.inputSchema as { properties: { chrom_scope: { enum: string[] } } }
-    expect(schema.properties.chrom_scope.enum).toEqual(['all', 'locus'])
+    const schema = tool.inputSchema as { properties: { chrom_scope: { enum: string[] }; stats: { enum: string[] }; rg_unit: { enum: string[] } } }
+    expect(schema.properties.chrom_scope.enum).toEqual(['all', 'locus', 'window'])
+    expect(schema.properties.stats.enum).toContain('ps')
+    expect(schema.properties.rg_unit.enum).toEqual(['trace', 'cell'])
 
-    await ACTIONS.open_view({ type: 'stats', stats: 'rg', chrom_scope: 'locus' })
+    await ACTIONS.open_view({ type: 'stats', stats: 'rg', chrom_scope: 'locus', rg_unit: 'cell' })
+    await ACTIONS.open_view({ type: 'stats', stats: 'ps', chrom_scope: 'window', source: 'cells' })
     await ACTIONS.open_view({ type: 'stats', stats: 'rg' })
-    const description = await ACTIONS.describe_workspace({}) as { views: Array<{ type: string; chrom_scope?: string }> }
+    const description = await ACTIONS.describe_workspace({}) as {
+      views: Array<{ type: string; stats?: string | null; chrom_scope?: string; rg_unit?: string; source?: string | null }>
+    }
 
-    expect(description.views.filter((view) => view.type === 'stats').map((view) => view.chrom_scope)).toEqual(['locus', 'all'])
+    const statsViews = description.views.filter((view) => view.type === 'stats')
+    expect(statsViews.map((view) => view.chrom_scope)).toEqual(['locus', 'window', 'all'])
+    expect(statsViews.map((view) => view.stats)).toEqual(['rg', 'ps', 'rg'])
+    expect(statsViews[0].rg_unit).toBe('cell')
+    expect(statsViews[1].source).toBe('cells')
   })
 
 })

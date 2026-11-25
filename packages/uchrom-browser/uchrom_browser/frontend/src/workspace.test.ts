@@ -229,7 +229,7 @@ describe('views the data supports', () => {
       'genome',
       'stats',
     ])
-    expect(supportedPaneTypes({ ...none, hasContactMaps: true })).toEqual(['genome', 'matrix'])
+    expect(supportedPaneTypes({ ...none, hasContactMaps: true })).toEqual(['genome', 'matrix', 'stats'])
   })
   it('defaults to every supported view for cells in tissue', () => {
     const t = (k: Parameters<typeof defaultWorkspace>[0]) => defaultWorkspace(k).panes.map((p) => p.type)

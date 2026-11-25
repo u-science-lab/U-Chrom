@@ -1,10 +1,111 @@
 /** Small numeric helpers for the stats / tracks panes (no DOM). */
 
 import { GENOME, type Locus } from './genome'
+import type { RgStats } from './types'
+
+export type StatsChromScope = 'all' | 'locus' | 'window'
 
 /** API chromosome parameter for chromosome-scoped stats; null means all chromosomes. */
-export function statsChrom(scope: 'all' | 'locus' | undefined, locus: Locus | null | undefined): string | null {
-  return scope === 'locus' && locus?.chrom && locus.chrom !== GENOME ? locus.chrom : null
+export function statsChrom(scope: StatsChromScope | undefined, locus: Locus | null | undefined): string | null {
+  return (scope === 'locus' || scope === 'window') && locus?.chrom && locus.chrom !== GENOME ? locus.chrom : null
+}
+
+/** API region parameters (chrom, start, end) for all / locus / window stats scopes. */
+export function statsRegion(
+  scope: StatsChromScope | undefined,
+  locus: Locus | null | undefined,
+): { chrom: string | null; start: number | null; end: number | null } {
+  const chrom = statsChrom(scope, locus)
+  if (!chrom || scope !== 'window' || !locus) return { chrom, start: null, end: null }
+  const start = Math.max(0, Math.round(locus.start))
+  const end = Math.round(locus.end)
+  if (!(end > start)) return { chrom, start: null, end: null }
+  return { chrom, start, end }
+}
+
+/** Per-cell median Rg across finite traces belonging to each non-null cell_id. */
+export function perCellMedians(rg: RgStats): number[] {
+  const byCell = new Map<string, number[]>()
+  for (let i = 0; i < rg.rg.length; i++) {
+    const cid = rg.cell_ids[i]
+    const v = rg.rg[i]
+    if (!cid || typeof v !== 'number' || !Number.isFinite(v)) continue
+    let list = byCell.get(cid)
+    if (!list) {
+      list = []
+      byCell.set(cid, list)
+    }
+    list.push(v)
+  }
+  const out: number[] = []
+  for (const vals of byCell.values()) {
+    vals.sort((a, b) => a - b)
+    const m = vals.length
+    out.push(m % 2 ? vals[(m - 1) / 2] : (vals[m / 2 - 1] + vals[m / 2]) / 2)
+  }
+  return out
+}
+
+export interface MannWhitneyResult {
+  u: number
+  p: number
+  rankBiserial: number
+  exploratory: boolean
+}
+
+function erfcApprox(x: number): number {
+  const z = Math.abs(x)
+  const t = 1 / (1 + 0.3275911 * z)
+  const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))))
+  const res = poly * Math.exp(-z * z)
+  return x >= 0 ? res : 2 - res
+}
+
+/**
+ * Exact U_a and two-sided tie- and continuity-corrected normal-approximation p-value.
+ * Returns null if either sample has no finite values.
+ */
+export function mannWhitneyTwoSided(a: readonly number[], b: readonly number[]): MannWhitneyResult | null {
+  const va = a.filter((x) => typeof x === 'number' && Number.isFinite(x))
+  const vb = b.filter((x) => typeof x === 'number' && Number.isFinite(x))
+  const nA = va.length
+  const nB = vb.length
+  if (!nA || !nB) return null
+
+  const pooled = [
+    ...va.map((v) => ({ v, grp: 0 as const })),
+    ...vb.map((v) => ({ v, grp: 1 as const })),
+  ].sort((x, y) => x.v - y.v)
+
+  let rankSumA = 0
+  let tieSum = 0
+  let i = 0
+  const N = pooled.length
+  while (i < N) {
+    let j = i + 1
+    while (j < N && pooled[j].v === pooled[i].v) j++
+    const t = j - i
+    const avgRank = (i + 1 + j) / 2
+    for (let k = i; k < j; k++) {
+      if (pooled[k].grp === 0) rankSumA += avgRank
+    }
+    if (t > 1) tieSum += t * t * t - t
+    i = j
+  }
+
+  const u = rankSumA - (nA * (nA + 1)) / 2
+  const totalPairs = nA * nB
+  const rankBiserial = (2 * u) / totalPairs - 1
+  const exploratory = Math.min(nA, nB) < 5
+  const tieCorr = N > 1 ? tieSum / (N * (N - 1)) : 0
+  const varU = (totalPairs / 12) * (N + 1 - tieCorr)
+  if (!(varU > 0)) return { u, p: 1, rankBiserial: 0, exploratory }
+
+  const diff = Math.abs(u - totalPairs / 2)
+  if (diff <= 0.5) return { u, p: 1, rankBiserial, exploratory }
+  const z = (diff - 0.5) / Math.sqrt(varU)
+  const p = Math.min(1, Math.max(0, erfcApprox(z / Math.SQRT2)))
+  return { u, p, rankBiserial, exploratory }
 }
 
 export interface Histogram {

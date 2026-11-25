@@ -13,7 +13,7 @@ import type { EmbeddingInfo, Layer, LayerStyle } from './types'
 /** 'genome': combined tracks + matrix triangles on one axis (was 'tracks'). */
 export type PaneType = '3d' | 'spatial' | 'embedding' | 'genome' | 'matrix' | 'stats'
 export type WsLayout = 'tabs' | 'grid'
-export type StatsKind = 'rg' | 'scaling' | 'hist' | 'scatter'
+export type StatsKind = 'rg' | 'scaling' | 'ps' | 'hist' | 'scatter'
 export type TrackAgg = 'mean' | 'median' | 'max'
 export type DistanceStat = 'median' | 'mean' | 'contact'
 
@@ -45,9 +45,11 @@ export interface PaneOptions {
   statsKind?: StatsKind
   fieldX?: string | null
   fieldY?: string | null
-  /** stats rg / scaling: all chromosomes or only the locus chromosome */
-  chromScope?: 'all' | 'locus'
-  /** stats rg / scaling: groups overlaid in their colours (group refs) */
+  /** stats rg / scaling / ps: all chromosomes, whole locus chromosome, or locus [start, end) window */
+  chromScope?: 'all' | 'locus' | 'window'
+  /** stats rg: per-trace (default) or per-cell median distribution */
+  rgUnit?: 'trace' | 'cell'
+  /** stats rg / scaling / ps: groups overlaid in their colours (group refs) */
   compareGroups?: string[]
   /** matrix: colour scale changes from the defaults (absent = defaults) */
   color?: ColorScaleSetting
@@ -128,7 +130,7 @@ export function supportedPaneTypes(k: DataKind): PaneType[] {
     embedding: k.hasEmbeddings,
     genome: k.hasCoords || k.hasTracks || !!k.hasContactMaps,
     matrix: k.hasCoords || !!k.hasContactMaps,
-    stats: k.hasCoords || !!k.manyCells,
+    stats: k.hasCoords || !!k.manyCells || !!k.hasContactMaps,
   }
   return PANE_TYPES.filter((t) => ok[t])
 }
@@ -431,10 +433,11 @@ function parseOptions(p: Partial<Pane> & LegacyPane): PaneOptions & { scope?: Sc
   if (typeof p.resolution === 'number' && p.resolution > 0) o.resolution = p.resolution
   if (p.stat === 'median' || p.stat === 'mean' || p.stat === 'contact') o.stat = p.stat
   if (typeof p.threshold === 'number' && p.threshold > 0) o.threshold = p.threshold
-  if (p.statsKind === 'rg' || p.statsKind === 'scaling' || p.statsKind === 'hist' || p.statsKind === 'scatter') o.statsKind = p.statsKind
+  if (p.statsKind === 'rg' || p.statsKind === 'scaling' || p.statsKind === 'ps' || p.statsKind === 'hist' || p.statsKind === 'scatter') o.statsKind = p.statsKind
   if (typeof p.fieldX === 'string') o.fieldX = p.fieldX
   if (typeof p.fieldY === 'string') o.fieldY = p.fieldY
-  if (p.chromScope === 'all' || p.chromScope === 'locus') o.chromScope = p.chromScope
+  if (p.chromScope === 'all' || p.chromScope === 'locus' || p.chromScope === 'window') o.chromScope = p.chromScope
+  if (p.rgUnit === 'trace' || p.rgUnit === 'cell') o.rgUnit = p.rgUnit
   if (typeof p.explode === 'number' && p.explode > 0 && p.explode <= MAX_EXPLODE) o.explode = p.explode
   const color = parseColorScale(p.color)
   if (color) o.color = color

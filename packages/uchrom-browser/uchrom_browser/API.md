@@ -595,10 +595,10 @@ tools (`frontend/src/webmcp.ts`, feature-detected, experimental).  Python:
 
 `select_cells` returns the canonical cell IDs accepted by the server; the browser selection and any
 named group use that same list. `set_locus` returns the resolved, chromosome-clamped locus reported
-by `describe_workspace`. For Rg / scaling stats, `open_view` accepts `chrom_scope="all"` (default)
-or `chrom_scope="locus"`; the latter filters by the current locus chromosome, over the whole
-chromosome rather than only the locus start/end interval. `describe_workspace` reports this setting
-as `chrom_scope` for each stats pane.
+by `describe_workspace`. For Rg / scaling / P(s) stats, `open_view` accepts `stats="rg" | "scaling" | "ps" | "hist" | "scatter"`,
+`chrom_scope="all"` (default), `"locus"` (whole current locus chromosome), or `"window"` (current locus
+`[start, end)` interval), `source` (contact-map key for `stats="ps"`), and `rg_unit="trace" | "cell"`.
+`describe_workspace` reports `chrom_scope` and, when set, `rg_unit` and `source` for each stats pane.
 
 ### `POST /api/control/actions`
 
