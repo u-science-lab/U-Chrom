@@ -59,7 +59,8 @@ class ActionBroker:
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"
                     continue
-                if msg.get("id") not in self._pending:
+                fut = self._pending.get(msg.get("id"))
+                if fut is None or fut.done():
                     continue
                 yield f"event: action\ndata: {json.dumps(msg)}\n\n"
         finally:

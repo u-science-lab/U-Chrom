@@ -773,6 +773,31 @@ class McpServer:
                 p["summary"] = None
         return out
 
+    @staticmethod
+    def _capture_path_key(dest: Path) -> tuple[tuple[int, int], tuple[str, ...]]:
+        cur = Path(os.path.abspath(str(dest)))
+        rel_rev: List[str] = []
+        while not cur.exists():
+            parent = cur.parent
+            if parent == cur:
+                break
+            rel_rev.append(cur.name)
+            cur = parent
+        st = os.stat(cur)
+        anc_key = (st.st_dev, st.st_ino)
+        case_insensitive = False
+        probe = cur
+        while probe.parent != probe:
+            alt_name = probe.name.swapcase()
+            if alt_name != probe.name:
+                alt = probe.parent / alt_name
+                if alt.exists() and os.path.samefile(probe, alt):
+                    case_insensitive = True
+                break
+            probe = probe.parent
+        rel_parts = tuple(p.casefold() if case_insensitive else p for p in reversed(rel_rev))
+        return anc_key, rel_parts
+
     def execute_batch(self, steps: List[Any], explicit_page: Optional[str] = None) -> Dict[str, Any]:
         if not isinstance(steps, list) or not (1 <= len(steps) <= 20):
             raise ValueError("batch 'steps' must be an array containing between 1 and 20 steps")
@@ -784,7 +809,7 @@ class McpServer:
             cap_schema.setdefault("properties", {})["path"] = {"type": "string"}
 
         validated: List[tuple[str, Dict[str, Any]]] = []
-        seen_capture_paths: set[Path] = set()
+        seen_capture_paths: set[tuple[tuple[int, int], tuple[str, ...]]] = set()
         for idx, raw_step in enumerate(steps):
             if not isinstance(raw_step, dict):
                 raise ValueError(f"step[{idx}]: must be an object with 'action' and optional 'args'")
@@ -817,13 +842,14 @@ class McpServer:
                 explicit_fmt = sargs.get("format")
                 fmt = _capture_format(explicit_fmt, sargs["path"])
                 dest = _resolve_capture_dest(sargs["path"], explicit_fmt, fmt)
-                norm = Path(os.path.abspath(str(dest)))
-                for prev in seen_capture_paths:
-                    if norm == prev or prev in norm.parents or norm in prev.parents:
+                anc_key, rel_parts = self._capture_path_key(dest)
+                for prev_anc, prev_parts in seen_capture_paths:
+                    n_min = min(len(rel_parts), len(prev_parts))
+                    if anc_key == prev_anc and rel_parts[:n_min] == prev_parts[:n_min]:
                         raise ValueError(
                             f"step[{idx}] (capture_view): capture path {sargs['path']!r} conflicts with earlier batch capture path"
                         )
-                seen_capture_paths.add(norm)
+                seen_capture_paths.add((anc_key, rel_parts))
 
             validated.append((act, sargs))
 
@@ -956,9 +982,12 @@ class McpServer:
         if not isinstance(result, dict):
             raise ActionExecutionError("capture_view returned malformed result")
         b64 = result.get("data_base64") or result.get("png_base64")
-        if not b64:
-            raise ActionExecutionError("capture_view did not return image data")
-        data = base64.b64decode(b64)
+        if not isinstance(b64, str) or not b64:
+            raise ActionExecutionError("capture_view did not return valid base64 image data")
+        try:
+            data = base64.b64decode(b64, validate=True)
+        except (ValueError, TypeError) as exc:
+            raise ActionExecutionError(f"capture_view returned malformed base64 image data: {exc}") from None
         if dest is not None:
             _write_exclusive(dest, data)
         else:

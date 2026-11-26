@@ -1023,6 +1023,49 @@ def test_mcp_batch_and_summary_hardening(tmp_path):
         assert sc["completed"] == 1 and sc["failed_step"] == 1 and sc["failed_action"] == "get_selection"
         assert sc["results"] == [{"step": 0, "action": "arrange", "result": {"layout": "grid"}}]
 
+    # 1b. Case-aliased batch capture paths on case-insensitive FS fail upfront with 0 dispatches
+    cap_a = tmp_path / "CaseSub" / "out.png"
+    cap_a.parent.mkdir()
+    cap_b = tmp_path / "casesub" / "out.png"
+    if cap_a.parent.exists() and cap_b.parent.exists() and cap_a.parent.samefile(cap_b.parent):
+        with patch.object(srv, "_request") as req_mock, patch.object(srv, "_load_ui_tools", return_value=load_tools()["tools"]):
+            bad_case = _call_tool(srv, 2, "uchrom_batch", {
+                "page": "tabA",
+                "steps": [
+                    {"action": "capture_view", "args": {"path": str(cap_a)}},
+                    {"action": "capture_view", "args": {"path": str(cap_b)}},
+                ],
+            })
+            assert bad_case["isError"] is True
+            req_mock.assert_not_called()
+
+    # 1c. Malformed data_base64 inside capture_view preserves partial progress instead of -32603
+    def _bad_b64_urlopen(req, timeout=None):
+        url_str = req.full_url
+        if url_str.endswith("/api/control/pages"):
+            return _FakeResp(json.dumps([{"page": "tabA"}]).encode())
+        if url_str.endswith("/api/control/tools"):
+            return _FakeResp(json.dumps(load_tools()).encode())
+        if url_str.endswith("/api/control/actions"):
+            body = json.loads(req.data.decode())
+            if body.get("name") == "arrange":
+                return _FakeResp(json.dumps({"result": {"layout": "grid"}}).encode())
+            return _FakeResp(json.dumps({"result": {"data_base64": 123, "format": "png"}}).encode())
+        raise AssertionError(f"unexpected URL {url_str}")
+
+    with patch("urllib.request.urlopen", side_effect=_bad_b64_urlopen):
+        res_b64 = _call_tool(srv, 5, "uchrom_batch", {
+            "page": "tabA",
+            "steps": [
+                {"action": "arrange", "args": {"layout": "grid"}},
+                {"action": "capture_view", "args": {"path": str(tmp_path / "b64_err.png")}},
+            ],
+        })
+        assert res_b64["isError"] is True
+        sc_b64 = res_b64["structuredContent"]
+        assert sc_b64["completed"] == 1 and sc_b64["failed_step"] == 1 and sc_b64["failed_action"] == "capture_view"
+        assert "base64" in sc_b64["error"]
+
     # Verify _request itself wraps IncompleteRead cleanly on status
     with patch("urllib.request.urlopen", side_effect=http.client.IncompleteRead(b"", 5)):
         res_wrap = _call_tool(srv, 4, "uchrom_status")

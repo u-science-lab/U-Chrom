@@ -184,7 +184,13 @@ def test_broker_drops_timed_out_action_before_sse_delivery():
         with pytest.raises(asyncio.TimeoutError):
             await broker.call("open_view", {"type": "stats"}, timeout=0.01, page_id="tabT")
 
-        # Stale timed-out message should be dropped before delivery, so calling stream next
+        # Also verify the race where fut is cancelled/done while still in _pending before finally cleans it
+        race_fut = asyncio.get_running_loop().create_future()
+        race_fut.cancel()
+        broker._pending["stale_race"] = race_fut
+        await broker._pages["tabT"].queue.put({"id": "stale_race", "name": "arrange", "args": {"layout": "grid"}})
+
+        # Stale timed-out/cancelled messages should be dropped before delivery, so calling stream next
         # sees only freshly queued actions (or keepalive timeout).
         fresh_task = asyncio.create_task(broker.call("get_selection", {}, timeout=1.0, page_id="tabT"))
         await asyncio.sleep(0)
