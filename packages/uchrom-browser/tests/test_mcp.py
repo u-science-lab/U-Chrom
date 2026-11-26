@@ -184,6 +184,7 @@ def test_tools_list_dynamic_and_offline_fallback(server):
         "uchrom_list_pages",
         "uchrom_bind_page",
         "uchrom_wait_for_page",
+        "uchrom_batch",
     }
 
     for url in (server, "http://127.0.0.1:1"):
@@ -672,7 +673,7 @@ def test_mcp_resources_prompts_wait_doctor_and_print_config(server):
 
     res_list = _rpc(srv, {"jsonrpc": "2.0", "id": 2, "method": "resources/list"})["result"]
     uris = {r["uri"] for r in res_list["resources"]}
-    assert uris == {"uchrom://status", "uchrom://workspace", "uchrom://selection"}
+    assert uris == {"uchrom://status", "uchrom://pages", "uchrom://workspace", "uchrom://selection"}
 
     st_read = _rpc(srv, {"jsonrpc": "2.0", "id": 3, "method": "resources/read", "params": {"uri": "uchrom://status"}})
     st_json = json.loads(st_read["result"]["contents"][0]["text"])
@@ -778,3 +779,139 @@ def test_mcp_resources_prompts_wait_doctor_and_print_config(server):
     assert d_off.returncode == 3
     off_doc = json.loads(d_off.stdout)
     assert off_doc["server_reachable"] is False and len(off_doc["proxy_warnings"]) >= 1
+
+
+def test_mcp_page_summaries_and_batch(server, tmp_path):
+    from uchrom_browser.mcp import McpServer
+
+    png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+
+    def _mk_handler(ds_name):
+        def handler(name, args):
+            if name == "describe_workspace":
+                return {
+                    "dataset": {"id": f"id_{ds_name}", "name": ds_name, "path": f"/tmp/{ds_name}.zarr"},
+                    "views": [{"pane": "P1"}],
+                    "active_view": "P1",
+                    "layout": "tabs",
+                    "focus": {"cell": None, "group": None},
+                    "selection": None,
+                    "locus": {"chrom": "chr1", "start": 0, "end": 1000},
+                }
+            if name == "open_view":
+                return {"pane": "P2"}
+            if name == "capture_view":
+                return {
+                    "data_base64": base64.b64encode(png_bytes).decode(),
+                    "format": args.get("format", "png"),
+                    "width": 20,
+                    "height": 20,
+                }
+            if name == "show_view" and args.get("pane") == "BOOM":
+                raise RuntimeError("pane not found")
+            return {"ok": True, "args": args}
+
+        return handler
+
+    tab_a = FakeSSEPage(server, _mk_handler("alpha"), page="tabA")
+    tab_b = FakeSSEPage(server, _mk_handler("beta"), page="tabB")
+    tab_a.start()
+    tab_b.start()
+    assert tab_a.ready.wait(5) and tab_b.ready.wait(5)
+    try:
+        srv = McpServer(url=server, timeout=5.0)
+
+        # list_pages and uchrom://pages attach per-tab summaries
+        lp = _call_tool(srv, 1, "uchrom_list_pages")
+        assert lp["isError"] is False
+        by_id = {p["page"]: p for p in lp["structuredContent"]["pages"]}
+        assert by_id["tabA"]["summary"]["dataset"] == "alpha"
+        assert by_id["tabB"]["summary"]["dataset"] == "beta"
+
+        pages_res = _rpc(srv, {"jsonrpc": "2.0", "id": 2, "method": "resources/read", "params": {"uri": "uchrom://pages"}})
+        pages_json = json.loads(pages_res["result"]["contents"][0]["text"])
+        assert {p["summary"]["dataset"] for p in pages_json["pages"]} == {"alpha", "beta"}
+
+        # probe=False skips describe_workspace calls
+        before_a, before_b = len(tab_a.seen), len(tab_b.seen)
+        lp_noprobe = _call_tool(srv, 3, "uchrom_list_pages", {"probe": False})
+        assert lp_noprobe["isError"] is False
+        assert "summary" not in lp_noprobe["structuredContent"]["pages"][0]
+        assert len(tab_a.seen) == before_a and len(tab_b.seen) == before_b
+
+        # Upfront validation failure dispatches ZERO steps
+        cap_path = tmp_path / "batch_ok.png"
+        bad_batch = _call_tool(
+            srv,
+            4,
+            "uchrom_batch",
+            {
+                "page": "tabA",
+                "steps": [
+                    {"action": "set_locus", "args": {"chrom": "chr1", "start": 0, "end": 500}},
+                    {"action": "open_view", "args": {"type": "bogus"}},
+                ],
+            },
+        )
+        assert bad_batch["isError"] is True
+        assert len(tab_a.seen) == before_a and len(tab_b.seen) == before_b
+
+        # Duplicate capture output path inside one batch fails upfront with ZERO dispatches
+        dup_cap = _call_tool(
+            srv,
+            5,
+            "uchrom_batch",
+            {
+                "page": "tabA",
+                "steps": [
+                    {"action": "capture_view", "args": {"path": str(cap_path)}},
+                    {"action": "capture_view", "args": {"path": str(cap_path)}},
+                ],
+            },
+        )
+        assert dup_cap["isError"] is True
+        assert len(tab_a.seen) == before_a
+
+        # Valid 3-step batch executes sequentially on tabA only
+        ok_batch = _call_tool(
+            srv,
+            6,
+            "uchrom_batch",
+            {
+                "page": "tabA",
+                "steps": [
+                    {"action": "set_locus", "args": {"chrom": "chr1", "start": 100, "end": 900}},
+                    {"action": "open_view", "args": {"type": "stats", "stats": "rg"}},
+                    {"action": "capture_view", "args": {"pane": "P2", "path": str(cap_path)}},
+                ],
+            },
+        )
+        assert ok_batch["isError"] is False
+        sc = ok_batch["structuredContent"]
+        assert sc["page"] == "tabA" and sc["completed"] == 3
+        assert len(sc["results"]) == 3
+        assert cap_path.read_bytes() == png_bytes
+        assert len(tab_b.seen) == before_b
+
+        # Mid-batch runtime error halts before trailing step and reports completed count
+        before_a2 = len(tab_a.seen)
+        mid_fail = _call_tool(
+            srv,
+            7,
+            "uchrom_batch",
+            {
+                "page": "tabA",
+                "steps": [
+                    {"action": "arrange", "args": {"layout": "grid"}},
+                    {"action": "show_view", "args": {"pane": "BOOM"}},
+                    {"action": "close_view", "args": {"pane": "P2"}},
+                ],
+            },
+        )
+        assert mid_fail["isError"] is True
+        mf = mid_fail["structuredContent"]
+        assert mf["completed"] == 1 and mf["failed_step"] == 1 and mf["failed_action"] == "show_view"
+        assert len(tab_a.seen) == before_a2 + 2  # arrange + failing show_view; close_view never sent
+    finally:
+        tab_a.close()
+        tab_b.close()

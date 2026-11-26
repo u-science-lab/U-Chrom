@@ -311,3 +311,79 @@ def test_ctl_concurrent_binds_permissions_and_transport_codes(tmp_path):
         assert json.loads(r_504.stderr)["code"] == "UNREACHABLE"
     finally:
         srv.shutdown()
+
+
+def test_ctl_pages_summary_and_batch(server, tmp_path):  # noqa: F811
+    state = tmp_path / "ctl.json"
+
+    def _handle(ds_name):
+        def fn(name, args):
+            if name == "describe_workspace":
+                return {
+                    "dataset": {"id": f"d_{ds_name}", "name": ds_name, "path": f"/data/{ds_name}.zarr"},
+                    "views": [{"pane": "P1"}],
+                    "active_view": "P1",
+                    "layout": "tabs",
+                    "focus": {"cell": None, "group": None},
+                    "selection": None,
+                    "locus": {"chrom": "chr1", "start": 0, "end": 1000},
+                }
+            if name == "show_view" and args.get("pane") == "MISSING":
+                raise RuntimeError("no such pane")
+            return {"from": ds_name, "name": name, "args": args}
+
+        return fn
+
+    tab_a = FakeSSEPage(server, _handle("alpha"), page="tab1")
+    tab_b = FakeSSEPage(server, _handle("beta"), page="tab2")
+    tab_a.start()
+    tab_b.start()
+    assert tab_a.ready.wait(5) and tab_b.ready.wait(5)
+    try:
+        r_pages = _run_ctl("pages", state_file=state, url=server)
+        assert r_pages.returncode == 0
+        pages_out = {p["page"]: p for p in json.loads(r_pages.stdout)["pages"]}
+        assert pages_out["tab1"]["summary"]["dataset"] == "alpha"
+        assert pages_out["tab2"]["summary"]["dataset"] == "beta"
+
+        before_a = len(tab_a.seen)
+        r_noprobe = _run_ctl("pages", "--no-probe", state_file=state, url=server)
+        assert r_noprobe.returncode == 0
+        assert "summary" not in json.loads(r_noprobe.stdout)["pages"][0]
+        assert len(tab_a.seen) == before_a
+
+        # Batch upfront schema rejection -> exit 2, zero actions dispatched
+        bad_steps = json.dumps([
+            {"action": "arrange", "args": {"layout": "grid"}},
+            {"action": "open_view", "args": {"type": "invalid"}},
+        ])
+        r_bad = _run_ctl("--page", "tab1", "batch", "--steps-json", bad_steps, state_file=state, url=server)
+        assert r_bad.returncode == 2
+        assert json.loads(r_bad.stderr)["code"] == "INVALID_ARGS"
+        assert len(tab_a.seen) == before_a
+
+        # Batch success via --steps-file
+        steps_file = tmp_path / "steps.json"
+        steps_file.write_text(json.dumps([
+            {"action": "set_locus", "args": {"chrom": "chr1", "start": 10, "end": 200}},
+            {"action": "arrange", "args": {"layout": "grid"}},
+        ]))
+        r_ok = _run_ctl("--page", "tab1", "batch", "--steps-file", str(steps_file), state_file=state, url=server)
+        assert r_ok.returncode == 0
+        ok_json = json.loads(r_ok.stdout)
+        assert ok_json["page"] == "tab1" and ok_json["completed"] == 2
+
+        # Mid-batch browser failure -> exit 5 with structured step progress
+        fail_steps = json.dumps([
+            {"action": "arrange", "args": {"layout": "tabs"}},
+            {"action": "show_view", "args": {"pane": "MISSING"}},
+            {"action": "close_view", "args": {"pane": "P1"}},
+        ])
+        r_fail = _run_ctl("--page", "tab1", "batch", "--steps-json", fail_steps, state_file=state, url=server)
+        assert r_fail.returncode == 5
+        err_json = json.loads(r_fail.stderr)
+        assert err_json["code"] == "ACTION_ERROR"
+        assert err_json["completed"] == 1 and err_json["failed_step"] == 1
+    finally:
+        tab_a.close()
+        tab_b.close()

@@ -19,10 +19,11 @@ Coding agents and Python drive an open browser using the same actions (`ui_tools
   ```
 - **Control CLI (`uchrom-browser-ctl`)** — strict JSON output and semantic exit codes for terminal agents:
   ```bash
-  uchrom-browser-ctl pages
+  uchrom-browser-ctl pages                   # connected tabs + active dataset summary
   uchrom-browser-ctl bind <page_id>          # when multiple tabs are open
   uchrom-browser-ctl selection
   uchrom-browser-ctl open stats --stats rg --compare field:cell_type=Purkinje,field:cell_type=Granule
+  uchrom-browser-ctl batch --steps-json '[{"action":"arrange","args":{"layout":"grid"}}]'
   uchrom-browser-ctl capture --out rg.svg
   ```
 - **Python client (`uchrom_browser.connect()`)**:

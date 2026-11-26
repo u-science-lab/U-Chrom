@@ -204,13 +204,14 @@ use only the Python standard library and emit strict JSON:
 ```bash
 uchrom-browser-ctl doctor                  # verify URL, connected tabs, and proxy settings
 uchrom-browser-ctl wait                    # wait for a browser tab to connect
-uchrom-browser-ctl pages                   # list connected tabs + loaded datasets
+uchrom-browser-ctl pages                   # list connected tabs (with workspace summary) + datasets
 uchrom-browser-ctl bind <page_id>          # bind session for this server URL (needed if 2+ tabs)
 uchrom-browser-ctl tools --schema open_view
 uchrom-browser-ctl selection
 uchrom-browser-ctl locus chr15:3000000-33000000
 uchrom-browser-ctl open stats --stats rg --chrom-scope locus --compare g123,field:cell_type=Granule
 uchrom-browser-ctl arrange grid
+uchrom-browser-ctl batch --steps-json '[{"action":"arrange","args":{"layout":"grid"}},{"action":"capture_view","args":{"path":"fig.svg"}}]'
 uchrom-browser-ctl capture --out fig.svg   # refuses overwrite, '..', or symlinks
 ```
 
@@ -226,9 +227,9 @@ uchrom-browser-mcp --print-config claude   # or: claude-code, codex, cursor
 uchrom-browser-mcp --doctor                # check server health, datasets, tabs & loopback proxies
 ```
 
-- **Tools**: `uchrom_status`, `uchrom_list_pages` (tabs + datasets), `uchrom_bind_page`,
-  `uchrom_wait_for_page`, and `uchrom_<action>` for every entry in `ui_tools.json`.
-- **Resources & Prompts**: read-only `uchrom://status`, `uchrom://workspace`, and `uchrom://selection`
+- **Tools**: `uchrom_status`, `uchrom_list_pages` (tabs + optional workspace summary + datasets), `uchrom_bind_page`,
+  `uchrom_wait_for_page`, `uchrom_batch` (validate and execute `1..20` sequential steps on one resolved tab), and `uchrom_<action>` for every entry in `ui_tools.json`.
+- **Resources & Prompts**: read-only `uchrom://status`, `uchrom://pages`, `uchrom://workspace`, and `uchrom://selection`
   resources, plus guided `compare-selection` and `inspect-locus` workflow prompts.
 - **Multi-tab & file safety**: both MCP and `uchrom-browser-ctl` refuse mutating/reading an ambiguous
   workspace when multiple tabs are connected until `page` is passed or a tab is bound, and never silently

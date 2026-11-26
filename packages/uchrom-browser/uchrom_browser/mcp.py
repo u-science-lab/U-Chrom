@@ -57,6 +57,18 @@ class ActionExecutionError(BrowserError):
     """The HTTP server or browser page rejected or failed the requested action."""
 
 
+class BatchStepError(BrowserError):
+    """A batch execution step failed partway through."""
+
+    def __init__(self, cause: Exception, page: str, step_index: int, action: str, results: List[Dict[str, Any]]):
+        super().__init__(str(cause))
+        self.cause = cause
+        self.page = page
+        self.step_index = step_index
+        self.action = action
+        self.results = list(results)
+
+
 _SESSION_TOOLS: List[Dict[str, Any]] = [
     {
         "name": "uchrom_status",
@@ -66,8 +78,16 @@ _SESSION_TOOLS: List[Dict[str, Any]] = [
     },
     {
         "name": "uchrom_list_pages",
-        "description": "List connected browser pages (tabs), loaded datasets, and the currently bound page.",
-        "inputSchema": {"type": "object", "properties": {}},
+        "description": "List connected browser pages (tabs) with optional per-tab workspace summaries, loaded datasets, and the currently bound page.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "probe": {
+                    "type": "boolean",
+                    "description": "Query each connected tab's describe_workspace for its active dataset, layout, and selection summary (default: true).",
+                }
+            },
+        },
         "annotations": {"readOnlyHint": True},
     },
     {
@@ -101,6 +121,26 @@ _SESSION_TOOLS: List[Dict[str, Any]] = [
         },
         "annotations": {"readOnlyHint": True},
     },
+    {
+        "name": "uchrom_batch",
+        "description": "Validate all steps upfront and run 1..20 browser UI actions sequentially on a single resolved tab.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["steps"],
+            "properties": {
+                "steps": {
+                    "type": "array",
+                    "description": "Ordered list of {action, args?} objects using ui_tools.json action names.",
+                    "items": {"type": "object"},
+                },
+                "page": {
+                    "type": "string",
+                    "description": "Target browser page id from uchrom_list_pages",
+                },
+            },
+        },
+        "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False},
+    },
 ]
 
 _RESOURCES: List[Dict[str, Any]] = [
@@ -108,6 +148,12 @@ _RESOURCES: List[Dict[str, Any]] = [
         "uri": "uchrom://status",
         "name": "browser-status",
         "description": "Browser server health, loaded datasets, connected tabs, and current page binding.",
+        "mimeType": "application/json",
+    },
+    {
+        "uri": "uchrom://pages",
+        "name": "connected-pages",
+        "description": "Connected browser tabs with active dataset/workspace summaries, loaded datasets, and bound page.",
         "mimeType": "application/json",
     },
     {
@@ -664,6 +710,116 @@ class McpServer:
                 raise NoPageConnectedError(f"timed out after {secs:g}s waiting for {target_desc} to connect")
             time.sleep(min(0.2, rem_sleep))
 
+    def _summarize_pages(self, pages: List[Dict[str, Any]], *, probe: bool = True) -> List[Dict[str, Any]]:
+        out = [dict(p) for p in pages]
+        if not probe or len(out) > 8:
+            return out
+        probe_timeout = min(self.timeout, 1.5)
+        for p in out:
+            pid = p.get("page")
+            if not isinstance(pid, str):
+                p["summary"] = None
+                continue
+            try:
+                resp = self._request(
+                    "POST",
+                    "/api/control/actions",
+                    {"name": "describe_workspace", "args": {}, "timeout": probe_timeout, "page": pid},
+                    timeout=probe_timeout,
+                )
+                res = resp.get("result")
+                if isinstance(res, dict) and isinstance(res.get("dataset"), dict):
+                    ds = res["dataset"]
+                    views = res.get("views")
+                    p["summary"] = {
+                        "dataset": ds.get("name"),
+                        "dataset_id": ds.get("id"),
+                        "path": ds.get("path"),
+                        "layout": res.get("layout"),
+                        "active_view": res.get("active_view"),
+                        "n_views": len(views) if isinstance(views, list) else None,
+                        "selection": res.get("selection"),
+                        "focus": res.get("focus"),
+                        "locus": res.get("locus"),
+                    }
+                else:
+                    p["summary"] = None
+            except ActionExecutionError as exc:
+                p["summary"] = {"dataset": None} if "no dataset is open" in str(exc).lower() else None
+            except BrowserError:
+                p["summary"] = None
+        return out
+
+    def execute_batch(self, steps: List[Any], explicit_page: Optional[str] = None) -> Dict[str, Any]:
+        if not isinstance(steps, list) or not (1 <= len(steps) <= 20):
+            raise ValueError("batch 'steps' must be an array containing between 1 and 20 steps")
+
+        raw_tools = {t["name"]: t for t in self._load_ui_tools()}
+        cap_schema: Optional[Dict[str, Any]] = None
+        if "capture_view" in raw_tools:
+            cap_schema = copy.deepcopy(raw_tools["capture_view"]["inputSchema"])
+            cap_schema.setdefault("properties", {})["path"] = {"type": "string"}
+
+        validated: List[tuple[str, Dict[str, Any]]] = []
+        seen_capture_paths: set[Path] = set()
+        for idx, raw_step in enumerate(steps):
+            if not isinstance(raw_step, dict):
+                raise ValueError(f"step[{idx}]: must be an object with 'action' and optional 'args'")
+            unknown_keys = set(raw_step) - {"action", "args"}
+            if unknown_keys:
+                raise ValueError(f"step[{idx}]: unknown step key(s): {', '.join(sorted(unknown_keys))}")
+            raw_action = raw_step.get("action")
+            if not isinstance(raw_action, str) or not raw_action.strip():
+                raise ValueError(f"step[{idx}]: must include non-empty string 'action'")
+            act = raw_action.removeprefix("uchrom_")
+            if act not in raw_tools:
+                raise ValueError(f"step[{idx}]: unknown or unsupported batch action {raw_action!r}")
+
+            raw_args = raw_step.get("args")
+            if raw_args is None:
+                sargs: Dict[str, Any] = {}
+            elif isinstance(raw_args, dict):
+                sargs = dict(raw_args)
+            else:
+                raise ValueError(f"step[{idx}]: 'args' must be an object")
+            if "page" in sargs:
+                raise ValueError(f"step[{idx}]: per-step 'page' is not allowed; pass 'page' on the batch itself")
+
+            schema = cap_schema if (act == "capture_view" and cap_schema is not None) else raw_tools[act]["inputSchema"]
+            err = _validate_arguments(schema, sargs)
+            if err is not None:
+                raise ValueError(f"step[{idx}] ({act}): {err}")
+
+            if act == "capture_view" and sargs.get("path") is not None:
+                explicit_fmt = sargs.get("format")
+                fmt = _capture_format(explicit_fmt, sargs["path"])
+                dest = _resolve_capture_dest(sargs["path"], explicit_fmt, fmt)
+                norm = Path(os.path.abspath(str(dest)))
+                if norm in seen_capture_paths:
+                    raise ValueError(f"step[{idx}] (capture_view): duplicate capture path {sargs['path']!r} in batch")
+                seen_capture_paths.add(norm)
+
+            validated.append((act, sargs))
+
+        target_page = self._resolve_page(explicit_page)
+        results: List[Dict[str, Any]] = []
+        for idx, (act, sargs) in enumerate(validated):
+            try:
+                if act == "capture_view":
+                    res = self._handle_capture_view({**sargs, "page": target_page}, resolved_page=target_page)
+                else:
+                    cleaned = {k: v for k, v in sargs.items() if v is not None}
+                    resp = self._request(
+                        "POST",
+                        "/api/control/actions",
+                        {"name": act, "args": cleaned, "timeout": self.timeout, "page": target_page},
+                    )
+                    res = resp["result"]
+                results.append({"step": idx, "action": act, "result": res})
+            except (BrowserError, ValueError, OSError) as exc:
+                raise BatchStepError(exc, target_page, idx, act, results) from None
+        return {"page": target_page, "completed": len(results), "results": results}
+
     # -- tool execution ---------------------------------------------------
     def _call_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         tools_by_name = {t["name"]: t for t in self._build_tools()}
@@ -689,7 +845,8 @@ class McpServer:
                 })
 
             if name == "uchrom_list_pages":
-                pages = self._connected_pages()
+                probe = True if arguments.get("probe") is None else bool(arguments["probe"])
+                pages = self._summarize_pages(self._connected_pages(), probe=probe)
                 datasets = self._request("GET", "/api/datasets")
                 return _tool_ok({"pages": pages, "datasets": datasets, "bound_page": self.bound_page})
 
@@ -713,6 +870,9 @@ class McpServer:
                 wait_seconds = 10.0 if arguments.get("wait_seconds") is None else arguments["wait_seconds"]
                 return _tool_ok(self.wait_for_page(page=arguments.get("page"), wait_seconds=wait_seconds))
 
+            if name == "uchrom_batch":
+                return _tool_ok(self.execute_batch(arguments["steps"], explicit_page=arguments.get("page")))
+
             action = name.removeprefix("uchrom_")
             if action == "capture_view":
                 return _tool_ok(self._handle_capture_view(arguments))
@@ -730,11 +890,25 @@ class McpServer:
             else:
                 out = {"result": result, "page": target_page}
             return _tool_ok(out)
+        except BatchStepError as exc:
+            payload = _json_safe({
+                "page": exc.page,
+                "completed": len(exc.results),
+                "results": exc.results,
+                "failed_step": exc.step_index,
+                "failed_action": exc.action,
+                "error": str(exc.cause),
+            })
+            return {
+                "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False, allow_nan=False)}],
+                "structuredContent": payload,
+                "isError": True,
+            }
         except (BrowserError, ValueError, OSError) as exc:
             return _tool_err(str(exc))
 
-    def _handle_capture_view(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        target_page = self._resolve_page(arguments.get("page"))
+    def _handle_capture_view(self, arguments: Dict[str, Any], *, resolved_page: Optional[str] = None) -> Dict[str, Any]:
+        target_page = resolved_page if resolved_page is not None else self._resolve_page(arguments.get("page"))
         pane = arguments.get("pane")
         out_path = arguments.get("path")
         explicit_fmt = arguments.get("format")
@@ -778,6 +952,15 @@ class McpServer:
                     "health": self._request("GET", "/api/health"),
                     "datasets": self._request("GET", "/api/datasets"),
                     "pages": self._connected_pages(),
+                    "bound_page": self.bound_page,
+                }
+            except BrowserError as exc:
+                raise _RpcError(-32002, str(exc)) from None
+        elif uri == "uchrom://pages":
+            try:
+                payload = {
+                    "pages": self._summarize_pages(self._connected_pages(), probe=True),
+                    "datasets": self._request("GET", "/api/datasets"),
                     "bound_page": self.bound_page,
                 }
             except BrowserError as exc:

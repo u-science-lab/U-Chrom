@@ -24,6 +24,7 @@ except ImportError:  # pragma: no cover - non-POSIX fallback
 from .client import BrowserError
 from .mcp import (
     ActionExecutionError,
+    BatchStepError,
     McpServer,
     NoPageConnectedError,
     PageConflictError,
@@ -208,7 +209,8 @@ def _build_parser() -> _JsonArgumentParser:
 
     sub.add_parser("status", parents=[common], help="Check server health, loaded datasets, connected tabs, and bound tab")
     sub.add_parser("doctor", parents=[common], help="Diagnose server reachability, proxy hazards, state files, and connected tabs")
-    sub.add_parser("pages", parents=[common], help="List connected browser tabs, loaded datasets, and current binding")
+    p_pages = sub.add_parser("pages", parents=[common], help="List connected browser tabs, workspace summaries, and current binding")
+    p_pages.add_argument("--no-probe", action="store_true", help="Skip querying describe_workspace on each connected tab")
 
     p_bind = sub.add_parser("bind", parents=[common], help="Bind this CLI session for the current URL to a tab (or clear binding)")
     p_bind.add_argument("target_page", nargs="?", default=None, help="Connected page id to bind")
@@ -275,6 +277,11 @@ def _build_parser() -> _JsonArgumentParser:
     p_call.add_argument("action", help="Action name (e.g. open_view or uchrom_open_view)")
     p_call.add_argument("--json", dest="json_args", default="{}", help="JSON object of action arguments")
 
+    p_batch = sub.add_parser("batch", parents=[common], help="Validate and run 1..20 browser UI actions sequentially on one tab")
+    g_batch = p_batch.add_mutually_exclusive_group(required=True)
+    g_batch.add_argument("--steps-json", default=None, help="JSON array of {action, args?} step objects")
+    g_batch.add_argument("--steps-file", default=None, help="Path to a JSON file containing an array of {action, args?} step objects")
+
     return parser
 
 
@@ -322,7 +329,7 @@ def _dispatch(args: argparse.Namespace, srv: McpServer, state_path: Path, bindin
         }, EXIT_OK
 
     if cmd == "pages":
-        pages = srv._connected_pages()
+        pages = srv._summarize_pages(srv._connected_pages(), probe=not args.no_probe)
         datasets = srv._request("GET", "/api/datasets")
         return {"pages": pages, "datasets": datasets, "bound_page": srv.bound_page}, EXIT_OK
 
@@ -476,6 +483,14 @@ def _dispatch(args: argparse.Namespace, srv: McpServer, state_path: Path, bindin
             return srv._handle_capture_view(raw_obj), EXIT_OK
         return _execute_action(srv, action_name, raw_obj, eff_page), EXIT_OK
 
+    if cmd == "batch":
+        raw_text = args.steps_json if args.steps_json is not None else Path(args.steps_file).read_text(encoding="utf-8")
+        try:
+            steps = _json_loads_strict(raw_text)
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise _CliUsageError(f"invalid batch JSON: {exc}") from None
+        return srv.execute_batch(steps, explicit_page=explicit_page), EXIT_OK
+
     raise _CliUsageError(f"unknown command: {cmd}")
 
 
@@ -514,6 +529,26 @@ def main(argv: Optional[List[str]] = None) -> int:
             EXIT_TAB_CONFLICT,
             pretty=pretty,
             extra={"connected_pages": exc.connected_pages, "bound_page": srv.bound_page},
+        )
+    except BatchStepError as exc:
+        if isinstance(exc.cause, (ServerUnreachableError, NoPageConnectedError)):
+            code_name, code = "UNREACHABLE", EXIT_UNREACHABLE
+        elif isinstance(exc.cause, PageConflictError):
+            code_name, code = "PAGE_CONFLICT", EXIT_TAB_CONFLICT
+        else:
+            code_name, code = "ACTION_ERROR", EXIT_ACTION_ERROR
+        return _fail(
+            code_name,
+            str(exc.cause),
+            code,
+            pretty=pretty,
+            extra={
+                "page": exc.page,
+                "completed": len(exc.results),
+                "results": exc.results,
+                "failed_step": exc.step_index,
+                "failed_action": exc.action,
+            },
         )
     except (ActionExecutionError, BrowserError, OSError) as exc:
         return _fail("ACTION_ERROR", str(exc), EXIT_ACTION_ERROR, pretty=pretty)

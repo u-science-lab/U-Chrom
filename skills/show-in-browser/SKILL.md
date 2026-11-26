@@ -7,7 +7,7 @@ description: Only when a U-Chrom web browser is running or the user asks to show
 
 The browser is visualization only; analysis stays in Python (`uchrom`). Choose the control transport in this order:
 
-1. **MCP tools (`uchrom_*`)** — when connected via `uchrom-browser-mcp` (stdio: includes session tools `uchrom_status` / `uchrom_list_pages` / `uchrom_bind_page` / `uchrom_wait_for_page`, `uchrom://` resources, and file-backed `uchrom_capture_view(path=...)`), or when running inside a WebMCP browser tab (exposes `ui_tools.json` actions directly; `uchrom_capture_view` returns base64 rather than writing files).
+1. **MCP tools (`uchrom_*`)** — when connected via `uchrom-browser-mcp` (stdio: includes session tools `uchrom_status` / `uchrom_list_pages` / `uchrom_bind_page` / `uchrom_wait_for_page` / `uchrom_batch`, `uchrom://` resources including `uchrom://pages`, and file-backed `uchrom_capture_view(path=...)`), or when running inside a WebMCP browser tab (exposes `ui_tools.json` actions directly; `uchrom_capture_view` returns base64 rather than writing files).
 2. **Control CLI (`uchrom-browser-ctl`)** — in terminal coding agents (Claude Code, Codex) without MCP config. Zero setup, compact JSON on stdout/stderr, semantic exit codes (`0` ok, `2` bad args, `3` unreachable/no tab, `4` multi-tab conflict or disconnected tab, `5` action/file error).
 3. **Python client (`uchrom_browser.connect()`)** — inside Python scripts that already compute on `chromdata`/`uchrom` (`ws = ub.connect()`; use `ws.capture(path=...)` for file-backed figure exports and `page=...` when multiple tabs are open).
 
@@ -20,6 +20,7 @@ uchrom-browser-ctl selection               # read researcher's lassoed / focused
 uchrom-browser-ctl locus chr15:3000000-33000000
 uchrom-browser-ctl open stats --stats rg --chrom-scope locus --compare g123,field:cell_type=Granule
 uchrom-browser-ctl arrange grid
+uchrom-browser-ctl batch --steps-json '[{"action":"arrange","args":{"layout":"grid"}},{"action":"capture_view","args":{"path":"fig.svg"}}]'
 uchrom-browser-ctl capture --out fig.svg
 ```
 
