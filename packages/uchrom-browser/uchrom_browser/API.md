@@ -609,10 +609,26 @@ Run a pure-stdlib JSON-RPC 2.0 MCP server over `stdin`/`stdout` against a runnin
 
 ```bash
 uchrom-browser-mcp [--url http://127.0.0.1:8765] [--timeout 30]
-# or: python -m uchrom_browser.mcp [--url ...] [--timeout 30]
+uchrom-browser-mcp --print-config {claude|claude-code|codex|cursor} [--url ...]
+uchrom-browser-mcp --doctor [--url ...]
+# or: python -m uchrom_browser.mcp ...
 ```
 
-- **Discovery & session tools**: `uchrom_status` (`url`, `health`, `datasets`, `pages`, `bound_page`), `uchrom_list_pages`, and `uchrom_bind_page` (`page` id or `null` to clear).
-- **Browser actions**: every tool from `GET /api/control/tools` (falling back to `ui_tools.json` when offline) is exposed as `uchrom_<name>` with an optional `page` argument and strict schema validation before dispatch.
-- **Multi-tab safety**: actions resolve `page` explicitly, else the session's `bound_page` (erroring without failover if that tab closes), else the single connected page — refusing when 0 or 2+ pages are connected.
-- **`uchrom_capture_view`**: accepts optional `path` (non-existing destination; no `..`, symlinks, or conflicting extension; defaults to a private `0700` temp directory where callers manage temp cleanup), writes PNG/SVG/PDF bytes exclusively, and returns `{path, pane, format, width, height, bytes, sha256, notes, page}` with no base64 payload.
+- **Discovery, readiness & session tools**: `uchrom_status` (`url`, `health`, `datasets`, `pages`, `bound_page`), `uchrom_list_pages` (`pages`, `datasets`, `bound_page`), `uchrom_bind_page` (`page` id or `null` to clear), and `uchrom_wait_for_page` (`page?`, `wait_seconds?` in `0..60`, default `10`).
+- **Browser actions**: every tool from `GET /api/control/tools` (falling back to `ui_tools.json` when offline) is exposed as `uchrom_<name>` with an optional `page` argument and strict schema + finite 64-bit numeric validation before dispatch.
+- **Resources & prompts**: `resources/list` + `resources/read` expose `uchrom://status`, `uchrom://workspace`, and `uchrom://selection`; `prompts/list` + `prompts/get` provide `compare-selection` and `inspect-locus`.
+- **Multi-tab safety**: actions and page-scoped resources resolve `page` explicitly, else the session's `bound_page` (erroring without failover if that tab closes), else the single connected page — refusing when 0 or 2+ pages are connected.
+- **`uchrom_capture_view`**: accepts optional `path` (non-existing destination; no `..`, symlinks, or conflicting extension; written using `dir_fd` + `O_NOFOLLOW` + `O_CREAT|O_EXCL`, defaults to a private `0700` temp directory where callers manage temp cleanup) and returns `{path, pane, format, width, height, bytes, sha256, notes, page}` with no base64 payload.
+
+## Control CLI (`uchrom-browser-ctl`)
+
+Pure-stdlib CLI sharing URL resolution, schema validation, multi-tab safety, and atomic capture logic with `uchrom_browser.mcp`:
+
+```bash
+uchrom-browser-ctl [--url URL] [--page ID] [--timeout 30] [--pretty] <command> ...
+# or: python -m uchrom_browser.cli ...
+```
+
+- **Subcommands**: `status`, `doctor`, `pages`, `bind [PAGE|--clear]`, `wait [--wait-seconds S]`, `tools [--schema ACTION]`, `describe`, `selection`, `groups`, `select (--cells ... | --cells-file ...) [--name ...]`, `focus [--cell ... | --group ... | --clear]`, `locus (CHROM | CHROM:START-END) [--start ...] [--end ...]`, `open <type> ...`, `show PANE`, `close PANE`, `arrange {grid,tabs}`, `color-by FIELD`, `capture [--pane ...] [--out ...] [--format png|svg|pdf]`, `call ACTION [--json '{...}']`.
+- **Tab binding state**: `bind` persists `{url: page}` in `$UCHROM_BROWSER_CTL_STATE` (default `$XDG_CACHE_HOME/uchrom/browser_ctl.json`, `0700`/`0600`, symlinks refused); `--page` overrides per invocation.
+- **Output & exit codes**: writes strict JSON (`allow_nan=False`) to `stdout` on success (`0`) or structured `{ok: false, code, error}` JSON to `stderr` on failure: `2` invalid CLI args/locus/schema, `3` browser server or page unreachable/timeout, `4` multi-tab ambiguity or missing bound tab (`connected_pages` included), `5` browser execution or file-write error.

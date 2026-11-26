@@ -27,3 +27,12 @@ The data layer
 
 .. autoclass:: uchrom_browser.DatasetStore
    :members: load, get, list
+
+Command-line & MCP interfaces
+-----------------------------
+
+Both agent control entrypoints use only the Python standard library and never import ``uchrom``:
+
+- ``uchrom-browser`` (``python -m uchrom_browser``) — start the local web server.
+- ``uchrom-browser-ctl`` (``python -m uchrom_browser.cli``) — agent-friendly JSON control CLI with semantic exit codes (``0``/``2``/``3``/``4``/``5``) and persistent multi-tab binding.
+- ``uchrom-browser-mcp`` (``python -m uchrom_browser.mcp``) — stdio JSON-RPC 2.0 MCP server (supports ``--print-config``, ``--doctor``, ``resources``, and ``prompts``).

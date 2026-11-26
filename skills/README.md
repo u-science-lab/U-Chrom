@@ -1,10 +1,10 @@
 # U-Chrom agent skills
 
 Skills in the [Agent Skills](https://docs.claude.com/en/docs/claude-code/skills) format
-(`<name>/SKILL.md`, optional `scripts/`). They teach a coding agent (Claude Code, Codex,
+(`&lt;name&gt;/SKILL.md`, optional `scripts/`). They teach a coding agent (Claude Code, Codex,
 `uchrom_discovery`, …) *how* to use U-Chrom well: which API calls, in which order, and which checks an
 answer must pass. They add no new API — analysis is the `uchrom` Python API, visualization the web
-browser (`uchrom_browser.connect()` / WebMCP).
+browser (`uchrom-browser-mcp`, `uchrom-browser-ctl`, `uchrom_browser.connect()`, or WebMCP).
 
 | skill | for | script |
 |---|---|---|
@@ -12,7 +12,7 @@ browser (`uchrom_browser.connect()` / WebMCP).
 | `call-structures` | distance vs separation, Rg, P(s) slopes from contact maps (depth-normalised, pseudo-bulk), TADs / compartments / loops with the right caller and bin size | `scripts/structures.py` |
 | `compare-groups` | a statistic between groups of cells, cell as the unit, effect size, FDR scan over many features, equal-loci subsampling, confounder checks | `scripts/compare_groups.py` |
 | `associate-modalities` | feature ↔ structure or modality ↔ modality at the spot / bin / cell / cell-type level, Spearman + partial on confounders, within vs between cell types, embedding kNN purity | `scripts/associate.py` |
-| `show-in-browser` | read the researcher's selection; open, arrange and capture views | — |
+| `show-in-browser` | read the researcher's selection; open, arrange and capture views via MCP tools, `uchrom-browser-ctl`, or Python | — |
 
 Scripts print one JSON object whose `checks` list what a report must mention; tests are in
 `packages/uchrom/tests/skills/`. Use with Claude Code: copy or symlink a skill folder into `.claude/skills/` (project) or

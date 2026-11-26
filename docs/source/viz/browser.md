@@ -169,10 +169,14 @@ nuclear size: Granule 1.16 µm (22 cells) < Bergmann 1.47 µm (8) < Purkinje
 1.86 µm (3).  On scHiCAR MOp the pseudo-bulk of a subclass is identical
 to that subclass's own `.cool` (coarsened to the same 1 Mb bins).
 
-## Driving the browser from Python (and agents)
+## Driving the browser from Python and AI agents
 
-The open page can be driven from code with the same actions as its GUI — read what the researcher
-selected, open and arrange views, capture a view:
+The open page can be driven with the same GUI actions defined in
+`packages/uchrom-browser/uchrom_browser/ui_tools.json` (`describe_workspace`, `get_selection`,
+`select_cells`, `list_groups`, `focus`, `set_locus`, `open_view`, `show_view`, `close_view`,
+`arrange`, `color_by`, `capture_view`):
+
+### 1. Python client (`uchrom_browser.connect()`)
 
 ```python
 import uchrom_browser as ub
@@ -189,12 +193,51 @@ ws.open_view("stats", stats="rg", compare_groups=[g, "field:cell_type=Granule"])
 ws.capture(path="rg.png")              # or rg.svg / rg.pdf: editable vectors (format= to override)
 ```
 
-`ws.tools()` lists the actions (`describe_workspace`, `get_selection`, `select_cells`,
-`list_groups`, `focus`, `set_locus`, `open_view`, `show_view`, `close_view`, `arrange`, `color_by`,
-`capture_view`); they are defined in `packages/uchrom-browser/uchrom_browser/ui_tools.json`.  Coding agents use the
-same client.  In browsers that support WebMCP (a W3C Community Group draft; Chrome behind a flag),
-the page also registers these actions as tools (`uchrom_open_view`, …) for agents running in the
-browser.  The HTTP side is documented under *Control* in `packages/uchrom-browser/uchrom_browser/API.md`.
+`ws.tools()` lists the schemas; pass `page="<id>"` when multiple tabs are open.
+
+### 2. Agent-friendly Control CLI (`uchrom-browser-ctl`)
+
+Terminal coding agents (Claude Code, Codex) can drive a running browser without writing Python glue or
+loading MCP schemas upfront. Both `uchrom-browser-ctl` (`python -m uchrom_browser.cli`) and `uchrom-browser-mcp`
+use only the Python standard library and emit strict JSON:
+
+```bash
+uchrom-browser-ctl doctor                  # verify URL, connected tabs, and proxy settings
+uchrom-browser-ctl wait                    # wait for a browser tab to connect
+uchrom-browser-ctl pages                   # list connected tabs + loaded datasets
+uchrom-browser-ctl bind <page_id>          # bind session for this server URL (needed if 2+ tabs)
+uchrom-browser-ctl tools --schema open_view
+uchrom-browser-ctl selection
+uchrom-browser-ctl locus chr15:3000000-33000000
+uchrom-browser-ctl open stats --stats rg --chrom-scope locus --compare g123,field:cell_type=Granule
+uchrom-browser-ctl arrange grid
+uchrom-browser-ctl capture --out fig.svg   # refuses overwrite, '..', or symlinks
+```
+
+Exit codes: `0` success, `2` invalid flags/schema, `3` server/tab unreachable, `4` multi-tab ambiguity or
+missing bound tab, `5` browser execution or file-write error.
+
+### 3. Stdio MCP Server (`uchrom-browser-mcp`) & WebMCP
+
+MCP hosts (Claude Desktop, Cursor, Claude Code, Codex, Antigravity) can connect over `stdio` JSON-RPC 2.0:
+
+```bash
+uchrom-browser-mcp --print-config claude   # or: claude-code, codex, cursor
+uchrom-browser-mcp --doctor                # check server health, datasets, tabs & loopback proxies
+```
+
+- **Tools**: `uchrom_status`, `uchrom_list_pages` (tabs + datasets), `uchrom_bind_page`,
+  `uchrom_wait_for_page`, and `uchrom_<action>` for every entry in `ui_tools.json`.
+- **Resources & Prompts**: read-only `uchrom://status`, `uchrom://workspace`, and `uchrom://selection`
+  resources, plus guided `compare-selection` and `inspect-locus` workflow prompts.
+- **Multi-tab & file safety**: both MCP and `uchrom-browser-ctl` refuse mutating/reading an ambiguous
+  workspace when multiple tabs are connected until `page` is passed or a tab is bound, and never silently
+  fail over if a bound tab closes. `capture` writes exclusively to a non-existing PNG/SVG/PDF path (never
+  traversing `..` or symlinks) or to a private `0700` temp directory and returns metadata only (never raw base64).
+
+In browsers that support **WebMCP** (a W3C Community Group draft; Chrome behind a flag), the page also registers
+the same `uchrom_*` tools directly in the browser. HTTP endpoints are documented under *Control* in
+`packages/uchrom-browser/uchrom_browser/API.md`.
 
 ## Themes
 

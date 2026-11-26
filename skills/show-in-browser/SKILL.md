@@ -5,9 +5,23 @@ description: Only when a U-Chrom web browser is running or the user asks to show
 
 # Show results in the researcher's browser
 
-The browser is visualization only; analysis stays in Python (`uchrom`). Drive the open page with
-the Python client (or, for an agent inside the browser, the same actions as WebMCP tools
-`uchrom_*`):
+The browser is visualization only; analysis stays in Python (`uchrom`). Choose the control transport in this order:
+
+1. **MCP tools (`uchrom_*`)** — when connected via `uchrom-browser-mcp` (native MCP host) or in-browser WebMCP (`uchrom_*`). Inspect `uchrom_status` / `uchrom_list_pages` first; read `uchrom://workspace` or `uchrom://selection` when supported.
+2. **Control CLI (`uchrom-browser-ctl`)** — in terminal coding agents (Claude Code, Codex) without MCP config. Zero setup, compact JSON on stdout/stderr, semantic exit codes (`0` ok, `2` bad args, `3` unreachable/no tab, `4` multi-tab conflict or missing bound tab, `5` action/file error).
+3. **Python client (`uchrom_browser.connect()`)** — inside Python scripts that already compute on `chromdata`/`uchrom` (`ws = ub.connect()`).
+
+```bash
+# Terminal / CLI path (zero Python boilerplate, pure stdlib)
+uchrom-browser-ctl doctor
+uchrom-browser-ctl pages
+uchrom-browser-ctl bind <page_id>          # required when 2+ browser tabs are open
+uchrom-browser-ctl selection               # read researcher's lassoed / focused cells
+uchrom-browser-ctl locus chr15:3000000-33000000
+uchrom-browser-ctl open stats --stats rg --chrom-scope locus --compare g123,field:cell_type=Granule
+uchrom-browser-ctl arrange grid
+uchrom-browser-ctl capture --out fig.svg
+```
 
 ```python
 import uchrom_browser as ub
@@ -17,7 +31,7 @@ cells = ws.selected_cells()          # what the researcher lassoed / focused ([]
 cd = ws.dataset()                    # the same ChromData, for analysis
 ```
 
-## Actions (all via `ws.<name>(**args)`; full schema: `ws.tools()`)
+## Actions (via `uchrom_<name>`, `uchrom-browser-ctl call <name> --json '{...}'`, or `ws.<name>(**args)`; schema: `uchrom-browser-ctl tools --schema <name>` / `ws.tools()`)
 | action | use |
 |---|---|
 | `select_cells(cells=[...], name=None)` | register + focus a group (like a lasso); returns the canonical server-accepted cell ids, group ref, and counts |
@@ -26,11 +40,15 @@ cd = ws.dataset()                    # the same ChromData, for analysis
 | `open_view(type, cells=…, rows=[…], stats=…, chrom_scope="all"|"locus", compare_groups=[…], field_x, field_y, embedding)` | new view; returns `{"pane": id}` |
 | `arrange(layout="grid")`, `show_view(pane)`, `close_view(pane)` | layout |
 | `color_by(field)` | colour cells by a field |
-| `capture(pane, path, format=None)` | save a view as PNG, SVG or PDF (format from the suffix of `path`, else `format`, else PNG; SVG / PDF are editable vectors); returns `{"path", "format", "width", "height", "bytes", "notes"}` (never print image bytes) |
+| `capture_view(pane, path, format=None)` | save a view as PNG, SVG or PDF to a non-existing path (or private temp file if omitted; SVG / PDF are editable vectors); returns `{"path", "format", "width", "height", "bytes", "sha256", "notes"}` |
 
 Group references: the `group` returned by `select_cells`, `field:<column>=<value>`, or `all`.
 Genome rows: `{"kind": "track", "track": "H3K27ac", "cells": ref}`, `{"kind": "distance", "cells": ref}`,
 `{"kind": "contacts", "source": key, "cells": ref}`, `{"kind": "intervals", "key": "tads"}`.
+
+## Multi-tab & readiness checks
+- If 2+ browser tabs are connected, NEVER guess: pass explicit `page` / `--page` or bind once (`uchrom_bind_page` / `uchrom-browser-ctl bind <page_id>`). If a bound tab closes, rebind or unbind explicitly instead of silently falling back to another tab.
+- When you just started `uchrom-browser`, call `uchrom_wait_for_page` / `uchrom-browser-ctl wait` to wait for the browser tab to attach.
 
 ## Recipe: show a two-group comparison
 ```python
@@ -48,4 +66,4 @@ ws.arrange(layout="grid")
 - Show what the answer claims: the views must use the same groups and chromosome scope as the numbers.
 - Don't close or rearrange the researcher's existing views unless asked; add views.
 - Name the pane ids in the answer so the researcher can find them.
-- No browser open (`BrowserError: 409`/connection refused) → give the result without views and say so.
+- No browser open (`BrowserError: 409`, exit code `3`, or `uchrom_status` empty `pages`) → give the result without views and say so.

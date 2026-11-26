@@ -10,15 +10,27 @@ uchrom-browser data.chromdata.zarr                 # or: python -m uchrom_browse
 uchrom-browser --atlas https://uchrom-atlas-r2.u-science.org      # the Open dialog lists an atlas
 ```
 
-Python and coding agents drive an open browser with the same actions as the page (`ui_tools.json`):
+Coding agents and Python drive an open browser using the same actions (`ui_tools.json`) via three interfaces — all pure Python stdlib on the client side with no `u-chrom` dependency:
 
-```python
-import uchrom_browser as ub
-ws = ub.connect()
-cells = ws.get_selection()["cells"]
-ws.open_view(type="genome", rows=[{"kind": "contacts", "source": "per_cell"}], cells=cells)
-```
+- **Stdio MCP server (`uchrom-browser-mcp`)**:
+  ```bash
+  uchrom-browser-mcp --print-config claude   # or: claude-code, codex, cursor
+  uchrom-browser-mcp --doctor                # check server health, connected tabs & proxy env
+  ```
+- **Control CLI (`uchrom-browser-ctl`)** — strict JSON output and semantic exit codes for terminal agents:
+  ```bash
+  uchrom-browser-ctl pages
+  uchrom-browser-ctl bind <page_id>          # when multiple tabs are open
+  uchrom-browser-ctl selection
+  uchrom-browser-ctl open stats --stats rg --compare field:cell_type=Purkinje,field:cell_type=Granule
+  uchrom-browser-ctl capture --out rg.svg
+  ```
+- **Python client (`uchrom_browser.connect()`)**:
+  ```python
+  import uchrom_browser as ub
+  ws = ub.connect()
+  cells = ws.get_selection()["cells"]
+  ws.open_view(type="genome", rows=[{"kind": "contacts", "source": "per_cell"}], cells=cells)
+  ```
 
-It needs only the data model, [`chromdata`](../chromdata); the analysis library (`u-chrom`) is not required.  The
-server's API is [`uchrom_browser/API.md`](uchrom_browser/API.md); the front end (`uchrom_browser/frontend`, React +
-Three.js) is built with `npm run build` into `uchrom_browser/static`, which is committed.
+The server's HTTP, CLI, and MCP contracts live in [`uchrom_browser/API.md`](uchrom_browser/API.md); the front end (`uchrom_browser/frontend`, React + Three.js) is built with `npm run build` into `uchrom_browser/static`, which is committed.
