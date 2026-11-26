@@ -537,18 +537,22 @@ def main(argv: Optional[List[str]] = None) -> int:
             code_name, code = "PAGE_CONFLICT", EXIT_TAB_CONFLICT
         else:
             code_name, code = "ACTION_ERROR", EXIT_ACTION_ERROR
+        extra: Dict[str, Any] = {
+            "page": exc.page,
+            "completed": len(exc.results),
+            "results": exc.results,
+            "failed_step": exc.step_index,
+            "failed_action": exc.action,
+        }
+        if isinstance(exc.cause, PageConflictError):
+            extra["connected_pages"] = exc.cause.connected_pages
+            extra["bound_page"] = srv.bound_page
         return _fail(
             code_name,
             str(exc.cause),
             code,
             pretty=pretty,
-            extra={
-                "page": exc.page,
-                "completed": len(exc.results),
-                "results": exc.results,
-                "failed_step": exc.step_index,
-                "failed_action": exc.action,
-            },
+            extra=extra,
         )
     except (ActionExecutionError, BrowserError, OSError) as exc:
         return _fail("ACTION_ERROR", str(exc), EXIT_ACTION_ERROR, pretty=pretty)

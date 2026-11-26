@@ -13,6 +13,7 @@ import argparse
 import base64
 import copy
 import hashlib
+import http.client
 import json
 import math
 import os
@@ -84,7 +85,7 @@ _SESSION_TOOLS: List[Dict[str, Any]] = [
             "properties": {
                 "probe": {
                     "type": "boolean",
-                    "description": "Query each connected tab's describe_workspace for its active dataset, layout, and selection summary (default: true).",
+                    "description": "Query up to 8 active tabs' describe_workspace for their active dataset, layout, and selection summary (default: true).",
                 }
             },
         },
@@ -401,6 +402,8 @@ def _write_private_temp(data: bytes, fmt: str) -> Path:
 
 
 def _resolve_capture_dest(out_path: str, explicit_fmt: Optional[str], fmt: str) -> Path:
+    if "\x00" in str(out_path):
+        raise ValueError("capture path must not contain NUL bytes")
     if not str(out_path).strip():
         raise ValueError("capture path must not be empty")
     raw = Path(out_path)
@@ -570,14 +573,18 @@ class McpServer:
         sock_timeout = (float(effective_timeout) + 2.0) if path == "/api/control/actions" else max(0.001, float(effective_timeout))
         try:
             with urllib.request.urlopen(req, timeout=sock_timeout) as resp:
-                return json.loads(resp.read() or b"null")
+                raw = resp.read()
         except TimeoutError:
             raise NoPageConnectedError(f"request to {path} timed out after {effective_timeout:g}s") from None
         except urllib.error.HTTPError as exc:
+            detail: Any = exc.reason
             try:
-                detail = json.loads(exc.read()).get("detail", exc.reason)
-            except ValueError:
-                detail = exc.reason
+                err_raw = exc.read()
+                parsed_err = json.loads(err_raw) if err_raw else None
+                if isinstance(parsed_err, dict):
+                    detail = parsed_err.get("detail", exc.reason)
+            except (ValueError, http.client.IncompleteRead, OSError):
+                pass
             msg = f"{exc.code}: {detail}"
             if exc.code == 504:
                 raise NoPageConnectedError(msg) from None
@@ -602,6 +609,19 @@ class McpServer:
                 f"cannot reach the browser server at {self.url} ({exc.reason}); "
                 "start it with `python -m uchrom_browser data.chromdata.zarr`"
             ) from None
+        except (http.client.HTTPException, OSError) as exc:
+            raise ServerUnreachableError(f"connection error reading {path} from {self.url}: {exc}") from None
+
+        try:
+            return json.loads(raw or b"null")
+        except ValueError as exc:
+            raise ActionExecutionError(f"invalid JSON response from {path}: {exc}") from None
+
+    @staticmethod
+    def _extract_action_result(resp: Any, action: str) -> Any:
+        if not isinstance(resp, dict) or "result" not in resp:
+            raise ActionExecutionError(f"malformed response for action {action!r}")
+        return resp["result"]
 
     # -- tool catalog -----------------------------------------------------
     def _load_ui_tools(self) -> List[Dict[str, Any]]:
@@ -712,10 +732,13 @@ class McpServer:
 
     def _summarize_pages(self, pages: List[Dict[str, Any]], *, probe: bool = True) -> List[Dict[str, Any]]:
         out = [dict(p) for p in pages]
-        if not probe or len(out) > 8:
+        if not probe:
             return out
         probe_timeout = min(self.timeout, 1.5)
-        for p in out:
+        for idx, p in enumerate(out):
+            if idx >= 8:
+                p["summary"] = None
+                continue
             pid = p.get("page")
             if not isinstance(pid, str):
                 p["summary"] = None
@@ -727,7 +750,7 @@ class McpServer:
                     {"name": "describe_workspace", "args": {}, "timeout": probe_timeout, "page": pid},
                     timeout=probe_timeout,
                 )
-                res = resp.get("result")
+                res = resp.get("result") if isinstance(resp, dict) else None
                 if isinstance(res, dict) and isinstance(res.get("dataset"), dict):
                     ds = res["dataset"]
                     views = res.get("views")
@@ -795,8 +818,11 @@ class McpServer:
                 fmt = _capture_format(explicit_fmt, sargs["path"])
                 dest = _resolve_capture_dest(sargs["path"], explicit_fmt, fmt)
                 norm = Path(os.path.abspath(str(dest)))
-                if norm in seen_capture_paths:
-                    raise ValueError(f"step[{idx}] (capture_view): duplicate capture path {sargs['path']!r} in batch")
+                for prev in seen_capture_paths:
+                    if norm == prev or prev in norm.parents or norm in prev.parents:
+                        raise ValueError(
+                            f"step[{idx}] (capture_view): capture path {sargs['path']!r} conflicts with earlier batch capture path"
+                        )
                 seen_capture_paths.add(norm)
 
             validated.append((act, sargs))
@@ -814,7 +840,7 @@ class McpServer:
                         "/api/control/actions",
                         {"name": act, "args": cleaned, "timeout": self.timeout, "page": target_page},
                     )
-                    res = resp["result"]
+                    res = self._extract_action_result(resp, act)
                 results.append({"step": idx, "action": act, "result": res})
             except (BrowserError, ValueError, OSError) as exc:
                 raise BatchStepError(exc, target_page, idx, act, results) from None
@@ -884,21 +910,25 @@ class McpServer:
                 "/api/control/actions",
                 {"name": action, "args": action_args, "timeout": self.timeout, "page": target_page},
             )
-            result = resp["result"]
+            result = self._extract_action_result(resp, action)
             if isinstance(result, dict):
                 out = {**result, "page": target_page}
             else:
                 out = {"result": result, "page": target_page}
             return _tool_ok(out)
         except BatchStepError as exc:
-            payload = _json_safe({
+            err_payload: Dict[str, Any] = {
                 "page": exc.page,
                 "completed": len(exc.results),
                 "results": exc.results,
                 "failed_step": exc.step_index,
                 "failed_action": exc.action,
                 "error": str(exc.cause),
-            })
+            }
+            if isinstance(exc.cause, PageConflictError):
+                err_payload["connected_pages"] = exc.cause.connected_pages
+                err_payload["bound_page"] = self.bound_page
+            payload = _json_safe(err_payload)
             return {
                 "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False, allow_nan=False)}],
                 "structuredContent": payload,
@@ -922,7 +952,9 @@ class McpServer:
             "/api/control/actions",
             {"name": "capture_view", "args": action_args, "timeout": self.timeout, "page": target_page},
         )
-        result = resp["result"]
+        result = self._extract_action_result(resp, "capture_view")
+        if not isinstance(result, dict):
+            raise ActionExecutionError("capture_view returned malformed result")
         b64 = result.get("data_base64") or result.get("png_base64")
         if not b64:
             raise ActionExecutionError("capture_view did not return image data")
@@ -974,7 +1006,7 @@ class McpServer:
                     "/api/control/actions",
                     {"name": action, "args": {}, "timeout": self.timeout, "page": target_page},
                 )
-                result = resp["result"]
+                result = self._extract_action_result(resp, action)
                 payload = {**result, "page": target_page} if isinstance(result, dict) else {"result": result, "page": target_page}
             except BrowserError as exc:
                 raise _RpcError(-32002, str(exc)) from None

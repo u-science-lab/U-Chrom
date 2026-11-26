@@ -11,10 +11,6 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("fastapi")
-pytest.importorskip("uvicorn")
-pytest.importorskip("requests")
-
 from tests.test_mcp import FakeSSEPage, server  # noqa: F401,E402
 
 
@@ -61,6 +57,26 @@ def test_ctl_python_s_stdlib_only_and_script_help():
         check=True,
     )
     assert mod_check.stdout.strip() == "False"
+
+    tools_p = subprocess.run(
+        [sys.executable, "-S", "-m", "uchrom_browser.cli", "--url", "http://127.0.0.1:9", "tools", "--schema", "open_view"],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=10,
+    )
+    assert tools_p.returncode == 0, tools_p.stderr
+    assert json.loads(tools_p.stdout)["name"] == "open_view"
+
+    doc_p = subprocess.run(
+        [sys.executable, "-S", "-m", "uchrom_browser.cli", "--url", "http://127.0.0.1:9", "doctor"],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=10,
+    )
+    assert doc_p.returncode == 3, doc_p.stderr
+    assert json.loads(doc_p.stdout)["code"] == "UNREACHABLE"
 
 
 def test_ctl_exit_codes_and_strict_json(server, tmp_path):  # noqa: F811
@@ -387,3 +403,38 @@ def test_ctl_pages_summary_and_batch(server, tmp_path):  # noqa: F811
     finally:
         tab_a.close()
         tab_b.close()
+
+
+def test_ctl_batch_midflight_disconnect_returns_exit_4_with_recovery_fields(tmp_path):
+    from unittest.mock import patch
+    import io
+    import contextlib
+    from uchrom_browser import cli
+    from uchrom_browser.mcp import BatchStepError, PageConflictError
+
+    state = tmp_path / "ctl.json"
+    err_buf = io.StringIO()
+    out_buf = io.StringIO()
+    partial_err = BatchStepError(
+        PageConflictError("browser page 'tabA' is no longer connected", ["tabB"]),
+        "tabA",
+        1,
+        "get_selection",
+        [{"step": 0, "action": "arrange", "result": {"layout": "grid"}}],
+    )
+    with (
+        patch.dict(os.environ, {"UCHROM_BROWSER_CTL_STATE": str(state)}),
+        patch.object(cli.McpServer, "execute_batch", side_effect=partial_err),
+        contextlib.redirect_stdout(out_buf),
+        contextlib.redirect_stderr(err_buf),
+    ):
+        rc = cli.main(["--url", "http://127.0.0.1:9", "batch", "--steps-json", '[{"action":"arrange"},{"action":"get_selection"}]'])
+    assert rc == 4
+    err_obj = json.loads(err_buf.getvalue())
+    assert err_obj["code"] == "PAGE_CONFLICT"
+    assert err_obj["connected_pages"] == ["tabB"]
+    assert "bound_page" in err_obj
+    assert err_obj["completed"] == 1
+    assert err_obj["failed_step"] == 1
+    assert err_obj["failed_action"] == "get_selection"
+    assert err_obj["results"] == [{"step": 0, "action": "arrange", "result": {"layout": "grid"}}]

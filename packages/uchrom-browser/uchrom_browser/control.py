@@ -59,6 +59,8 @@ class ActionBroker:
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"
                     continue
+                if msg.get("id") not in self._pending:
+                    continue
                 yield f"event: action\ndata: {json.dumps(msg)}\n\n"
         finally:
             if self._pages.get(page_id) is page:

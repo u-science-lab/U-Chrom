@@ -169,3 +169,33 @@ def test_capture_formats_through_a_page(server, tmp_path):
 def test_capture_tool_declares_formats():
     tool = next(t for t in load_tools()["tools"] if t["name"] == "capture_view")
     assert tool["inputSchema"]["properties"]["format"]["enum"] == ["png", "svg", "pdf"]
+
+
+def test_broker_drops_timed_out_action_before_sse_delivery():
+    import asyncio
+    from uchrom_browser.control import ActionBroker, NoPage
+
+    async def _run():
+        broker = ActionBroker()
+        stream = broker.events("tabT")
+        first = await anext(stream)
+        assert first.startswith("event: hello")
+
+        with pytest.raises(asyncio.TimeoutError):
+            await broker.call("open_view", {"type": "stats"}, timeout=0.01, page_id="tabT")
+
+        # Stale timed-out message should be dropped before delivery, so calling stream next
+        # sees only freshly queued actions (or keepalive timeout).
+        fresh_task = asyncio.create_task(broker.call("get_selection", {}, timeout=1.0, page_id="tabT"))
+        await asyncio.sleep(0)
+        evt = await anext(stream)
+        assert evt.startswith("event: action")
+        payload = json.loads(evt.split("data: ", 1)[1])
+        assert payload["name"] == "get_selection"
+        assert broker.resolve(payload["id"], True, {"cells": ["c1"]}) is True
+        assert await fresh_task == {"cells": ["c1"]}
+        await stream.aclose()
+        with pytest.raises(NoPage):
+            await broker.call("get_selection", {}, timeout=0.1, page_id="tabT")
+
+    asyncio.run(_run())

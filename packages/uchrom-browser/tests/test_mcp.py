@@ -17,12 +17,17 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("fastapi")
-uvicorn = pytest.importorskip("uvicorn")
-requests = pytest.importorskip("requests")
+try:
+    import requests
+except ImportError:
+    requests = None
 
-from uchrom_browser import client as ubc  # noqa: E402
-from uchrom_browser import create_app  # noqa: E402
+try:
+    from uchrom_browser import client as ubc  # noqa: E402
+    from uchrom_browser import create_app  # noqa: E402
+except ImportError:
+    ubc = None
+    create_app = None
 from uchrom_browser.control import load_tools  # noqa: E402
 
 
@@ -34,6 +39,11 @@ def _free_port() -> int:
 
 @pytest.fixture
 def server():
+    pytest.importorskip("fastapi")
+    uvicorn = pytest.importorskip("uvicorn")
+    pytest.importorskip("requests")
+    if create_app is None:
+        pytest.skip("server dependencies unavailable")
     port = _free_port()
     srv = uvicorn.Server(uvicorn.Config(create_app(), host="127.0.0.1", port=port, log_level="warning"))
     th = threading.Thread(target=srv.run, daemon=True)
@@ -466,6 +476,36 @@ def test_mcp_python_s_stdlib_only_cli():
     )
     assert proc.returncode == 0, proc.stderr
     assert "uchrom_browser.mcp" in proc.stdout or "--url" in proc.stdout
+
+    cfg_proc = subprocess.run(
+        [sys.executable, "-S", "-m", "uchrom_browser.mcp", "--print-config", "claude", "--url", "http://127.0.0.1:9"],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=10,
+    )
+    assert cfg_proc.returncode == 0, cfg_proc.stderr
+    cfg_json = json.loads(cfg_proc.stdout)
+    assert "uchrom-browser" in cfg_json["mcpServers"]
+
+    rpc_in = (
+        '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}\n'
+        '{"jsonrpc":"2.0","method":"notifications/initialized"}\n'
+        '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n'
+    )
+    stdio_proc = subprocess.run(
+        [sys.executable, "-S", "-m", "uchrom_browser.mcp", "--url", "http://127.0.0.1:9"],
+        input=rpc_in,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=10,
+    )
+    assert stdio_proc.returncode == 0, stdio_proc.stderr
+    lines = [json.loads(ln) for ln in stdio_proc.stdout.splitlines() if ln.strip()]
+    assert len(lines) == 2
+    assert lines[0]["result"]["serverInfo"]["name"] == "uchrom-browser"
+    assert any(t["name"] == "uchrom_batch" for t in lines[1]["result"]["tools"])
 
 
 def test_mcp_jsonrpc_edge_cases_and_validation(server):
@@ -915,3 +955,118 @@ def test_mcp_page_summaries_and_batch(server, tmp_path):
     finally:
         tab_a.close()
         tab_b.close()
+
+
+def test_mcp_batch_and_summary_hardening(tmp_path):
+    import http.client
+    from unittest.mock import patch
+    from uchrom_browser.mcp import ActionExecutionError, McpServer
+
+    srv = McpServer("http://127.0.0.1:9")
+    # 1. NUL byte and colliding parent/child capture paths fail upfront with 0 requests
+    with patch.object(srv, "_request") as req_mock, patch.object(srv, "_load_ui_tools", return_value=load_tools()["tools"]):
+        bad_nul = _call_tool(srv, 1, "uchrom_batch", {
+            "page": "tabA",
+            "steps": [{"action": "capture_view", "args": {"path": str(tmp_path / "bad\x00.png")}}],
+        })
+        assert bad_nul["isError"] is True
+        bad_child = _call_tool(srv, 2, "uchrom_batch", {
+            "page": "tabA",
+            "steps": [
+                {"action": "capture_view", "args": {"path": str(tmp_path / "out.png")}},
+                {"action": "capture_view", "args": {"path": str(tmp_path / "out.png" / "child.png")}},
+            ],
+        })
+        assert bad_child["isError"] is True
+        req_mock.assert_not_called()
+
+    # 2. IncompleteRead or malformed missing-result reply preserves partial progress in uchrom_batch
+    class _FakeResp:
+        def __init__(self, payload_bytes=None, exc=None):
+            self._payload = payload_bytes
+            self._exc = exc
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            if self._exc is not None:
+                raise self._exc
+            return self._payload
+
+    def _fake_urlopen(req, timeout=None):
+        url_str = req.full_url
+        if url_str.endswith("/api/control/pages"):
+            return _FakeResp(json.dumps([{"page": "tabA"}]).encode())
+        if url_str.endswith("/api/control/tools"):
+            return _FakeResp(json.dumps(load_tools()).encode())
+        if url_str.endswith("/api/control/actions"):
+            body = json.loads(req.data.decode())
+            if body.get("name") == "arrange":
+                return _FakeResp(json.dumps({"result": {"layout": "grid"}}).encode())
+            return _FakeResp(exc=http.client.IncompleteRead(b"{", 10))
+        raise AssertionError(f"unexpected URL {url_str}")
+
+    with patch("urllib.request.urlopen", side_effect=_fake_urlopen):
+        res_inc = _call_tool(srv, 3, "uchrom_batch", {
+            "page": "tabA",
+            "steps": [
+                {"action": "arrange", "args": {"layout": "grid"}},
+                {"action": "get_selection"},
+            ],
+        })
+        assert res_inc["isError"] is True
+        sc = res_inc["structuredContent"]
+        assert sc["completed"] == 1 and sc["failed_step"] == 1 and sc["failed_action"] == "get_selection"
+        assert sc["results"] == [{"step": 0, "action": "arrange", "result": {"layout": "grid"}}]
+
+    # Verify _request itself wraps IncompleteRead cleanly on status
+    with patch("urllib.request.urlopen", side_effect=http.client.IncompleteRead(b"", 5)):
+        res_wrap = _call_tool(srv, 4, "uchrom_status")
+        assert res_wrap["isError"] is True
+        assert "connection error" in res_wrap["content"][0]["text"]
+
+    def _missing_res(method, path, body=None, timeout=None):
+        if path == "/api/control/pages":
+            return [{"page": "tabA"}]
+        if path == "/api/control/tools":
+            return {"tools": load_tools()["tools"]}
+        if body and body.get("name") == "arrange":
+            return {"result": {"layout": "grid"}}
+        return {"unexpected": True}
+
+    with patch.object(srv, "_request", side_effect=_missing_res):
+        res_bad_res = _call_tool(srv, 5, "uchrom_batch", {
+            "page": "tabA",
+            "steps": [
+                {"action": "arrange", "args": {"layout": "grid"}},
+                {"action": "get_selection"},
+            ],
+        })
+        assert res_bad_res["isError"] is True
+        sc2 = res_bad_res["structuredContent"]
+        assert sc2["completed"] == 1 and sc2["failed_step"] == 1
+        assert "malformed response" in sc2["error"]
+
+    # 3. _summarize_pages tolerates malformed/null tab 1 and still summarizes tabs 2..8 while capping at 8
+    pages = [{"page": f"p{i}"} for i in range(10)]
+
+    def _probe_side_effect(method, path, body=None, timeout=None):
+        pid = body["page"]
+        if pid == "p0":
+            return None  # JSON null
+        if pid == "p1":
+            raise ActionExecutionError("invalid JSON")
+        return {"result": {"dataset": {"name": f"ds_{pid}", "id": pid, "path": f"/{pid}"}, "views": [{"pane": "P1"}], "layout": "grid"}}
+
+    with patch.object(srv, "_request", side_effect=_probe_side_effect) as mock_probe:
+        summarized = srv._summarize_pages(pages, probe=True)
+        assert mock_probe.call_count == 8
+        assert summarized[0]["summary"] is None
+        assert summarized[1]["summary"] is None
+        assert summarized[2]["summary"]["dataset"] == "ds_p2"
+        assert summarized[7]["summary"]["dataset"] == "ds_p7"
+        assert summarized[8]["summary"] is None and summarized[9]["summary"] is None

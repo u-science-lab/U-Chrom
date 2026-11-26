@@ -211,7 +211,7 @@ uchrom-browser-ctl selection
 uchrom-browser-ctl locus chr15:3000000-33000000
 uchrom-browser-ctl open stats --stats rg --chrom-scope locus --compare g123,field:cell_type=Granule
 uchrom-browser-ctl arrange grid
-uchrom-browser-ctl batch --steps-json '[{"action":"arrange","args":{"layout":"grid"}},{"action":"capture_view","args":{"path":"fig.svg"}}]'
+uchrom-browser-ctl batch --steps-json '[{"action":"arrange","args":{"layout":"grid"}},{"action":"capture_view","args":{"path":"overview.svg"}}]'
 uchrom-browser-ctl capture --out fig.svg   # refuses overwrite, '..', or symlinks
 ```
 
