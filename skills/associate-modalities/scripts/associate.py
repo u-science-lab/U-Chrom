@@ -109,7 +109,8 @@ def per_trace(cd, chrom: str | None = None, start: int | None = None, end: int |
     first, last = g[["x", "y", "z"]].first(), g[["x", "y", "z"]].last()
     t["span"] = np.linalg.norm(first.to_numpy() - last.to_numpy(), axis=1)
     t.loc[t["n_spots"] < 2, ["rg", "span"]] = np.nan
-    t["rg_norm"] = t["rg"] / t.groupby("chrom")["rg"].transform("median")
+    med = t.groupby("chrom")["rg"].transform("median")
+    t["rg_norm"] = np.where(med > 0, t["rg"] / med, np.nan)
     return t
 
 
@@ -239,6 +240,26 @@ def _embedded_contact_stat(e, stat: str, chrom: str | None, start: int | None, e
     return pd.Series(vals, index=pd.Index([str(c) for c in e.cells], dtype=object), name=stat, dtype=float)
 
 
+def _scool_binsize(f, b_chrom: np.ndarray, b_start: np.ndarray, b_end: np.ndarray) -> int:
+    bs = f.attrs.get("bin-size")
+    if bs is not None and not isinstance(bs, (bool, bytes, str)) and int(bs) > 0:
+        return int(bs)
+    cells_grp = f.get("cells")
+    if cells_grp and len(cells_grp):
+        first_key = next(iter(cells_grp.keys()))
+        bs = cells_grp[first_key].attrs.get("bin-size")
+        if bs is not None and not isinstance(bs, (bool, bytes, str)) and int(bs) > 0:
+            return int(bs)
+    diffs = (b_end - b_start).astype(np.int64)
+    if len(b_chrom) > 1:
+        non_last = np.r_[b_chrom[:-1] == b_chrom[1:], False]
+        inner = diffs[non_last & (diffs > 0)]
+        if len(inner):
+            return int(np.median(inner))
+    pos = diffs[diffs > 0]
+    return int(np.median(pos)) if len(pos) else 1
+
+
 def _scool_contact_stat(path: Path, stat: str, chrom: str | None, start: int | None, end: int | None, smin: float | None, smax: float | None) -> pd.Series:
     import h5py
 
@@ -248,7 +269,7 @@ def _scool_contact_stat(path: Path, stat: str, chrom: str | None, start: int | N
         b_chrom = np.asarray(f["bins/chrom"][:], dtype=np.int64)
         b_start = np.asarray(f["bins/start"][:], dtype=np.int64)
         b_end = np.asarray(f["bins/end"][:], dtype=np.int64)
-        r = int(np.median(b_end - b_start))
+        r = _scool_binsize(f, b_chrom, b_start, b_end)
         if chrom is not None:
             if chrom not in chroms:
                 raise KeyError(f"chromosome {chrom!r} not in scool (have {chroms[:10]})")
@@ -332,22 +353,30 @@ def _contact_stat(
                 pick = next((k for k in recs if k in per_cell_maps), next(iter(per_cell_maps)))
                 e = per_cell_maps[pick]
     if e is not None:
-        return _embedded_contact_stat(e, stat, chrom, start, end, smin, smax)
-
-    recs = _linked_scool_records(cd)
-    if cool is not None:
-        if cool in recs:
-            rec = recs[cool]
-        elif Path(cool).exists():
-            rec = {"path": cool}
-        else:
-            raise KeyError(f"no embedded per_cell map or linked_scool record {cool!r}")
+        s = _embedded_contact_stat(e, stat, chrom, start, end, smin, smax)
     else:
-        if not recs:
-            raise KeyError("no embedded per_cell map and no uns['linked_scool'] record")
-        rec = recs.get("default") or next(iter(recs.values()))
-    p = cd.resolve_link_path(rec["path"]) if hasattr(cd, "resolve_link_path") else Path(rec["path"])
-    return _scool_contact_stat(p, stat, chrom, start, end, smin, smax)
+        recs = _linked_scool_records(cd)
+        if cool is not None:
+            if cool in recs:
+                rec = recs[cool]
+            elif Path(cool).exists():
+                rec = {"path": cool}
+            else:
+                raise KeyError(f"no embedded per_cell map or linked_scool record {cool!r}")
+        else:
+            if not recs:
+                raise KeyError("no embedded per_cell map and no uns['linked_scool'] record")
+            rec = recs.get("default") or next(iter(recs.values()))
+        p = cd.resolve_link_path(rec["path"]) if hasattr(cd, "resolve_link_path") else Path(rec["path"])
+        s = _scool_contact_stat(p, stat, chrom, start, end, smin, smax)
+
+    if cd.cells is not None:
+        cohort = set(_cell_index(cd))
+        return s.loc[s.index.isin(cohort)]
+    if cd.spots is not None and "cell_id" in cd.spots.columns:
+        cohort = set(cd.spots["cell_id"].astype(str))
+        return s.loc[s.index.isin(cohort)]
+    return s
 
 
 # ------------------------------------------------------------------ multi-way cluster metrics
@@ -468,7 +497,7 @@ def cell_level(
     covs = [c for c in (covariates or []) if c and c not in (x, y)]
     for c in covs:
         cols[c] = per_cell(cd, c, chrom=chrom, start=start, end=end, cool=cool, smin=smin, smax=smax)
-    df = pd.DataFrame(cols).dropna()
+    df = pd.DataFrame(cols).replace([np.inf, -np.inf], np.nan).dropna()
     if group and cd.cells is not None and group in cd.cells.columns:
         lab = pd.Series(cd.cells[group].astype(str).to_numpy(), index=_cell_index(cd))
         df["_group"] = lab.reindex(df.index).to_numpy()
@@ -699,6 +728,7 @@ def spatial_autocorr(
         checks.append(f"only {n} cells with finite positions and feature values (< 4); Moran's I not computed")
         return res
 
+    valid_ids = pd.Index(sorted(map(str, valid_ids)), dtype=object)
     xy = pos.loc[valid_ids, dims].to_numpy(float)
     vals = pd.to_numeric(s.reindex(valid_ids), errors="coerce").to_numpy(float)
     z = vals - vals.mean()
@@ -712,10 +742,15 @@ def spatial_autocorr(
         checks.append(f"k clamped from {int(k)} to {k_eff} (n_cells - 1)")
         res["k_used"] = k_eff
 
-    _, nbrs = cKDTree(xy).query(xy, k=k_eff + 1)
-    rows = np.repeat(np.arange(n), k_eff)
-    cols = nbrs[:, 1:].ravel()
-    adj = sps.coo_matrix((np.ones(len(rows)), (rows, cols)), shape=(n, n)).tocsr()
+    _, raw_nbrs = cKDTree(xy).query(xy, k=min(n, k_eff + 1))
+    if np.ndim(raw_nbrs) == 1:
+        raw_nbrs = raw_nbrs[:, None]
+    rows_l, cols_l = [], []
+    for i in range(n):
+        picked = [int(j) for j in raw_nbrs[i] if int(j) != i][:k_eff]
+        rows_l.extend([i] * len(picked))
+        cols_l.extend(picked)
+    adj = sps.coo_matrix((np.ones(len(rows_l)), (rows_l, cols_l)), shape=(n, n)).tocsr()
     adj = ((adj + adj.T) > 0).astype(np.float64).tocsr()
     adj.setdiag(0)
     adj.eliminate_zeros()
@@ -729,6 +764,7 @@ def spatial_autocorr(
 
     scale = n / (s0 * zz)
     obs_i = float(scale * (z @ (w @ z)))
+    tol = 1e-12 * max(1.0, abs(obs_i))
     rng = np.random.default_rng(seed)
     n_perms = max(0, int(permutations))
     ge = 0
@@ -736,9 +772,9 @@ def spatial_autocorr(
     for _ in range(n_perms):
         zp = z[rng.permutation(n)]
         ip = scale * (zp @ (w @ zp))
-        if ip >= obs_i:
+        if ip >= obs_i - tol:
             ge += 1
-        if ip <= obs_i:
+        if ip <= obs_i + tol:
             le += 1
 
     res["morans_i"] = obs_i
@@ -762,6 +798,23 @@ def _is_valid_cov(cd, c: str) -> bool:
         or c.startswith(("track:", "clusters:"))
         or (cd.cells is not None and c in cd.cells.columns)
     )
+
+
+def _json_safe(obj):
+    import math
+
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    if isinstance(obj, (np.floating, float)):
+        val = float(obj)
+        return val if math.isfinite(val) else None
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    return obj
 
 
 def main():
@@ -831,7 +884,7 @@ def main():
         )
     else:
         out = {e: knn_purity(cd, e, a.label, 15 if a.k is None else a.k) for e in a.emb.split(",")}
-    json.dump(out, sys.stdout, indent=1, default=float)
+    json.dump(_json_safe(out), sys.stdout, indent=1, allow_nan=False)
     print()
 
 

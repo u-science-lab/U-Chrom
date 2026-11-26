@@ -183,3 +183,84 @@ def test_spatial_autocorr_and_cli(tmp_path):
     ], text=True)
     parsed = json.loads(out)
     assert parsed["morans_i"] == pytest.approx(r1["morans_i"])
+
+
+def test_review_regressions_spatial_cohort_rgnorm_and_strict_json(tmp_path):
+    # 1. Complete uniform spatial graph has zero permutation spread -> p == 1.0
+    ids5 = [f"c{i}" for i in range(5)]
+    pos5 = np.column_stack([np.arange(5, dtype=float), np.zeros(5, dtype=float)])
+    cdf5 = pd.DataFrame({"val": [-0.625, -0.4375, 0.125, 0.0625, 1.0]}, index=ids5)
+    empty_spots = pd.DataFrame(columns=["chrom", "start", "end", "trace_id", "cell_id"])
+    cd5 = ChromData(np.zeros((0, 3)), empty_spots, cells=cdf5)
+    cd5.set_cell_positions(pos5, cell_ids=ids5, unit="um", frame="fov")
+    r_full = assoc.spatial_autocorr(cd5, "val", k=10, permutations=199, seed=0)
+    assert r_full["morans_i"] == pytest.approx(-0.25)
+    assert r_full["p_upper"] == pytest.approx(1.0)
+    assert r_full["p_two_sided"] == pytest.approx(1.0)
+
+    # 2. Coincident positions must be invariant to cell/row order
+    ids4 = ["a", "b", "c", "d"]
+    pos4 = np.zeros((4, 2), dtype=float)
+    cd4_a = ChromData(np.zeros((0, 3)), empty_spots, cells=pd.DataFrame({"v": [0.0, 1.0, 2.0, 10.0]}, index=ids4))
+    cd4_a.set_cell_positions(pos4, cell_ids=ids4, unit="um", frame="fov")
+    rev = [3, 1, 2, 0]
+    ids4_b = [ids4[i] for i in rev]
+    cd4_b = ChromData(np.zeros((0, 3)), empty_spots, cells=pd.DataFrame({"v": [0.0, 1.0, 2.0, 10.0]}, index=ids4).iloc[rev])
+    cd4_b.set_cell_positions(pos4, cell_ids=ids4_b, unit="um", frame="fov")
+    ra = assoc.spatial_autocorr(cd4_a, "v", k=1, permutations=49, seed=7)
+    rb = assoc.spatial_autocorr(cd4_b, "v", k=1, permutations=49, seed=7)
+    assert ra["morans_i"] == pytest.approx(rb["morans_i"])
+    assert ra["p_two_sided"] == pytest.approx(rb["p_two_sided"])
+
+    # 3. Contact associations respect subsetted cell cohort (embedded links and .scool fallback)
+    pytest.importorskip("h5py")
+    from tests.skills.test_compare_groups import _make_scool_store
+
+    emb_dir = tmp_path / "emb"
+    emb_dir.mkdir()
+    store_emb = _make_scool_store(emb_dir, embed=True, delete_scool=True)
+    cd_emb = ChromData.read(store_emb, backed=True)
+    sub_emb = cd_emb.get_cells(["A1", "A2", "A3"])
+    res_sub = assoc.cell_level(sub_emb, "ps_slope", "cis_contacts", covariates=[], group=None, chrom="chr1")
+    assert res_sub["n_cells"] == 3
+
+    sc_dir = tmp_path / "sc"
+    sc_dir.mkdir()
+    store_sc = _make_scool_store(sc_dir, embed=False, delete_scool=False)
+    cd_sc = ChromData.read(store_sc, backed=True)
+    sub_sc = cd_sc.get_cells(["A1", "A2", "A3"])
+    res_sc = assoc.cell_level(sub_sc, "ps_slope", "cis_contacts", covariates=[], group=None, chrom="chr1")
+    assert res_sc["n_cells"] == 3
+
+    # 4. Windowed rg_norm with zero median avoids inf and strict JSON rejects no NaNs on constant features
+    rows, xyz = [], []
+    vals_x = []
+    for i in range(6):
+        cid = f"m{i}"
+        vals_x.append((cid, float(i)))
+        # Trace 0 & 1 have identical xyz in [0, 30) -> rg = 0, so median(rg) = 0; trace 2 has rg > 0
+        span = 0.0 if i < 4 else 2.0
+        for s_idx in range(2):
+            rows.append(("chr1", s_idx * 10, (s_idx + 1) * 10, f"t_{cid}", cid))
+            xyz.append([float(s_idx) * span, 0.0, 0.0])
+    cd_zero = ChromData(
+        np.array(xyz, dtype=float),
+        pd.DataFrame(rows, columns=["chrom", "start", "end", "trace_id", "cell_id"]),
+        cells=pd.DataFrame(vals_x, columns=["cell_id", "if.X"]).set_index("cell_id"),
+    )
+    pt = assoc.per_trace(cd_zero, chrom="chr1", start=0, end=30)
+    assert np.isfinite(pt["rg_norm"].dropna()).all()
+
+    zero_store = tmp_path / "zero_const.chromdata.zarr"
+    cd_zero.write(zero_store)
+    cli_out = subprocess.check_output([
+        sys.executable, str(SCRIPT), "cell", str(zero_store),
+        "--x", "if.X", "--y", "n_spots", "--chrom", "chr1", "--start", "0", "--end", "30",
+        "--covar", "", "--group", "",
+    ], text=True)
+
+    def _reject(v):
+        raise ValueError(f"invalid JSON constant: {v}")
+
+    strict = json.loads(cli_out, parse_constant=_reject)
+    assert strict["n_cells"] == 6 and strict["rho"] is None and strict["p"] is None

@@ -54,7 +54,7 @@ def resolve_group(cd, spec, other=None) -> list:
     'all', or 'rest' = every cell not in ``other``)."""
     if isinstance(spec, str) and spec in ("all", "rest"):
         excl = set(resolve_group(cd, other)) if spec == "rest" and other is not None else set()
-        return [c for c in _all_ids(cd) if c not in excl]
+        return list(dict.fromkeys(c for c in _all_ids(cd) if c not in excl))
     if isinstance(spec, str) and spec.startswith("field:"):
         body = spec[len("field:"):]
         neg = "!=" in body
@@ -62,10 +62,10 @@ def resolve_group(cd, spec, other=None) -> list:
         cells = cd.cells
         ids = cells.index.astype(str) if "cell_id" not in cells else cells["cell_id"].astype(str)
         hit = cells[col].astype(str).to_numpy() == val
-        return list(ids[~hit if neg else hit])
+        return list(dict.fromkeys(str(c) for c in ids[~hit if neg else hit]))
     if isinstance(spec, str):
         spec = [s for s in spec.split(",") if s]
-    return [str(c) for c in spec]
+    return list(dict.fromkeys(str(c) for c in spec))
 
 
 def _validate_window(chrom: str | None, start: int | None, end: int | None) -> tuple[str | None, int | None, int | None]:
@@ -293,6 +293,27 @@ def _embedded_contact_stats(e, cells: list[str], chrom: str | None, start: int |
                         columns=list(CONTACT_STATS)) if req else pd.DataFrame(columns=list(CONTACT_STATS))
 
 
+def _scool_binsize(f, b_chrom: np.ndarray, b_start: np.ndarray, b_end: np.ndarray) -> int:
+    for holder in (f,):
+        bs = holder.attrs.get("bin-size")
+        if bs is not None and not isinstance(bs, (bool, bytes, str)) and int(bs) > 0:
+            return int(bs)
+    cells_grp = f.get("cells")
+    if cells_grp and len(cells_grp):
+        first_key = next(iter(cells_grp.keys()))
+        bs = cells_grp[first_key].attrs.get("bin-size")
+        if bs is not None and not isinstance(bs, (bool, bytes, str)) and int(bs) > 0:
+            return int(bs)
+    diffs = (b_end - b_start).astype(np.int64)
+    if len(b_chrom) > 1:
+        non_last = np.r_[b_chrom[:-1] == b_chrom[1:], False]
+        inner = diffs[non_last & (diffs > 0)]
+        if len(inner):
+            return int(np.median(inner))
+    pos = diffs[diffs > 0]
+    return int(np.median(pos)) if len(pos) else 1
+
+
 def _scool_contact_stats(path: Path, cells: list[str], chrom: str | None, start: int | None, end: int | None, smin: float | None, smax: float | None) -> pd.DataFrame:
     import h5py
 
@@ -301,7 +322,7 @@ def _scool_contact_stats(path: Path, cells: list[str], chrom: str | None, start:
         b_chrom = np.asarray(f["bins/chrom"][:], dtype=np.int64)
         b_start = np.asarray(f["bins/start"][:], dtype=np.int64)
         b_end = np.asarray(f["bins/end"][:], dtype=np.int64)
-        r = int(np.median(b_end - b_start))
+        r = _scool_binsize(f, b_chrom, b_start, b_end)
         if chrom is not None:
             if chrom not in chroms:
                 raise KeyError(f"chromosome {chrom!r} not in scool (have {chroms[:10]})")
@@ -506,6 +527,14 @@ def per_cell(
     return s.reindex([str(c) for c in cells]).dropna()
 
 
+def _raw_explicit_ids(spec) -> list[str] | None:
+    if isinstance(spec, str):
+        if spec in ("all", "rest") or spec.startswith("field:"):
+            return None
+        return [s for s in spec.split(",") if s]
+    return [str(c) for c in spec]
+
+
 def compare(
     cd,
     a,
@@ -520,17 +549,19 @@ def compare(
     smin: float | None = None,
     smax: float | None = None,
 ) -> dict:
+    a_raw, b_raw = _raw_explicit_ids(a), _raw_explicit_ids(b)
     a_ids = resolve_group(cd, a)
     b_ids = resolve_group(cd, b, other=a_ids)
     overlap = sorted(set(a_ids) & set(b_ids))
+    eq_k = max(2, int(equalize)) if (equalize and stat in ("rg", "span")) else None
     if stat in CONTACT_STATS:
         ca_df = _contact_stats(cd, a_ids, cool=cool, chrom=chrom, start=start, end=end, smin=smin, smax=smax)
         cb_df = _contact_stats(cd, b_ids, cool=cool, chrom=chrom, start=start, end=end, smin=smin, smax=smax)
         va, vb = ca_df[stat].dropna(), cb_df[stat].dropna()
     else:
         ca_df = cb_df = None
-        va = per_cell(cd, stat, a_ids, equalize, chrom=chrom, start=start, end=end)
-        vb = per_cell(cd, stat, b_ids, equalize, chrom=chrom, start=start, end=end)
+        va = per_cell(cd, stat, a_ids, eq_k, chrom=chrom, start=start, end=end)
+        vb = per_cell(cd, stat, b_ids, eq_k, chrom=chrom, start=start, end=end)
     res = {
         "stat": stat,
         "unit": "cell (median over its traces)" if stat in TRACE_STATS else "cell",
@@ -538,6 +569,10 @@ def compare(
         "b": {"n_cells": int(len(vb)), "median": float(np.median(vb)) if len(vb) else None},
         "checks": [],
     }
+    if a_raw is not None and len(a_raw) != len(a_ids):
+        res["checks"].append(f"duplicate cell IDs in group 'a' collapsed ({len(a_raw)} -> {len(a_ids)})")
+    if b_raw is not None and len(b_raw) != len(b_ids):
+        res["checks"].append(f"duplicate cell IDs in group 'b' collapsed ({len(b_raw)} -> {len(b_ids)})")
     if chrom is not None:
         res["window"] = {"chrom": chrom, "start": start, "end": end}
     if stat in ("rg", "span"):
@@ -546,17 +581,17 @@ def compare(
         res["checks"].append(
             "trace_kind is 'set' (unordered spots, not a polymer path); end-to-end span is not meaningful — prefer rg"
         )
-    if equalize:
-        res["equalized_loci_per_trace"] = int(equalize)
+    if eq_k is not None:
+        res["equalized_loci_per_trace"] = eq_k
         res["checks"].append(
-            f"{stat} recomputed on {int(equalize)} random loci per trace (mean of 20 draws); traces "
+            f"{stat} recomputed on {eq_k} random loci per trace (mean of 20 draws); traces "
             "with fewer loci dropped — report the equalized medians next to the raw ones"
         )
     if stat in TRACE_STATS:
         sub_a = cd.get_cells(a_ids) if "cell_id" in cd.spots.columns else cd
         sub_b = cd.get_cells(b_ids) if "cell_id" in cd.spots.columns else cd
-        ta = per_trace(sub_a, stat, equalize, chrom=chrom, start=start, end=end)
-        tb = per_trace(sub_b, stat, equalize, chrom=chrom, start=start, end=end)
+        ta = per_trace(sub_a, stat, eq_k, chrom=chrom, start=start, end=end)
+        tb = per_trace(sub_b, stat, eq_k, chrom=chrom, start=start, end=end)
         res["a"]["n_traces"], res["b"]["n_traces"] = int(len(ta)), int(len(tb))
         res["a"]["median_over_traces"] = float(ta["value"].median()) if len(ta) else None
         res["b"]["median_over_traces"] = float(tb["value"].median()) if len(tb) else None
@@ -718,6 +753,23 @@ def scan(cd, a, b, columns="", top: int = 10) -> dict:
     return res
 
 
+def _json_safe(obj):
+    import math
+
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    if isinstance(obj, (np.floating, float)):
+        val = float(obj)
+        return val if math.isfinite(val) else None
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    return obj
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("data")
@@ -755,7 +807,7 @@ def main():
             smax=a.smax,
         )
     )
-    json.dump(out, sys.stdout, indent=1, default=float)
+    json.dump(_json_safe(out), sys.stdout, indent=1, allow_nan=False)
     print()
 
 

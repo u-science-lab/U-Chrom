@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from uchrom import ChromData
 from tests import REPO
@@ -290,4 +291,46 @@ def test_clusters_metrics_and_format24_checks():
     joined = " ".join(r_span["checks"]).lower()
     assert "set" in joined and "span" in joined
     assert "region" in joined and "no replicate" in joined
+
+
+def test_review_regressions_dedup_equalize_and_scool_binsize(tmp_path):
+    h5py = pytest.importorskip("h5py")
+
+    # 1. Duplicate IDs deduplicated cleanly (with check note) & --equalize 1 reports 2 consistently
+    cd = _cd(n_a=5, n_b=5)
+    r_dup = cg.compare(cd, "A0,A0,A1,A2,A3,A4", "field:cell_type=B", stat="rg", confounder=None)
+    assert r_dup["a"]["n_cells"] == 5
+    assert any("duplicate" in c.lower() for c in r_dup["checks"])
+
+    r_eq1 = cg.compare(cd, "field:cell_type=A", "field:cell_type=B", stat="span", confounder=None, equalize=1)
+    assert r_eq1["equalized_loci_per_trace"] == 2
+    assert any("2 random loci" in c for c in r_eq1["checks"])
+
+    # 2. .scool with trailing partial bin and small single-bin contigs still infers 100 bp nominal bin size
+    scool_path = tmp_path / "partial_contigs.scool"
+    with h5py.File(scool_path, "w") as f:
+        chroms = ["chr1"] + [f"ctg{i}" for i in range(5)]
+        f.create_dataset("chroms/name", data=np.array(chroms, dtype="S"))
+        f.create_dataset("chroms/length", data=np.array([350] + [50] * 5, dtype=np.int64))
+        b_chrom = np.array([0, 0, 0, 0, 1, 2, 3, 4, 5], dtype=np.int64)
+        b_start = np.array([0, 100, 200, 300, 0, 0, 0, 0, 0], dtype=np.int64)
+        b_end = np.array([100, 200, 300, 350, 50, 50, 50, 50, 50], dtype=np.int64)
+        f.create_dataset("bins/chrom", data=b_chrom)
+        f.create_dataset("bins/start", data=b_start)
+        f.create_dataset("bins/end", data=b_end)
+        cg_grp = f.create_group("cells")
+        for i, cid in enumerate([f"A{k}" for k in range(5)] + [f"B{k}" for k in range(5)]):
+            g = cg_grp.create_group(cid)
+            g.create_dataset("pixels/bin1_id", data=np.array([0, 0, 0], dtype=np.int64))
+            g.create_dataset("pixels/bin2_id", data=np.array([1, 2, 3], dtype=np.int64))
+            g.create_dataset("pixels/count", data=np.array([30.0 + i, 10.0, 2.0], dtype=np.float64))
+            off = np.zeros(len(b_chrom) + 1, dtype=np.int64)
+            off[1:] = 3
+            g.create_dataset("indexes/bin1_offset", data=off)
+
+    cd.uns["linked_scool"] = {"default": {"path": str(scool_path)}}
+    df = cg._contact_stats(cd, [f"A{k}" for k in range(5)], smin=100, smax=300)
+    assert np.isfinite(df["ps_slope"]).all()
+    # With r=100, k in [1..3] includes pixels (0,1)=30+, (0,2)=10, (0,3)=2 out of 3+2+1 = 6 possible pairs
+    assert df.loc["A0", "contact_density"] == pytest.approx((30.0 + 10.0 + 2.0) / 6.0)
 
