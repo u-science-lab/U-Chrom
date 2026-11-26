@@ -194,7 +194,13 @@ def test_tools_list_dynamic_and_offline_fallback(server):
             tool = by_name[f"uchrom_{raw['name']}"]
             assert tool["description"] == raw["description"]
             assert "page" in tool["inputSchema"]["properties"]
-            if "annotations" in raw:
+            if raw["name"] == "capture_view":
+                assert tool["annotations"] == {
+                    "readOnlyHint": False,
+                    "destructiveHint": False,
+                    "idempotentHint": False,
+                }
+            elif "annotations" in raw:
                 assert tool["annotations"] == raw["annotations"]
         assert "path" in by_name["uchrom_capture_view"]["inputSchema"]["properties"]
 
@@ -438,3 +444,129 @@ def test_mcp_uses_no_uchrom_or_third_party_mcp():
     out = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=True).stdout
     assert "uchrom: False" in out
     assert "mcp: False" in out
+
+
+def test_mcp_python_s_stdlib_only_cli():
+    pkg_root = str(Path(__file__).resolve().parents[1])
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    env["PYTHONPATH"] = pkg_root
+    proc = subprocess.run(
+        [sys.executable, "-S", "-m", "uchrom_browser.mcp", "--help"],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=10,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "uchrom_browser.mcp" in proc.stdout or "--url" in proc.stdout
+
+
+def test_mcp_jsonrpc_edge_cases_and_validation(server):
+    from uchrom_browser.mcp import McpServer
+
+    huge_id = "1" * 5000
+    wire_in = (
+        f'{{"jsonrpc":"2.0","id":{huge_id},"method":"ping"}}\n'
+        '{"jsonrpc":"2.0","id":NaN,"method":"ping"}\n'
+        '{"jsonrpc":"2.0","id":"\\ud800","method":"ping"}\n'
+        '{"id":1,"method":"ping"}\n'
+        '{"jsonrpc":"2.0","id":true,"method":"ping"}\n'
+        '{"jsonrpc":"2.0","id":2,"method":"notifications/initialized"}\n'
+        '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"uchrom_bind_page","arguments":{"page":"tabX"}}}\n'
+        '{"jsonrpc":"2.0","id":3,"method":"initialize","params":null}\n'
+        '{"jsonrpc":"2.0","id":4,"method":"ping"}\n'
+    )
+    proc = subprocess.run(
+        [sys.executable, "-m", "uchrom_browser.mcp", "--url", server],
+        input=wire_in,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert proc.returncode == 0, proc.stderr
+    lines = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
+    # 7 responses expected: 3 parse/surrogate + 3 invalid-request + initialize + ping - notification w/o id drops,
+    # Wait: notifications/initialized WITH id=2 produces -32600; tools/call WITHOUT id produces no response -> total 8!
+    assert len(lines) == 8
+    assert lines[0]["error"]["code"] == -32700
+    assert lines[1]["error"]["code"] == -32700
+    assert lines[2]["id"] == "\ud800" and lines[2]["result"] == {}
+    assert lines[3]["error"]["code"] == -32600
+    assert lines[4]["error"]["code"] == -32600
+    assert lines[5]["error"]["code"] == -32600
+    assert lines[6]["id"] == 3 and "protocolVersion" in lines[6]["result"]
+    assert lines[7]["id"] == 4 and lines[7]["result"] == {}
+
+    # ID-less notification must not mutate bound_page, integral float accepted for integer, overflow -> isError
+    page = FakeSSEPage(server, lambda n, a: {"ok": True, "args": a}, page="tabJ")
+    page.start()
+    assert page.ready.wait(5)
+    try:
+        srv = McpServer(url=server, timeout=5.0)
+        out = io.StringIO()
+        srv.handle_line(
+            '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"uchrom_bind_page","arguments":{"page":"tabJ"}}}',
+            out,
+        )
+        assert out.getvalue() == ""
+        assert srv.bound_page is None
+
+        ok_float_int = _call_tool(srv, 10, "uchrom_set_locus", {"chrom": "chr1", "start": 1.0, "end": 5.0})
+        assert ok_float_int["isError"] is False
+        assert page.seen[-1]["args"] == {"chrom": "chr1", "start": 1, "end": 5}
+
+        huge_num_line = (
+            '{"jsonrpc":"2.0","id":11,"method":"tools/call",'
+            '"params":{"name":"uchrom_open_view","arguments":{"type":"spatial","image_opacity":' + ("9" * 400) + "}}}"
+        )
+        out2 = io.StringIO()
+        srv.handle_line(huge_num_line, out2)
+        resp = json.loads(out2.getvalue().splitlines()[0])
+        assert resp["id"] == 11
+        assert resp["result"]["isError"] is True
+    finally:
+        page.close()
+
+
+def test_mcp_capture_view_safety(server, tmp_path):
+    from uchrom_browser.mcp import McpServer
+
+    png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+    page = FakeSSEPage(
+        server,
+        lambda n, a: {
+            "data_base64": base64.b64encode(png_bytes).decode(),
+            "format": a.get("format", "png"),
+            "width": 10,
+            "height": 10,
+        },
+        page="tabCap",
+    )
+    page.start()
+    assert page.ready.wait(5)
+    try:
+        srv = McpServer(url=server, timeout=5.0)
+
+        # Existing file must never be silently overwritten
+        existing = tmp_path / "existing.png"
+        existing.write_bytes(b"keep-me")
+        r_exist = _call_tool(srv, 1, "uchrom_capture_view", {"path": str(existing)})
+        assert r_exist["isError"] is True
+        assert existing.read_bytes() == b"keep-me"
+
+        # .. traversal rejected before touching browser page
+        before = len(page.seen)
+        r_trav = _call_tool(srv, 2, "uchrom_capture_view", {"path": str(tmp_path / "sub" / ".." / "out.png")})
+        assert r_trav["isError"] is True
+        assert len(page.seen) == before
+
+        # Extension vs explicit format mismatch rejected
+        r_fmt = _call_tool(srv, 3, "uchrom_capture_view", {"path": str(tmp_path / "shot.png"), "format": "svg"})
+        assert r_fmt["isError"] is True
+        assert len(page.seen) == before
+
+        # Unwritable parent (parent is a regular file) returns tool isError instead of crashing server
+        r_bad_parent = _call_tool(srv, 4, "uchrom_capture_view", {"path": str(existing / "shot.png")})
+        assert r_bad_parent["isError"] is True
+    finally:
+        page.close()

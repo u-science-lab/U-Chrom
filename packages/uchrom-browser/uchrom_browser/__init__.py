@@ -17,14 +17,34 @@ import threading
 import webbrowser
 from typing import Iterable, Optional
 
-from .client import BrowserError, Workspace, connect
-from .data import DatasetStore, decode_geometry, encode_geometry
-from .hosted import HostedConfig
-
 __version__ = "0.1.0"
 
 __all__ = ["BrowserError", "DatasetStore", "Workspace", "connect", "create_app", "decode_geometry",
            "encode_geometry", "serve", "__version__"]
+
+_LAZY = {
+    "BrowserError": (".client", "BrowserError"),
+    "Workspace": (".client", "Workspace"),
+    "connect": (".client", "connect"),
+    "DatasetStore": (".data", "DatasetStore"),
+    "decode_geometry": (".data", "decode_geometry"),
+    "encode_geometry": (".data", "encode_geometry"),
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY:
+        mod_name, attr = _LAZY[name]
+        from importlib import import_module
+
+        val = getattr(import_module(mod_name, __name__), attr)
+        globals()[name] = val
+        return val
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))
 
 
 def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None, hosted=None):
@@ -60,6 +80,8 @@ def serve(paths: Iterable[str] = (), *, host: str = "127.0.0.1", port: int = 876
             "The web browser needs the 'web' extra: pip install \"u-chrom[web]\""
         ) from exc
 
+    from .data import DatasetStore
+
     store = DatasetStore()
     for path in paths:
         ds = store.load(path)
@@ -73,6 +95,8 @@ def serve(paths: Iterable[str] = (), *, host: str = "127.0.0.1", port: int = 876
     from .client import clear_state, write_state
     write_state(url)  # lets uchrom_browser.connect() find this server
     try:
+        from .hosted import HostedConfig
+
         uvicorn.run(create_app(store, atlas, HostedConfig() if hosted else None), host=host, port=port, log_level="warning")
     finally:
         clear_state(url)

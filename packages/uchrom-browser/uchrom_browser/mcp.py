@@ -62,17 +62,25 @@ class _RpcError(Exception):
         self.message = message
 
 
+def _reject_constant(token: str) -> Any:
+    raise ValueError(f"non-JSON constant {token!r} is not allowed")
+
+
 def _matches_type(value: Any, expected: str) -> bool:
     if expected == "string":
         return isinstance(value, str)
     if expected == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
-    if expected == "number":
         return (
-            isinstance(value, (int, float))
-            and not isinstance(value, bool)
-            and math.isfinite(float(value))
+            (isinstance(value, int) and not isinstance(value, bool))
+            or (isinstance(value, float) and math.isfinite(value) and value.is_integer())
         )
+    if expected == "number":
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return False
+        try:
+            return math.isfinite(float(value))
+        except OverflowError:
+            return False
     if expected == "boolean":
         return isinstance(value, bool)
     if expected == "array":
@@ -134,12 +142,48 @@ def _tool_err(message: str) -> Dict[str, Any]:
 
 def _write_private_temp(data: bytes, fmt: str) -> Path:
     temp_dir = Path(tempfile.gettempdir()) / "uchrom-browser-mcp"
+    if temp_dir.is_symlink():
+        raise OSError(f"temporary capture directory {temp_dir} must not be a symlink")
     temp_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(temp_dir, 0o700)
     fd, tmp_name = tempfile.mkstemp(prefix="uchrom_view_", suffix=f".{fmt}", dir=str(temp_dir))
-    with os.fdopen(fd, "wb") as fh:
-        fh.write(data)
-    return Path(tmp_name)
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    return tmp_path
+
+
+def _resolve_capture_dest(out_path: str, explicit_fmt: Optional[str], fmt: str) -> Path:
+    raw = Path(out_path)
+    if ".." in raw.parts:
+        raise ValueError("capture path must not contain '..'")
+    if explicit_fmt is not None and raw.suffix and raw.suffix.lower().lstrip(".") != fmt:
+        raise ValueError(f"capture path suffix {raw.suffix!r} conflicts with format {fmt!r}")
+    cur = Path("/") if raw.is_absolute() else Path.cwd()
+    for part in raw.parts:
+        if part in ("", "/"):
+            continue
+        cur = cur / part
+        if cur.is_symlink():
+            raise ValueError(f"capture path must not traverse or target symlinks: {cur}")
+    if raw.exists():
+        raise FileExistsError(f"refusing to overwrite existing file: {raw}")
+    return raw
+
+
+def _write_exclusive(dest: Path, data: bytes) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(dest), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+    except BaseException:
+        dest.unlink(missing_ok=True)
+        raise
 
 
 class McpServer:
@@ -198,14 +242,16 @@ class McpServer:
             if raw["name"] == "capture_view":
                 props["path"] = {
                     "type": "string",
-                    "description": "Optional output file path (PNG, SVG, or PDF). Defaults to a private temporary file.",
+                    "description": "Optional non-existing output file path (PNG, SVG, or PDF; no '..' or symlinks). Defaults to a private temporary file.",
                 }
             entry: Dict[str, Any] = {
                 "name": f"uchrom_{raw['name']}",
                 "description": raw["description"],
                 "inputSchema": schema,
             }
-            if "annotations" in raw:
+            if raw["name"] == "capture_view":
+                entry["annotations"] = {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False}
+            elif "annotations" in raw:
                 entry["annotations"] = copy.deepcopy(raw["annotations"])
             tools.append(entry)
         return tools
@@ -301,14 +347,16 @@ class McpServer:
             else:
                 out = {"result": result, "page": target_page}
             return _tool_ok(out)
-        except (BrowserError, ValueError) as exc:
+        except (BrowserError, ValueError, OSError) as exc:
             return _tool_err(str(exc))
 
     def _handle_capture_view(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         target_page = self._resolve_page(arguments.get("page"))
         pane = arguments.get("pane")
         out_path = arguments.get("path")
-        fmt = _capture_format(arguments.get("format"), out_path)
+        explicit_fmt = arguments.get("format")
+        fmt = _capture_format(explicit_fmt, out_path)
+        dest: Optional[Path] = _resolve_capture_dest(out_path, explicit_fmt, fmt) if out_path else None
         action_args: Dict[str, Any] = {"format": fmt}
         if pane is not None:
             action_args["pane"] = pane
@@ -322,10 +370,8 @@ class McpServer:
         if not b64:
             raise BrowserError("capture_view did not return image data")
         data = base64.b64decode(b64)
-        if out_path:
-            dest = Path(out_path)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(data)
+        if dest is not None:
+            _write_exclusive(dest, data)
         else:
             dest = _write_private_temp(data, fmt)
         return {
@@ -341,11 +387,21 @@ class McpServer:
         }
 
     # -- JSON-RPC dispatch ------------------------------------------------
-    def _dispatch(self, method: str, params: Any) -> Any:
+    def _dispatch(self, method: str, params: Any, *, has_id: bool) -> Any:
+        if method.startswith("notifications/"):
+            if has_id:
+                raise _RpcError(-32600, "notifications must not include 'id'")
+            return None
+
+        if not has_id:
+            return None
+
         if method == "initialize":
-            if params is not None and not isinstance(params, dict):
+            if params is None:
+                params = {}
+            elif not isinstance(params, dict):
                 raise _RpcError(-32602, "initialize params must be an object")
-            requested = (params or {}).get("protocolVersion")
+            requested = params.get("protocolVersion")
             version = (
                 requested
                 if requested in SUPPORTED_PROTOCOL_VERSIONS
@@ -357,10 +413,9 @@ class McpServer:
                 "serverInfo": {"name": "uchrom-browser", "version": __version__},
             }
 
-        if method == "notifications/initialized":
-            return None
-
         if method == "ping":
+            if params is not None and not isinstance(params, dict):
+                raise _RpcError(-32602, "ping params must be an object")
             return {}
 
         if method == "tools/list":
@@ -384,20 +439,23 @@ class McpServer:
         if not line.strip():
             return
         try:
-            msg = json.loads(line)
-        except json.JSONDecodeError as exc:
+            msg = json.loads(line, parse_constant=_reject_constant)
+        except (json.JSONDecodeError, ValueError) as exc:
             self._write(out, {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": f"Parse error: {exc}"}})
             return
 
-        if not isinstance(msg, dict) or not isinstance(msg.get("method"), str):
-            req_id = msg.get("id") if isinstance(msg, dict) else None
-            self._write(out, {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32600, "message": "Invalid Request"}})
+        if not isinstance(msg, dict) or msg.get("jsonrpc") != "2.0" or not isinstance(msg.get("method"), str):
+            self._write(out, {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid Request"}})
             return
 
         has_id = "id" in msg
         req_id = msg.get("id")
+        if has_id and (isinstance(req_id, bool) or not (req_id is None or isinstance(req_id, (str, int)))):
+            self._write(out, {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid Request: invalid id"}})
+            return
+
         try:
-            result = self._dispatch(msg["method"], msg.get("params"))
+            result = self._dispatch(msg["method"], msg.get("params"), has_id=has_id)
         except _RpcError as exc:
             if has_id:
                 self._write(out, {"jsonrpc": "2.0", "id": req_id, "error": {"code": exc.code, "message": exc.message}})
@@ -412,7 +470,7 @@ class McpServer:
 
     @staticmethod
     def _write(out: TextIO, payload: Dict[str, Any]) -> None:
-        out.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        out.write(json.dumps(payload, ensure_ascii=True, allow_nan=False) + "\n")
         out.flush()
 
     def serve_stdio(self, stdin: Optional[TextIO] = None, stdout: Optional[TextIO] = None) -> None:
