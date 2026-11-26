@@ -521,7 +521,7 @@ class McpServer:
             headers={"Content-Type": "application/json"},
         )
         effective_timeout = self.timeout if timeout is None else timeout
-        sock_timeout = (float(effective_timeout) + 2.0) if path == "/api/control/actions" else max(0.05, float(effective_timeout))
+        sock_timeout = (float(effective_timeout) + 2.0) if path == "/api/control/actions" else max(0.001, float(effective_timeout))
         try:
             with urllib.request.urlopen(req, timeout=sock_timeout) as resp:
                 return json.loads(resp.read() or b"null")
@@ -638,9 +638,14 @@ class McpServer:
             raise ValueError("wait_seconds must be between 0 and 60")
         target_id = page if page is not None else self.bound_page
         deadline = time.monotonic() + secs
+        attempt = 0
         while True:
             rem = deadline - time.monotonic()
-            poll_timeout = min(2.0, max(0.05, rem)) if secs > 0 else min(0.5, float(self.timeout))
+            if attempt > 0 and rem <= 0:
+                target_desc = f"page {target_id!r}" if target_id is not None else "any browser page"
+                raise NoPageConnectedError(f"timed out after {secs:g}s waiting for {target_desc} to connect")
+            poll_timeout = min(2.0, rem) if (secs > 0 and rem > 0) else min(0.05, float(self.timeout))
+            attempt += 1
             pages: Optional[List[Dict[str, Any]]] = None
             try:
                 pages = self._connected_pages(timeout=poll_timeout)
@@ -653,10 +658,11 @@ class McpServer:
                         return {"pages": pages, "bound_page": self.bound_page}
                 elif connected:
                     return {"pages": pages, "bound_page": self.bound_page}
-            if time.monotonic() >= deadline:
+            rem_sleep = deadline - time.monotonic()
+            if rem_sleep <= 0:
                 target_desc = f"page {target_id!r}" if target_id is not None else "any browser page"
                 raise NoPageConnectedError(f"timed out after {secs:g}s waiting for {target_desc} to connect")
-            time.sleep(min(0.2, max(0.01, deadline - time.monotonic())))
+            time.sleep(min(0.2, rem_sleep))
 
     # -- tool execution ---------------------------------------------------
     def _call_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:

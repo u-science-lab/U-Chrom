@@ -40,7 +40,7 @@ cd = ws.dataset()                    # the same ChromData, for analysis
 | `open_view(type, cells=…, rows=[…], stats=…, chrom_scope="all"|"locus", compare_groups=[…], field_x, field_y, embedding)` | new view; returns `{"pane": id}` |
 | `arrange(layout="grid")`, `show_view(pane)`, `close_view(pane)` | layout |
 | `color_by(field)` | colour cells by a field |
-| `capture_view` (`ws.capture(pane, path, format=None)`) | save PNG/SVG/PDF (`uchrom-browser-mcp` / `uchrom-browser-ctl capture --out` / `ws.capture` refuse overwriting, `..`, and symlinks; WebMCP returns base64) |
+| `capture_view` (`ws.capture(pane, path, format=None)`) | save PNG/SVG/PDF (`uchrom-browser-mcp` / `uchrom-browser-ctl capture --out` refuse overwriting, `..`, and symlinks; `ws.capture` writes to `path` or a temp file directly; WebMCP returns base64) |
 
 Group references: the `group` returned by `select_cells`, `field:<column>=<value>`, or `all`.
 Genome rows: `{"kind": "track", "track": "H3K27ac", "cells": ref}`, `{"kind": "distance", "cells": ref}`,
