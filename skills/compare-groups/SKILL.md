@@ -1,6 +1,6 @@
 ---
 name: compare-groups
-description: Use for any comparison of cell groups in U-Chrom data — do X cells have larger Rg / nuclei / more … than Y, is a mark different, which mark differs most, what is different about selected cells, is it still there at equal spots per trace, p-values. Per-cell stats, Mann–Whitney, effect size, FDR, confounders.
+description: Use for any comparison of cell groups in U-Chrom data — do X cells have larger Rg / nuclei / more … than Y, is a mark different, which mark differs most, what is different about selected cells, is it still there at equal spots per trace, per-cell contact stats (P(s) slope, cis contacts, contact density), multi-way clusters, p-values. Per-cell stats, Mann–Whitney, effect size, FDR, confounders.
 ---
 
 # Compare groups of cells
@@ -8,8 +8,10 @@ description: Use for any comparison of cell groups in U-Chrom data — do X cell
 ## When to use
 "Are X cells different from Y?", "what is special about the cells I selected?", "is chromatin
 more compact in …?", "which mark differs most …?" — any group comparison on a ChromData (`.chromdata.zarr` / `.cdz`; convert an older `.h5cd` first with `python -m uchrom.io.upgrade old.h5cd`).
-For contact-map statistics per group (P(s) of pseudo-bulk maps) compute them with *call-structures*
-and compare there; for correlations use *associate-modalities*.
+For pseudo-bulk contact-map statistics use *call-structures*; for per-cell contact-map comparisons
+(`ps_slope`, `cis_contacts`, `contact_density`), windowed tracing (`--chrom`/`--start`/`--end`), or
+multi-way cluster comparisons (`clusters:<key>:n_clusters|median_size|cis_frac`), use this skill.
+For correlations use *associate-modalities*.
 
 ## Steps
 1. **Get the groups.** Cell ids (`a,b,c`), `field:<cells column>=<value>` (e.g. `field:cell_type=<TYPE>`),
@@ -19,14 +21,21 @@ and compare there; for correlations use *associate-modalities*.
 2. **One statistic** — run `scripts/compare_groups.py` (CLI) or import `compare()`:
    ```bash
    python <skill dir>/scripts/compare_groups.py data.chromdata.zarr --a field:cell_type=<TYPE_A> --b field:cell_type=<TYPE_B> --stat rg
+   python <skill dir>/scripts/compare_groups.py data.chromdata.zarr --a field:cell_type=<TYPE_A> --b field:cell_type=<TYPE_B> --stat rg --chrom chr1 --start 0 --end 10000000
+   python <skill dir>/scripts/compare_groups.py data.chromdata.zarr --a field:cell_type=<TYPE_A> --b field:cell_type=<TYPE_B> --stat ps_slope --chrom chr1 [--smin 1e5 --smax 1e7] [--cool per_cell]
+   python <skill dir>/scripts/compare_groups.py data.chromdata.zarr --a field:cell_type=<TYPE_A> --b field:cell_type=<TYPE_B> --stat clusters:sprite:cis_frac
    ```
    ```python
    import sys; sys.path.insert(0, "<skill dir>/scripts")
    from compare_groups import compare, scan
-   res = compare(cd, "field:cell_type=A", "field:cell_type=B", stat="rg")      # rg | span | n_spots | <cells column>
+   res = compare(cd, "field:cell_type=A", "field:cell_type=B", stat="rg")
+   # stat: rg | span | n_spots | ps_slope | cis_contacts | contact_density | clusters:<key>:<n_clusters|median_size|cis_frac> | <cells column>
    ```
    Per-trace statistics (`rg`, `span`, `n_spots`) are summarised as the **median per cell**; the group
-   value is the median over cells; the test compares cells.
+   value is the median over cells; the test compares cells. Optional `chrom`, `start`, `end` restrict
+   tracing (dropping `< 2`-spot trace fragments for `rg`/`span`), contact maps, and clusters to a genomic
+   window. Per-cell contact stats read embedded Zarr maps (`embedded/contacts`) first without needing
+   `cooler` or `h5py`, falling back to `linked_scool` via `h5py`.
 3. **Many features / "what is different"** — `scan()` / `--scan if.` (prefix; `""` = every numeric
    cells column) tests each column per cell, sorts by p, and adds **BH-FDR q** across all columns tested
    plus the categorical composition (e.g. which cell type the selection is). Report the top field with
@@ -46,9 +55,11 @@ and compare there; for correlations use *associate-modalities*.
 - **n per group ≥ 5 cells**, else call the result exploratory and give no p-value claims.
 - **Multiple testing.** Scanning many marks/genes → BH-FDR (q) across all of them; say how many.
 - **Confounders.** If the statistic tracks nuclear volume (`res["confounder"]`, |ρ| > 0.5), say
-  the difference may reflect nuclear size; if possible compare within a size range. If spots per trace
-  differ, compare at equal loci (step 4).
-- **One batch / field of view** → say there is no replicate.
+  the difference may reflect nuclear size; if possible compare within a size range. For `ps_slope` and
+  `contact_density`, check `res["depth_confounder"]` (`cis_contacts`) and warn if median `cis_contacts < 1000`.
+  If spots per trace differ, compare at equal loci (step 4).
+- **Set traces & single region/batch.** If `uns["trace_kind"] == "set"`, `span` is not meaningful — prefer `rg`.
+  One `fov`/`region`/`batch`/`replicate`/`sample` → say there is no replicate.
 - Effect size with the test: median ratio and rank-biserial r (+1: every a cell > every b cell).
 
 ## Report template

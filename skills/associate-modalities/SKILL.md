@@ -1,18 +1,19 @@
 ---
 name: associate-modalities
-description: Use for any "does A correlate with B" question in U-Chrom data — IF / histone mark, RNA, ATAC or nuclear size vs Rg / compaction, central vs peripheral position of bins, ATAC vs RNA of a gene (driven by cell type?), cell-type separation (kNN purity) in Hi-C vs RNA embeddings. Level, Spearman, confounders.
+description: Use for any "does A correlate with B" or spatial autocorrelation question in U-Chrom data — IF / histone mark, RNA, ATAC, contact P(s) slope, multi-way clusters or nuclear size vs Rg / compaction, central vs peripheral position of bins, ATAC vs RNA of a gene (driven by cell type?), cell-type separation (kNN purity), spatial Moran's I. Level, Spearman, confounders.
 ---
 
 # Associate a feature with structure (or two modalities)
 
 ## When to use
-"Across cells, does ⟨IF / histone mark⟩ correlate with compaction (median trace Rg)?", "along chrN, do bins
-with more ⟨mark⟩ sit more central / peripheral?", "does ATAC gene activity correlate with RNA for gene X, and
-is it driven by cell type?", "how well do cell types separate in the Hi-C vs RNA embedding (kNN purity)?" —
-any feature (IF, RNA, ATAC, nuclear volume, embedding) vs structure or vs another modality.
+"Across cells, does ⟨IF / histone mark⟩ correlate with compaction (median trace Rg) or contact P(s) slope?",
+"along chrN, do bins with more ⟨mark⟩ sit more central / peripheral?", "does ATAC gene activity correlate with
+RNA for gene X, and is it driven by cell type?", "how well do cell types separate in the Hi-C vs RNA embedding
+(kNN purity)?", "is ⟨feature⟩ spatially autocorrelated across cells in the tissue?" — any feature (IF, RNA,
+ATAC, nuclear volume, contacts, multi-way clusters, embedding) vs structure, spatial coordinates, or another modality.
 
 Script: `<skill dir>/scripts/associate.py` (CLI prints JSON; or import `cell_level`, `bin_level`,
-`knn_purity`). Run *load-data* first if you have not looked at the dataset.
+`knn_purity`, `spatial_autocorr`). Run *load-data* first if you have not looked at the dataset.
 
 ## 1. Choose the level — and say it
 | the question is about… | level | unit of n | command |
@@ -21,6 +22,7 @@ Script: `<skill dir>/scripts/associate.py` (CLI prints JSON; or import `cell_lev
 | genomic positions ("bins / loci / regions with more X…", "along chrN") | **bin** | bins | `associate.py bin data.chromdata.zarr --x <TRACK> --y <TRACK> --chrom <CHROM> --bin-size <BIN>` |
 | cell types | **cell type** | cell types (few!) | per-type medians (`between_group_medians_rho`) — descriptive only |
 | embeddings | **cell** | cells | `associate.py purity data.chromdata.zarr --emb hic_umap,rna_umap --k 15` |
+| tissue spatial organisation | **cell** (spatial k-NN) | cells in region | `associate.py spatial data.chromdata.zarr --feature <FEAT> [--region <REG>] [--k 10]` |
 
 Spot-level correlations (every spot a sample) are pseudo-replicated — never the headline; the `bin`
 command prints one only for contrast.
@@ -28,8 +30,12 @@ command prints one only for contrast.
 Per-cell values — prefer the per-cell measurement when one exists (`if.<MARK>` in `cells` is the
 cell's IF value; `track:<MARK>` is the mean at DNA spots, a different quantity — name which you used): a `cells` column (`if.*`, `rna.*`, `atac.*`, `nuc_volume_um3`), `rg` / `span`
 (**median over the cell's traces**), `rg_norm` (Rg ÷ its chromosome's median, removes chromosome
-composition), `n_spots`, or `track:<name>` (mean of a per-spot track). Per-spot values for `bin`: any
-`cd.spot_tracks` column (or a per-locus `cd.bin_tracks` column, broadcast to spots) (IF at the DNA locus, a radial score such as `n_rad_score`, distance to the nuclear
+composition), `n_spots`, `track:<name>` (mean of a per-spot track), per-cell contact stats (`ps_slope`,
+`cis_contacts`, `contact_density` — embedded Zarr first without `cooler`/`h5py`, then `linked_scool`), or
+multi-way cluster metrics (`clusters:<key>:n_clusters|median_size|cis_frac`). Pass `--chrom`, `--start`,
+`--end` to restrict tracing, contact, and cluster stats to a genomic window (tracing fragments with `< 2`
+spots in the window are dropped for `rg`/`span`/`rg_norm`).
+Per-spot values for `bin`: any `cd.spot_tracks` column (or a per-locus `cd.bin_tracks` column, broadcast to spots) (IF at the DNA locus, a radial score such as `n_rad_score`, distance to the nuclear
 periphery) or `dist_to_cell_center`. **Check the direction before interpreting**: a normalised radial
 score is usually 0 at the centre and 1 at the periphery (it then anti-correlates with a
 distance-to-periphery track across spots — verify with `spearmanr`), so a *negative* ρ with it means
@@ -38,7 +44,7 @@ distance-to-periphery track across spots — verify with `spearmanr`), so a *neg
 ## 2. Test
 - **Spearman** by default (robust to skew; say "Spearman ρ"); give ρ, p and n.
 - **Confounders** (`--covar`, default `nuc_volume_um3`): add `n_spots` for structure statistics and
-  depth (`n_counts_rna`, `n_fragments_atac`, `n_contacts_hic`) for sequencing features. The script
+  depth (`n_counts_rna`, `n_fragments_atac`, `n_contacts_hic`, `cis_contacts`) for sequencing features. The script
   reports each confounder's correlation with x and y and a **partial Spearman** controlling for them.
   Nuclear size drives both IF intensity and Rg in many datasets — always mention it for cell-level
   structure associations. Report the **raw ρ as the answer** and the partial ρ as a sensitivity check;
@@ -51,10 +57,14 @@ distance-to-periphery track across spots — verify with `spearmanr`), so a *neg
   so the p-value is descriptive. Report n bins and spots per bin.
 - Embeddings: purity = mean fraction of each cell's k nearest neighbours (Euclidean, self excluded)
   sharing its label; compare to `chance_purity` (Σ p²) and name the embedding and k.
+- Spatial autocorrelation (`spatial` / `spatial_autocorr`): Moran's I on a symmetric spatial k-NN graph
+  within a single region (largest region by default when multiple exist, or `--region`), with
+  deterministic permutation upper (`p_upper`) and two-sided (`p_two_sided`) p-values (`--permutations`,
+  `--seed`). State `region`, `k`, `n_cells`, and whether positions are `measured` or `inferred`.
 
 ## Checks
-- Level stated (cell / bin / cell type) and n at that level.
-- Method named (Spearman unless asked otherwise), p-value, direction in words.
+- Level stated (cell / bin / cell type / spatial) and n at that level.
+- Method named (Spearman / Moran's I), p-value, direction in words.
 - Confounders: nuclear size (and spots per trace / depth) mentioned with the partial correlation.
 - Within-type result reported when cell types differ in both variables.
 - One field of view / batch → no replicate. Correlation is not causation.
