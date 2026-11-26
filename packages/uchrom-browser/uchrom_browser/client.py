@@ -66,13 +66,15 @@ class Workspace:
             raise BrowserError(f"cannot reach the browser server at {self.url} ({exc.reason}); "
                                "start it with `python -m uchrom_browser data.chromdata.zarr`") from None
 
-    def call(self, action: str, /, **args) -> Any:
-        """Run one browser action (see :meth:`tools`) on the active page and return its result (a dict)."""
+    def call(self, action: str, /, *, page: Optional[str] = None, **args) -> Any:
+        """Run one browser action (see :meth:`tools`) on the active (or given ``page``) and return its result."""
         if action not in self._tools:
             raise BrowserError(f"unknown action {action!r}; available: {', '.join(self._tools)}")
         args = {k: v for k, v in args.items() if v is not None}
-        return self._request("POST", "/api/control/actions",
-                             {"name": action, "args": args, "timeout": self.timeout})["result"]
+        body: Dict[str, Any] = {"name": action, "args": args, "timeout": self.timeout}
+        if page is not None:
+            body["page"] = page
+        return self._request("POST", "/api/control/actions", body)["result"]
 
     def tools(self) -> List[Dict[str, Any]]:
         """The action definitions (name, description, input schema)."""
@@ -106,12 +108,12 @@ class Workspace:
         return sorted(set(super().__dir__()) | set(self._tools))
 
     # -- conveniences ------------------------------------------------------
-    def describe(self) -> Dict[str, Any]:
-        return self.call("describe_workspace")
+    def describe(self, page: Optional[str] = None) -> Dict[str, Any]:
+        return self.call("describe_workspace", page=page)
 
-    def selected_cells(self) -> List[str]:
+    def selected_cells(self, page: Optional[str] = None) -> List[str]:
         """Cell ids of the current selection (lasso, focused group or cell); [] when none."""
-        return list(self.call("get_selection")["cells"])
+        return list(self.call("get_selection", page=page)["cells"])
 
     def dataset(self):
         """The ChromData the browser has open (read from the same file, in this process)."""
@@ -121,7 +123,8 @@ class Workspace:
             raise BrowserError("the open dataset has no file path")
         return ChromData.read(path)
 
-    def capture(self, pane: Optional[str] = None, path: Optional[str] = None, format: Optional[str] = None) -> Dict[str, Any]:
+    def capture(self, pane: Optional[str] = None, path: Optional[str] = None,
+                format: Optional[str] = None, page: Optional[str] = None) -> Dict[str, Any]:
         """Save a view (default: the active one) to ``path`` (default: a temporary file).
 
         ``format`` is ``"png"`` (pixels, as on screen), ``"svg"`` or ``"pdf"`` (editable vectors for
@@ -129,7 +132,7 @@ class Workspace:
         ``{"path", "pane", "format", "width", "height", "bytes", "notes"}`` — not the image itself;
         ``notes`` lists what the vector file approximates (e.g. 3-D tubes as strokes)."""
         fmt = _capture_format(format, path)
-        r = self.call("capture_view", pane=pane, format=fmt)
+        r = self.call("capture_view", pane=pane, format=fmt, page=page)
         data = base64.b64decode(r.get("data_base64") or r["png_base64"])
         if not path:
             import tempfile

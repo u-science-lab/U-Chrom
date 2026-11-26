@@ -602,3 +602,17 @@ The page marks itself active on window focus; `pages` lists connected pages, act
 
 `python -m uchrom_browser` records its URL in `~/.cache/uchrom/browser.json` (removed on
 exit) so that `connect()` finds a server that moved to another port.
+
+## MCP Server (stdio)
+
+Run a pure-stdlib JSON-RPC 2.0 MCP server over `stdin`/`stdout` against a running browser:
+
+```bash
+uchrom-browser-mcp [--url http://127.0.0.1:8765] [--timeout 30]
+# or: python -m uchrom_browser.mcp [--url ...] [--timeout 30]
+```
+
+- **Discovery & session tools**: `uchrom_status` (`url`, `health`, `datasets`, `pages`, `bound_page`), `uchrom_list_pages`, and `uchrom_bind_page` (`page` id or `null` to clear).
+- **Browser actions**: every tool from `GET /api/control/tools` (falling back to `ui_tools.json` when offline) is exposed as `uchrom_<name>` with an optional `page` argument and strict schema validation before dispatch.
+- **Multi-tab safety**: actions resolve `page` explicitly, else the session's `bound_page` (erroring without failover if that tab closes), else the single connected page — refusing when 0 or 2+ pages are connected.
+- **`uchrom_capture_view`**: accepts optional `path` (defaulting to a private `0700` temp directory), writes PNG/SVG/PDF bytes to disk, and returns `{path, pane, format, width, height, bytes, sha256, notes, page}` with no base64 payload.
