@@ -144,7 +144,7 @@ sources, cached under `$UCHROM_DATA` (default `~/.cache/uchrom`). How each one i
   Claude Code, and Codex. Run `uchrom-browser-mcp --print-config claude` (or `codex` / `cursor`) for a
   ready-to-paste snippet, and `uchrom-browser-mcp --doctor` to verify connectivity and connected tabs.
 - **Agent-friendly CLI (`uchrom-browser-ctl`)** — lightweight pure-stdlib shell interface sharing the same
-  schema validation, multi-tab safety, and atomic PNG/SVG/PDF capture for coding agents (`doctor`, `pages`,
+  schema validation, multi-tab safety, and exclusive (non-overwriting) PNG/SVG/PDF capture for coding agents (`doctor`, `pages`,
   `bind`, `selection`, `locus`, `open`, `arrange`, `capture`, `call`), emitting strict JSON and semantic
   exit codes (`0`/`2`/`3`/`4`/`5`).
 - **Python client & WebMCP** — `ws = uchrom_browser.connect()` drives an open browser from Python analysis

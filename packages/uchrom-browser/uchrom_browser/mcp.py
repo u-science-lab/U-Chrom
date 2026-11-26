@@ -16,6 +16,8 @@ import hashlib
 import json
 import math
 import os
+import secrets
+import stat
 import sys
 import tempfile
 import time
@@ -164,7 +166,10 @@ def _parse_json_int(token: str) -> int:
 
 
 def _json_loads_strict(text: str) -> Any:
-    return json.loads(text, parse_constant=_reject_constant, parse_int=_parse_json_int)
+    try:
+        return json.loads(text, parse_constant=_reject_constant, parse_int=_parse_json_int)
+    except RecursionError:
+        raise ValueError("JSON nesting depth exceeded") from None
 
 
 def _json_safe(obj: Any) -> Any:
@@ -181,7 +186,9 @@ def _in_safe_int_range(value: int) -> bool:
     return -(MAX_SAFE_INT + 1) <= value <= MAX_SAFE_INT
 
 
-def _check_nested_finite(path: str, value: Any) -> Optional[str]:
+def _check_nested_finite(path: str, value: Any, depth: int = 0) -> Optional[str]:
+    if depth > 64:
+        return f"argument {path!r} exceeds maximum nesting depth"
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
@@ -194,13 +201,13 @@ def _check_nested_finite(path: str, value: Any) -> Optional[str]:
         return None
     if isinstance(value, list):
         for idx, item in enumerate(value):
-            err = _check_nested_finite(f"{path}[{idx}]", item)
+            err = _check_nested_finite(f"{path}[{idx}]", item, depth + 1)
             if err is not None:
                 return err
         return None
     if isinstance(value, dict):
         for k, v in value.items():
-            err = _check_nested_finite(f"{path}.{k}", v)
+            err = _check_nested_finite(f"{path}.{k}", v, depth + 1)
             if err is not None:
                 return err
         return None
@@ -224,6 +231,8 @@ def _matches_type(value: Any, expected: str) -> bool:
     if expected == "number":
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return False
+        if isinstance(value, int) and not _in_safe_int_range(value):
+            return False
         try:
             return math.isfinite(float(value))
         except OverflowError:
@@ -239,7 +248,9 @@ def _matches_type(value: Any, expected: str) -> bool:
     return True
 
 
-def _validate_value(path: str, value: Any, schema: Dict[str, Any]) -> Optional[str]:
+def _validate_value(path: str, value: Any, schema: Dict[str, Any], depth: int = 0) -> Optional[str]:
+    if depth > 64:
+        return f"argument {path!r} exceeds maximum nesting depth"
     expected = schema.get("type")
     if expected is not None:
         allowed = [expected] if isinstance(expected, str) else list(expected)
@@ -251,15 +262,15 @@ def _validate_value(path: str, value: Any, schema: Dict[str, Any]) -> Optional[s
         if "items" in schema:
             item_schema = schema["items"]
             for idx, item in enumerate(value):
-                err = _validate_value(f"{path}[{idx}]", item, item_schema)
+                err = _validate_value(f"{path}[{idx}]", item, item_schema, depth + 1)
                 if err is not None:
                     return err
         else:
-            err = _check_nested_finite(path, value)
+            err = _check_nested_finite(path, value, depth)
             if err is not None:
                 return err
     elif isinstance(value, dict):
-        err = _check_nested_finite(path, value)
+        err = _check_nested_finite(path, value, depth)
         if err is not None:
             return err
     return None
@@ -298,20 +309,49 @@ def _tool_err(message: str) -> Dict[str, Any]:
 
 
 def _write_private_temp(data: bytes, fmt: str) -> Path:
-    temp_dir = Path(tempfile.gettempdir()) / "uchrom-browser-mcp"
-    if temp_dir.is_symlink():
-        raise OSError(f"temporary capture directory {temp_dir} must not be a symlink")
-    temp_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(temp_dir, 0o700)
-    fd, tmp_name = tempfile.mkstemp(prefix="uchrom_view_", suffix=f".{fmt}", dir=str(temp_dir))
-    tmp_path = Path(tmp_name)
+    o_dir = getattr(os, "O_DIRECTORY", 0)
+    o_nofollow = getattr(os, "O_NOFOLLOW", 0)
+    temp_root = Path(tempfile.gettempdir())
+    base_fd = os.open(str(temp_root), os.O_RDONLY | o_dir)
+    sub_fd: Optional[int] = None
     try:
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(data)
-    except BaseException:
-        tmp_path.unlink(missing_ok=True)
-        raise
-    return tmp_path
+        try:
+            sub_fd = os.open("uchrom-browser-mcp", os.O_RDONLY | o_dir | o_nofollow, dir_fd=base_fd)
+        except FileNotFoundError:
+            try:
+                os.mkdir("uchrom-browser-mcp", 0o700, dir_fd=base_fd)
+            except FileExistsError:
+                pass
+            sub_fd = os.open("uchrom-browser-mcp", os.O_RDONLY | o_dir | o_nofollow, dir_fd=base_fd)
+
+        st = os.fstat(sub_fd)
+        if not stat.S_ISDIR(st.st_mode):
+            raise OSError("temporary capture directory must be a directory")
+        if hasattr(os, "getuid") and st.st_uid != os.getuid():
+            raise OSError("temporary capture directory is not owned by the current user")
+        os.fchmod(sub_fd, 0o700)
+
+        for _ in range(16):
+            name = f"uchrom_view_{secrets.token_hex(8)}.{fmt}"
+            try:
+                fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | o_nofollow, 0o600, dir_fd=sub_fd)
+            except FileExistsError:
+                continue
+            try:
+                with os.fdopen(fd, "wb") as fh:
+                    fh.write(data)
+            except BaseException:
+                try:
+                    os.unlink(name, dir_fd=sub_fd)
+                except OSError:
+                    pass
+                raise
+            return temp_root / "uchrom-browser-mcp" / name
+        raise OSError("failed to allocate unique temporary capture file")
+    finally:
+        if sub_fd is not None:
+            os.close(sub_fd)
+        os.close(base_fd)
 
 
 def _resolve_capture_dest(out_path: str, explicit_fmt: Optional[str], fmt: str) -> Path:
@@ -325,12 +365,13 @@ def _resolve_capture_dest(out_path: str, explicit_fmt: Optional[str], fmt: str) 
     if explicit_fmt is not None and raw.suffix and raw.suffix.lower().lstrip(".") != fmt:
         raise ValueError(f"capture path suffix {raw.suffix!r} conflicts with format {fmt!r}")
     cur = Path("/") if raw.is_absolute() else Path.cwd()
-    for part in raw.parts:
-        if part in ("", "/"):
-            continue
+    rel_parts = [p for p in raw.parts if p not in ("", "/")]
+    for idx, part in enumerate(rel_parts):
         cur = cur / part
         if cur.is_symlink():
             raise ValueError(f"capture path must not traverse or target symlinks: {cur}")
+        if idx < len(rel_parts) - 1 and cur.exists() and not cur.is_dir():
+            raise NotADirectoryError(f"capture parent is not a directory: {cur}")
     if raw.exists():
         raise FileExistsError(f"refusing to overwrite existing file: {raw}")
     return raw
@@ -419,6 +460,7 @@ def run_doctor(url: Optional[str] = None, timeout: float = 5.0) -> Dict[str, Any
 
     return _json_safe({
         "ok": reachable,
+        "code": "OK" if reachable else "UNREACHABLE",
         "url": eff_url,
         "server_reachable": reachable,
         "state_file": {"path": str(STATE_FILE), "exists": STATE_FILE.exists()},
@@ -479,19 +521,37 @@ class McpServer:
             headers={"Content-Type": "application/json"},
         )
         effective_timeout = self.timeout if timeout is None else timeout
+        sock_timeout = (float(effective_timeout) + 2.0) if path == "/api/control/actions" else max(0.05, float(effective_timeout))
         try:
-            with urllib.request.urlopen(req, timeout=effective_timeout + 5) as resp:
+            with urllib.request.urlopen(req, timeout=sock_timeout) as resp:
                 return json.loads(resp.read() or b"null")
+        except TimeoutError:
+            raise NoPageConnectedError(f"request to {path} timed out after {effective_timeout:g}s") from None
         except urllib.error.HTTPError as exc:
             try:
                 detail = json.loads(exc.read()).get("detail", exc.reason)
             except ValueError:
                 detail = exc.reason
             msg = f"{exc.code}: {detail}"
+            if exc.code == 504:
+                raise NoPageConnectedError(msg) from None
             if exc.code == 409:
+                if isinstance(body, dict) and body.get("page") is not None:
+                    connected: List[str] = []
+                    try:
+                        connected = [p["page"] for p in self._connected_pages(timeout=min(float(effective_timeout), 1.0))]
+                    except BrowserError:
+                        pass
+                    listed = ", ".join(connected) if connected else "none"
+                    raise PageConflictError(
+                        f"browser page {body['page']!r} is no longer connected (connected pages: {listed})",
+                        connected,
+                    ) from None
                 raise NoPageConnectedError(msg) from None
             raise ActionExecutionError(msg) from None
         except urllib.error.URLError as exc:
+            if isinstance(getattr(exc, "reason", None), TimeoutError):
+                raise NoPageConnectedError(f"request to {path} timed out after {effective_timeout:g}s") from None
             raise ServerUnreachableError(
                 f"cannot reach the browser server at {self.url} ({exc.reason}); "
                 "start it with `python -m uchrom_browser data.chromdata.zarr`"
@@ -535,8 +595,8 @@ class McpServer:
         return tools
 
     # -- page safety ------------------------------------------------------
-    def _connected_pages(self) -> List[Dict[str, Any]]:
-        pages = self._request("GET", "/api/control/pages")
+    def _connected_pages(self, timeout: Optional[float] = None) -> List[Dict[str, Any]]:
+        pages = self._request("GET", "/api/control/pages", timeout=timeout)
         if not isinstance(pages, list):
             raise ActionExecutionError("unexpected response from /api/control/pages")
         return pages
@@ -576,18 +636,26 @@ class McpServer:
         secs = float(wait_seconds)
         if secs < 0 or secs > 60:
             raise ValueError("wait_seconds must be between 0 and 60")
+        target_id = page if page is not None else self.bound_page
         deadline = time.monotonic() + secs
         while True:
-            pages = self._connected_pages()
-            connected = [p["page"] for p in pages]
-            if page is not None:
-                if page in connected:
+            rem = deadline - time.monotonic()
+            poll_timeout = min(2.0, max(0.05, rem)) if secs > 0 else min(0.5, float(self.timeout))
+            pages: Optional[List[Dict[str, Any]]] = None
+            try:
+                pages = self._connected_pages(timeout=poll_timeout)
+            except (ServerUnreachableError, NoPageConnectedError):
+                pass
+            if pages is not None:
+                connected = [p["page"] for p in pages]
+                if target_id is not None:
+                    if target_id in connected:
+                        return {"pages": pages, "bound_page": self.bound_page}
+                elif connected:
                     return {"pages": pages, "bound_page": self.bound_page}
-            elif connected:
-                return {"pages": pages, "bound_page": self.bound_page}
             if time.monotonic() >= deadline:
-                target = f"page {page!r}" if page is not None else "any browser page"
-                raise NoPageConnectedError(f"timed out after {secs:g}s waiting for {target} to connect")
+                target_desc = f"page {target_id!r}" if target_id is not None else "any browser page"
+                raise NoPageConnectedError(f"timed out after {secs:g}s waiting for {target_desc} to connect")
             time.sleep(min(0.2, max(0.01, deadline - time.monotonic())))
 
     # -- tool execution ---------------------------------------------------
@@ -765,10 +833,40 @@ class McpServer:
             }
 
         chrom = args["chrom"].strip()
-        start = args.get("start")
-        end = args.get("end")
+        raw_start = args.get("start")
+        raw_end = args.get("end")
+        start_val: Optional[int] = None
+        end_val: Optional[int] = None
+        if raw_start is not None and raw_start.strip():
+            try:
+                start_val = int(raw_start.strip())
+            except ValueError:
+                raise _RpcError(-32602, f"prompt argument 'start' must be an integer, got {raw_start!r}") from None
+            if start_val < 0:
+                raise _RpcError(-32602, f"prompt argument 'start' must be >= 0, got {start_val}")
+        if raw_end is not None and raw_end.strip():
+            try:
+                end_val = int(raw_end.strip())
+            except ValueError:
+                raise _RpcError(-32602, f"prompt argument 'end' must be an integer, got {raw_end!r}") from None
+            if end_val < 0:
+                raise _RpcError(-32602, f"prompt argument 'end' must be >= 0, got {end_val}")
+        if start_val is not None and end_val is not None and end_val <= start_val:
+            raise _RpcError(-32602, f"prompt argument 'end' ({end_val}) must be > 'start' ({start_val})")
+
         export_path = args.get("export_path")
-        locus = f"{chrom}:{start}-{end}" if (start and end) else chrom
+        if start_val is not None and end_val is not None:
+            locus_desc = f"{chrom}:{start_val}-{end_val}"
+            locus_call = f"uchrom_set_locus(chrom={chrom!r}, start={start_val}, end={end_val})"
+        elif start_val is not None:
+            locus_desc = f"{chrom} from {start_val}"
+            locus_call = f"uchrom_set_locus(chrom={chrom!r}, start={start_val})"
+        elif end_val is not None:
+            locus_desc = f"{chrom} up to {end_val}"
+            locus_call = f"uchrom_set_locus(chrom={chrom!r}, end={end_val})"
+        else:
+            locus_desc = chrom
+            locus_call = f"uchrom_set_locus(chrom={chrom!r})"
         export_step = (
             f"\n4. Export the active figure cleanly with `uchrom_capture_view(path={export_path!r})` (never overwrite an existing file)."
             if export_path
@@ -776,7 +874,7 @@ class McpServer:
         )
         text = (
             f"1. Read `uchrom_describe_workspace` to discover loaded tracks, contact maps, and selected cells.\n"
-            f"2. Focus the browser window on `{locus}` with `uchrom_set_locus`.\n"
+            f"2. Focus the browser window on `{locus_desc}` with `{locus_call}`.\n"
             f"3. Open aligned Genome (`open_view(type='genome', ...)`), Matrix, or Stats (`chrom_scope='locus'` if chrom-specific) panes and arrange with `uchrom_arrange`."
             + export_step
         )

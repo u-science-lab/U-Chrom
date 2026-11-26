@@ -571,9 +571,11 @@ def test_mcp_capture_view_safety(server, tmp_path):
         assert r_fmt["isError"] is True
         assert len(page.seen) == before
 
-        # Unwritable parent (parent is a regular file) returns tool isError instead of crashing server
+        # Unwritable parent (parent is a regular file) fails BEFORE sending action to browser page
+        before_bad = len(page.seen)
         r_bad_parent = _call_tool(srv, 4, "uchrom_capture_view", {"path": str(existing / "shot.png")})
         assert r_bad_parent["isError"] is True
+        assert len(page.seen) == before_bad
 
         # Symlink intermediate directory is rejected even inside _write_exclusive
         from uchrom_browser.mcp import _write_exclusive
@@ -635,7 +637,27 @@ def test_mcp_p2_hardening_overflow_and_intmaxstrdigits(server):
 
         r_nested_big = _call_tool(srv, 12, "uchrom_open_view", {"type": "genome", "rows": [{"smooth": 10**400}]})
         assert r_nested_big["isError"] is True
+        r_num_big = _call_tool(srv, 13, "uchrom_open_view", {"type": "spatial", "image_opacity": 2**63})
+        assert r_num_big["isError"] is True
         assert len(page.seen) == 0
+
+        # Nested depth > 64 inside object/array arguments is rejected cleanly
+        nested_deep = 1
+        for _ in range(70):
+            nested_deep = {"a": nested_deep}
+        r_deep_arg = _call_tool(srv, 14, "uchrom_open_view", {"type": "genome", "rows": [nested_deep]})
+        assert r_deep_arg["isError"] is True
+        assert len(page.seen) == 0
+
+        # Extremely deep JSON (RecursionError or invalid params) never crashes stdio loop
+        deep = "[" * 5000 + "]" * 5000
+        out_deep = io.StringIO()
+        srv.handle_line(f'{{"jsonrpc":"2.0","id":15,"method":"ping","params":{deep}}}', out_deep)
+        resp_deep = json.loads(out_deep.getvalue().splitlines()[0])
+        assert resp_deep["error"]["code"] in (-32700, -32602)
+        out_after = io.StringIO()
+        srv.handle_line('{"jsonrpc":"2.0","id":16,"method":"ping"}', out_after)
+        assert json.loads(out_after.getvalue())["result"] == {}
     finally:
         page.close()
 
@@ -669,12 +691,20 @@ def test_mcp_resources_prompts_wait_doctor_and_print_config(server):
     pr_ok = _rpc(srv, {"jsonrpc": "2.0", "id": 7, "method": "prompts/get", "params": {"name": "compare-selection", "arguments": {"chrom": "chr3"}}})["result"]
     assert "chr3" in pr_ok["messages"][0]["content"]["text"]
 
+    pr_lone = _rpc(srv, {"jsonrpc": "2.0", "id": 71, "method": "prompts/get", "params": {"name": "inspect-locus", "arguments": {"chrom": "chr7", "start": "1000"}}})["result"]
+    assert "1000" in pr_lone["messages"][0]["content"]["text"]
+
+    pr_neg = _rpc(srv, {"jsonrpc": "2.0", "id": 72, "method": "prompts/get", "params": {"name": "inspect-locus", "arguments": {"chrom": "chr7", "start": "-5"}}})
+    assert pr_neg["error"]["code"] == -32602
+
     pr_bad = _rpc(srv, {"jsonrpc": "2.0", "id": 8, "method": "prompts/get", "params": {"name": "no-such-prompt"}})
     assert pr_bad["error"]["code"] == -32602
 
-    # wait_for_page timeout when no tab connected
+    # wait_for_page timeout when no tab connected (and bounded within wait_seconds)
+    t0 = time.monotonic()
     w_to = _call_tool(srv, 9, "uchrom_wait_for_page", {"wait_seconds": 0.1})
     assert w_to["isError"] is True
+    assert time.monotonic() - t0 < 2.0
 
     # wait_for_page succeeds when tab connects asynchronously; resources work; 2-tab safety enforced
     page_a = FakeSSEPage(

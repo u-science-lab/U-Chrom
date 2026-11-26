@@ -1,9 +1,9 @@
 """Pure-stdlib Agent-friendly CLI (``uchrom-browser-ctl``) for controlling a running U-Chrom browser.
 
-Shares URL discovery, JSON-schema validation, multi-tab page safety, and atomic capture
-file writes with :mod:`uchrom_browser.mcp`, outputting strict JSON on ``stdout``/``stderr``
-with semantic exit codes (0 ok, 2 invalid args/schema, 3 server/page unreachable, 4 tab
-conflict, 5 browser action or file write error).
+Shares URL discovery, JSON-schema validation, multi-tab page safety, and exclusive
+(non-overwriting) capture file writes with :mod:`uchrom_browser.mcp`, outputting strict
+JSON on ``stdout``/``stderr`` with semantic exit codes (0 ok, 2 invalid args/schema,
+3 server/page unreachable, 4 tab conflict, 5 browser action or file write error).
 """
 
 from __future__ import annotations
@@ -15,6 +15,11 @@ import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - non-POSIX fallback
+    fcntl = None  # type: ignore[assignment]
 
 from .client import BrowserError
 from .mcp import (
@@ -68,22 +73,45 @@ def _load_bindings(path: Path) -> Dict[str, str]:
     return {}
 
 
-def _save_bindings(path: Path, bindings: Dict[str, str]) -> None:
-    if path.parent.is_symlink() or path.is_symlink():
-        raise OSError(f"control state path must not be a symlink: {path}")
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(path.parent, 0o700)
-    payload = json.dumps({"bindings": bindings}, indent=2, ensure_ascii=False, allow_nan=False).encode("utf-8")
+def _update_binding_locked(state_path: Path, url: str, target_page: Optional[str]) -> Dict[str, str]:
+    if state_path.parent.is_symlink() or state_path.is_symlink():
+        raise OSError(f"control state path must not be a symlink: {state_path}")
+    if os.environ.get("UCHROM_BROWSER_CTL_STATE"):
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+
     o_nofollow = getattr(os, "O_NOFOLLOW", 0)
-    tmp_path = path.with_name(f".{path.name}.tmp.{os.getpid()}")
-    fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | o_nofollow, 0o600)
+    lock_path = state_path.with_name(f".{state_path.name}.lock")
+    if lock_path.is_symlink():
+        raise OSError(f"control state lock path must not be a symlink: {lock_path}")
+    lock_fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR | o_nofollow, 0o600)
     try:
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(payload)
-        os.replace(tmp_path, path)
-    except BaseException:
-        tmp_path.unlink(missing_ok=True)
-        raise
+        if fcntl is not None:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        bindings = _load_bindings(state_path)
+        if target_page is None:
+            bindings.pop(url, None)
+        else:
+            bindings[url] = target_page
+        payload = json.dumps({"bindings": bindings}, indent=2, ensure_ascii=False, allow_nan=False).encode("utf-8")
+        tmp_path = state_path.with_name(f".{state_path.name}.tmp.{os.getpid()}")
+        fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | o_nofollow, 0o600)
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(payload)
+            os.replace(tmp_path, state_path)
+        except BaseException:
+            tmp_path.unlink(missing_ok=True)
+            raise
+        return bindings
+    finally:
+        if fcntl is not None:
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
+        os.close(lock_fd)
 
 
 def _emit_json(stream: Any, payload: Any, *, pretty: bool = False) -> None:
@@ -214,7 +242,6 @@ def _build_parser() -> _JsonArgumentParser:
     p_open = sub.add_parser("open", parents=[common], help="Open a new view pane")
     p_open.add_argument("view_type", choices=("3d", "spatial", "embedding", "genome", "matrix", "stats"), help="View type")
     p_open.add_argument("--cells", default=None, help="Cell scope ('focus', 'all', cell id, or group ref)")
-    p_open.add_argument("--title", default=None, help="Pane title")
     p_open.add_argument("--stats", choices=("rg", "scaling", "hist", "scatter"), default=None, help="Stats view sub-type")
     p_open.add_argument("--chrom-scope", choices=("all", "locus"), default=None, help="Stats chromosome scope")
     p_open.add_argument("--compare", default=None, help="Comma-separated group refs for stats compare_groups")
@@ -304,8 +331,7 @@ def _dispatch(args: argparse.Namespace, srv: McpServer, state_path: Path, bindin
             raise _CliUsageError("pass either a page id or --clear, not both")
         pages = srv._connected_pages()
         if args.clear or args.target_page in (None, ""):
-            bindings.pop(srv.url, None)
-            _save_bindings(state_path, bindings)
+            _update_binding_locked(state_path, srv.url, None)
             srv.bound_page = None
             return {"bound_page": None, "pages": pages, "state_file": str(state_path)}, EXIT_OK
         connected = [p["page"] for p in pages]
@@ -315,8 +341,7 @@ def _dispatch(args: argparse.Namespace, srv: McpServer, state_path: Path, bindin
                 f"cannot bind unknown browser page {args.target_page!r}; connected pages: {listed}",
                 connected,
             )
-        bindings[srv.url] = args.target_page
-        _save_bindings(state_path, bindings)
+        _update_binding_locked(state_path, srv.url, args.target_page)
         srv.bound_page = args.target_page
         return {"bound_page": args.target_page, "pages": pages, "state_file": str(state_path)}, EXIT_OK
 
@@ -375,7 +400,6 @@ def _dispatch(args: argparse.Namespace, srv: McpServer, state_path: Path, bindin
         act_args: Dict[str, Any] = {"type": args.view_type}
         mapping = (
             ("cells", args.cells),
-            ("title", args.title),
             ("stats", args.stats),
             ("chrom_scope", args.chrom_scope),
             ("field_x", args.field_x),

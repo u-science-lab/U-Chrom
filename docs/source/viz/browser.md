@@ -193,7 +193,7 @@ ws.open_view("stats", stats="rg", compare_groups=[g, "field:cell_type=Granule"])
 ws.capture(path="rg.png")              # or rg.svg / rg.pdf: editable vectors (format= to override)
 ```
 
-`ws.tools()` lists the schemas; pass `page="<id>"` when multiple tabs are open.
+`ws.tools()` lists the schemas; pass `page="<id>"` when multiple tabs are open (including `ws.dataset(page="<id>")` to inspect that tab's dataset).
 
 ### 2. Agent-friendly Control CLI (`uchrom-browser-ctl`)
 

@@ -115,10 +115,10 @@ class Workspace:
         """Cell ids of the current selection (lasso, focused group or cell); [] when none."""
         return list(self.call("get_selection", page=page)["cells"])
 
-    def dataset(self):
+    def dataset(self, page: Optional[str] = None):
         """The ChromData the browser has open (read from the same file, in this process)."""
         from chromdata import ChromData
-        path = self.describe()["dataset"]["path"]
+        path = self.describe(page=page)["dataset"]["path"]
         if not path:
             raise BrowserError("the open dataset has no file path")
         return ChromData.read(path)

@@ -223,3 +223,91 @@ def test_ctl_multitab_binding_actions_and_capture(server, tmp_path):  # noqa: F8
     finally:
         tab_a.close()
         tab_b.close()
+
+
+def test_ctl_concurrent_binds_permissions_and_transport_codes(tmp_path):
+    from uchrom_browser.client import BrowserError
+    from uchrom_browser.mcp import ActionExecutionError, McpServer, NoPageConnectedError, PageConflictError
+    from uchrom_browser.cli import _load_bindings, _update_binding_locked
+    import http.server
+    import threading
+    import stat
+
+    # 1. Parent directory permissions under UCHROM_BROWSER_CTL_STATE are NOT modified
+    custom_dir = tmp_path / "custom_state_dir"
+    custom_dir.mkdir(mode=0o755)
+    os.chmod(custom_dir, 0o755)
+    custom_state = custom_dir / "ctl.json"
+    old_env = os.environ.get("UCHROM_BROWSER_CTL_STATE")
+    os.environ["UCHROM_BROWSER_CTL_STATE"] = str(custom_state)
+    try:
+        # Interleaved concurrent updates for two distinct server URLs preserve both bindings
+        errors = []
+
+        def worker(url, page):
+            try:
+                for i in range(10):
+                    _update_binding_locked(custom_state, url, f"{page}_{i}")
+            except BaseException as exc:  # pragma: no cover
+                errors.append(exc)
+
+        t1 = threading.Thread(target=worker, args=("http://127.0.0.1:9001", "pA"))
+        t2 = threading.Thread(target=worker, args=("http://127.0.0.1:9002", "pB"))
+        t1.start()
+        t2.start()
+        t1.join(5)
+        t2.join(5)
+        assert not errors
+        saved = _load_bindings(custom_state)
+        assert saved == {"http://127.0.0.1:9001": "pA_9", "http://127.0.0.1:9002": "pB_9"}
+        assert stat.S_IMODE(custom_dir.stat().st_mode) == 0o755
+    finally:
+        if old_env is None:
+            os.environ.pop("UCHROM_BROWSER_CTL_STATE", None)
+        else:
+            os.environ["UCHROM_BROWSER_CTL_STATE"] = old_env
+
+    # 2. HTTP 409 on targeted page race -> exit 4; HTTP 504 / timeout -> exit 3
+    class _MockHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == "/api/control/pages":
+                body = json.dumps([{"page": "tabA", "active": True}]).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            self.send_response(404)
+            self.end_headers()
+
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            req = json.loads(self.rfile.read(length) or b"{}")
+            if req.get("name") == "get_selection":
+                body = json.dumps({"detail": "page gone"}).encode()
+                self.send_response(409)
+            else:
+                body = json.dumps({"detail": "timeout"}).encode()
+                self.send_response(504)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _MockHandler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    mock_url = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        r_409 = _run_ctl("--page", "tabA", "selection", state_file=tmp_path / "m.json", url=mock_url)
+        assert r_409.returncode == 4
+        assert json.loads(r_409.stderr)["code"] == "PAGE_CONFLICT"
+
+        r_504 = _run_ctl("--page", "tabA", "groups", state_file=tmp_path / "m.json", url=mock_url)
+        assert r_504.returncode == 3
+        assert json.loads(r_504.stderr)["code"] == "UNREACHABLE"
+    finally:
+        srv.shutdown()

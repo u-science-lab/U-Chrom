@@ -622,7 +622,7 @@ uchrom-browser-mcp --doctor [--url ...]
 
 ## Control CLI (`uchrom-browser-ctl`)
 
-Pure-stdlib CLI sharing URL resolution, schema validation, multi-tab safety, and atomic capture logic with `uchrom_browser.mcp`:
+Pure-stdlib CLI sharing URL resolution, schema validation, multi-tab safety, and exclusive (non-overwriting) capture logic with `uchrom_browser.mcp`:
 
 ```bash
 uchrom-browser-ctl [--url URL] [--page ID] [--timeout 30] [--pretty] <command> ...
@@ -630,5 +630,5 @@ uchrom-browser-ctl [--url URL] [--page ID] [--timeout 30] [--pretty] <command> .
 ```
 
 - **Subcommands**: `status`, `doctor`, `pages`, `bind [PAGE|--clear]`, `wait [--wait-seconds S]`, `tools [--schema ACTION]`, `describe`, `selection`, `groups`, `select (--cells ... | --cells-file ...) [--name ...]`, `focus [--cell ... | --group ... | --clear]`, `locus (CHROM | CHROM:START-END) [--start ...] [--end ...]`, `open <type> ...`, `show PANE`, `close PANE`, `arrange {grid,tabs}`, `color-by FIELD`, `capture [--pane ...] [--out ...] [--format png|svg|pdf]`, `call ACTION [--json '{...}']`.
-- **Tab binding state**: `bind` persists `{url: page}` in `$UCHROM_BROWSER_CTL_STATE` (default `$XDG_CACHE_HOME/uchrom/browser_ctl.json`, `0700`/`0600`, symlinks refused); `--page` overrides per invocation.
-- **Output & exit codes**: writes strict JSON (`allow_nan=False`) to `stdout` on success (`0`) or structured `{ok: false, code, error}` JSON to `stderr` on failure: `2` invalid CLI args/locus/schema, `3` browser server or page unreachable/timeout, `4` multi-tab ambiguity or missing bound tab (`connected_pages` included), `5` browser execution or file-write error.
+- **Tab binding state**: `bind` updates `{url: page}` under a file lock in `$UCHROM_BROWSER_CTL_STATE` (default `$XDG_CACHE_HOME/uchrom/browser_ctl.json`, `0600` file, symlinks refused); `--page` overrides per invocation.
+- **Output & exit codes**: normal commands write strict JSON (`allow_nan=False`) to `stdout` on success (`0`) or structured `{ok: false, code, error}` JSON to `stderr` on non-zero exits (`2` invalid CLI args/locus/schema, `3` browser server or page unreachable/timeout, `4` multi-tab ambiguity or disconnected target/bound tab with `connected_pages`, `5` browser execution or file-write error). Exception: `doctor` writes its diagnostic JSON (`{ok, code, ...}`) to `stdout` on both `0` and `3`.
