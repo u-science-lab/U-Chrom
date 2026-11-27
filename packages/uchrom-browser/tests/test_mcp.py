@@ -60,20 +60,23 @@ def server():
     th.join(5)
 
 
-class FakeSSEPage(threading.Thread):
+class FakeSSEPage:
     """Subscribes to ``/api/control/events`` and can be cleanly closed to simulate tab close."""
 
     def __init__(self, base: str, handler, page: str):
-        super().__init__(daemon=True)
         self.base = base
         self.handler = handler
         self.page = page
         self.seen = []
         self.ready = threading.Event()
-        self._stop = threading.Event()
+        self._closing = threading.Event()
         self._resp = None
+        self._thread = threading.Thread(target=self._run, daemon=True)
 
-    def run(self):
+    def start(self):
+        self._thread.start()
+
+    def _run(self):
         try:
             with requests.get(
                 f"{self.base}/api/control/events",
@@ -84,7 +87,7 @@ class FakeSSEPage(threading.Thread):
                 self._resp = r
                 event = None
                 for line in r.iter_lines(decode_unicode=True):
-                    if self._stop.is_set():
+                    if self._closing.is_set():
                         break
                     if line.startswith("event: "):
                         event = line[7:]
@@ -97,13 +100,15 @@ class FakeSSEPage(threading.Thread):
                             body = {"ok": True, "result": self.handler(msg["name"], msg["args"])}
                         except Exception as exc:  # noqa: BLE001
                             body = {"ok": False, "error": str(exc)}
+                        if self._closing.is_set():
+                            break
                         requests.post(f"{self.base}/api/control/results/{msg['id']}", json=body, timeout=5)
         except Exception:  # noqa: BLE001
-            if not self._stop.is_set():
+            if not self._closing.is_set():
                 raise
 
     def close(self):
-        self._stop.set()
+        self._closing.set()
         resp = self._resp
         if resp is not None:
             try:
@@ -116,7 +121,7 @@ class FakeSSEPage(threading.Thread):
                 resp.close()
             except Exception:  # noqa: BLE001
                 pass
-        self.join(timeout=3)
+        self._thread.join(timeout=3)
 
 
 def _rpc(srv, msg: dict):
