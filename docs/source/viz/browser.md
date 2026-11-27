@@ -195,24 +195,24 @@ ws.capture(path="rg.png")              # or rg.svg / rg.pdf: editable vectors (f
 
 `ws.tools()` lists the schemas; pass `page="<id>"` when multiple tabs are open (including `ws.dataset(page="<id>")` to inspect that tab's dataset).
 
-### 2. Agent-friendly Control CLI (`uchrom-browser-ctl`)
+### 2. Agent-friendly Control CLI (`uchrom-web` / `uchrom-browser ctl`)
 
 Terminal coding agents (Claude Code, Codex) can drive a running browser without writing Python glue or
-loading MCP schemas upfront. Both `uchrom-browser-ctl` (`python -m uchrom_browser.cli`) and `uchrom-browser-mcp`
+loading MCP schemas upfront. Both `uchrom-web` (`python -m uchrom_browser.cli` / `uchrom-browser ctl`) and `uchrom-browser-mcp` (`uchrom-browser mcp` / `uchrom-web mcp`)
 use only the Python standard library and emit strict JSON:
 
 ```bash
-uchrom-browser-ctl doctor                  # verify URL, connected tabs, and proxy settings
-uchrom-browser-ctl wait                    # wait for a browser tab to connect
-uchrom-browser-ctl pages                   # list connected tabs (with workspace summary) + datasets
-uchrom-browser-ctl bind <page_id>          # bind session for this server URL (needed if 2+ tabs)
-uchrom-browser-ctl tools --schema open_view
-uchrom-browser-ctl selection
-uchrom-browser-ctl locus chr15:3000000-33000000
-uchrom-browser-ctl open stats --stats rg --chrom-scope locus --compare g123,field:cell_type=Granule
-uchrom-browser-ctl arrange grid
-uchrom-browser-ctl batch --steps-json '[{"action":"arrange","args":{"layout":"grid"}},{"action":"capture_view","args":{"path":"overview.svg"}}]'
-uchrom-browser-ctl capture --out fig.svg   # refuses overwrite, '..', or symlinks
+uchrom-web doctor                          # verify URL, connected tabs, and proxy settings
+uchrom-web wait                            # wait for a browser tab to connect
+uchrom-web pages                           # list connected tabs (with workspace summary) + datasets
+uchrom-web bind <page_id>                  # bind session for this server URL (needed if 2+ tabs)
+uchrom-web tools --schema open_view
+uchrom-web selection
+uchrom-web locus chr15:3000000-33000000
+uchrom-web open stats --stats rg --chrom-scope locus --compare g123,field:cell_type=Granule
+uchrom-web arrange grid
+uchrom-web batch --steps-json '[{"action":"arrange","args":{"layout":"grid"}},{"action":"capture_view","args":{"path":"overview.svg"}}]'
+uchrom-web capture --out fig.svg           # refuses overwrite, '..', or symlinks
 ```
 
 Exit codes: `0` success, `2` invalid flags/schema, `3` server/tab unreachable, `4` multi-tab ambiguity or
@@ -223,7 +223,7 @@ missing bound tab, `5` browser execution or file-write error.
 MCP hosts (Claude Desktop, Cursor, Claude Code, Codex, Antigravity) can connect over `stdio` JSON-RPC 2.0:
 
 ```bash
-uchrom-browser-mcp --print-config claude   # or: claude-code, codex, cursor
+uchrom-browser-mcp --print-config claude   # or: uchrom-web mcp --print-config claude (also: claude-code, codex, cursor)
 uchrom-browser-mcp --doctor                # check server health, datasets, tabs & loopback proxies
 ```
 
@@ -231,7 +231,7 @@ uchrom-browser-mcp --doctor                # check server health, datasets, tabs
   `uchrom_wait_for_page`, `uchrom_batch` (validate and execute `1..20` sequential steps on one resolved tab), and `uchrom_<action>` for every entry in `ui_tools.json`.
 - **Resources & Prompts**: read-only `uchrom://status`, `uchrom://pages`, `uchrom://workspace`, and `uchrom://selection`
   resources, plus guided `compare-selection` and `inspect-locus` workflow prompts.
-- **Multi-tab & file safety**: both MCP and `uchrom-browser-ctl` refuse mutating/reading an ambiguous
+- **Multi-tab & file safety**: both MCP and `uchrom-web` refuse mutating/reading an ambiguous
   workspace when multiple tabs are connected until `page` is passed or a tab is bound, and never silently
   fail over if a bound tab closes. `capture` writes exclusively to a non-existing PNG/SVG/PDF path (never
   traversing `..` or symlinks) or to a private `0700` temp directory and returns metadata only (never raw base64).

@@ -7,21 +7,21 @@ description: Only when a U-Chrom web browser is running or the user asks to show
 
 The browser is visualization only; analysis stays in Python (`uchrom`). Choose the control transport in this order:
 
-1. **MCP tools (`uchrom_*`)** — when connected via `uchrom-browser-mcp` (stdio: includes session tools `uchrom_status` / `uchrom_list_pages` / `uchrom_bind_page` / `uchrom_wait_for_page` / `uchrom_batch`, `uchrom://` resources including `uchrom://pages`, and file-backed `uchrom_capture_view(path=...)`), or when running inside a WebMCP browser tab (exposes `ui_tools.json` actions directly; `uchrom_capture_view` returns base64 rather than writing files).
-2. **Control CLI (`uchrom-browser-ctl`)** — in terminal coding agents (Claude Code, Codex) without MCP config. Zero setup, compact JSON on stdout/stderr, semantic exit codes (`0` ok, `2` bad args, `3` unreachable/no tab, `4` multi-tab conflict or disconnected tab, `5` action/file error).
+1. **MCP tools (`uchrom_*`)** — when connected via `uchrom-browser-mcp` / `uchrom-browser mcp` / `uchrom-web mcp` (stdio: includes session tools `uchrom_status` / `uchrom_list_pages` / `uchrom_bind_page` / `uchrom_wait_for_page` / `uchrom_batch`, `uchrom://` resources including `uchrom://pages`, and file-backed `uchrom_capture_view(path=...)`), or when running inside a WebMCP browser tab (exposes `ui_tools.json` actions directly; `uchrom_capture_view` returns base64 rather than writing files).
+2. **Control CLI (`uchrom-web`, or `uchrom-browser ctl`)** — in terminal coding agents (Claude Code, Codex) without MCP config. Zero setup, compact JSON on stdout/stderr, semantic exit codes (`0` ok, `2` bad args, `3` unreachable/no tab, `4` multi-tab conflict or disconnected tab, `5` action/file error).
 3. **Python client (`uchrom_browser.connect()`)** — inside Python scripts that already compute on `chromdata`/`uchrom` (`ws = ub.connect()`; use `ws.capture(path=...)` for file-backed figure exports and `page=...` when multiple tabs are open).
 
 ```bash
 # Terminal / CLI path (zero Python boilerplate, pure stdlib)
-uchrom-browser-ctl doctor
-uchrom-browser-ctl pages
-uchrom-browser-ctl bind <page_id>          # required when 2+ browser tabs are open
-uchrom-browser-ctl selection               # read researcher's lassoed / focused cells
-uchrom-browser-ctl locus chr15:3000000-33000000
-uchrom-browser-ctl open stats --stats rg --chrom-scope locus --compare g123,field:cell_type=Granule
-uchrom-browser-ctl arrange grid
-uchrom-browser-ctl batch --steps-json '[{"action":"arrange","args":{"layout":"grid"}},{"action":"capture_view","args":{"path":"overview.svg"}}]'
-uchrom-browser-ctl capture --out fig.svg
+uchrom-web doctor
+uchrom-web pages
+uchrom-web bind <page_id>                  # required when 2+ browser tabs are open
+uchrom-web selection                       # read researcher's lassoed / focused cells
+uchrom-web locus chr15:3000000-33000000
+uchrom-web open stats --stats rg --chrom-scope locus --compare g123,field:cell_type=Granule
+uchrom-web arrange grid
+uchrom-web batch --steps-json '[{"action":"arrange","args":{"layout":"grid"}},{"action":"capture_view","args":{"path":"overview.svg"}}]'
+uchrom-web capture --out fig.svg
 ```
 
 ```python
@@ -32,7 +32,7 @@ cells = ws.selected_cells()          # what the researcher lassoed / focused ([]
 cd = ws.dataset()                    # the same ChromData, for analysis
 ```
 
-## Actions (via `uchrom_<name>`, `uchrom-browser-ctl call <name> --json '{...}'`, or `ws.<name>(**args)`; schema: `uchrom-browser-ctl tools --schema <name>` / `ws.tools()`)
+## Actions (via `uchrom_<name>`, `uchrom-web call <name> --json '{...}'`, or `ws.<name>(**args)`; schema: `uchrom-web tools --schema <name>` / `ws.tools()`)
 | action | use |
 |---|---|
 | `select_cells(cells=[...], name=None)` | register + focus a group (like a lasso); returns the canonical server-accepted cell ids, group ref, and counts |
@@ -41,15 +41,15 @@ cd = ws.dataset()                    # the same ChromData, for analysis
 | `open_view(type, cells=…, rows=[…], stats=…, chrom_scope="all"|"locus", compare_groups=[…], field_x, field_y, embedding)` | new view; returns `{"pane": id}` |
 | `arrange(layout="grid")`, `show_view(pane)`, `close_view(pane)` | layout |
 | `color_by(field)` | colour cells by a field |
-| `capture_view` (`ws.capture(pane, path, format=None)`) | save PNG/SVG/PDF (`uchrom-browser-mcp` / `uchrom-browser-ctl capture --out` refuse overwriting, `..`, and symlinks; `ws.capture` writes to `path` or a temp file directly; WebMCP returns base64) |
+| `capture_view` (`ws.capture(pane, path, format=None)`) | save PNG/SVG/PDF (`uchrom-browser-mcp` / `uchrom-web capture --out` refuse overwriting, `..`, and symlinks; `ws.capture` writes to `path` or a temp file directly; WebMCP returns base64) |
 
 Group references: the `group` returned by `select_cells`, `field:<column>=<value>`, or `all`.
 Genome rows: `{"kind": "track", "track": "H3K27ac", "cells": ref}`, `{"kind": "distance", "cells": ref}`,
 `{"kind": "contacts", "source": key, "cells": ref}`, `{"kind": "intervals", "key": "tads"}`.
 
 ## Multi-tab & readiness checks
-- If 2+ browser tabs are connected, NEVER guess: pass explicit `page` / `--page` or bind once (`uchrom_bind_page` / `uchrom-browser-ctl bind <page_id>`). If a bound tab closes, rebind or unbind explicitly instead of silently falling back to another tab.
-- When you just started `uchrom-browser`, call `uchrom_wait_for_page` / `uchrom-browser-ctl wait` to wait for the browser tab to attach.
+- If 2+ browser tabs are connected, NEVER guess: pass explicit `page` / `--page` or bind once (`uchrom_bind_page` / `uchrom-web bind <page_id>`). If a bound tab closes, rebind or unbind explicitly instead of silently falling back to another tab.
+- When you just started `uchrom-browser`, call `uchrom_wait_for_page` / `uchrom-web wait` to wait for the browser tab to attach.
 
 ## Recipe: show a two-group comparison
 ```python

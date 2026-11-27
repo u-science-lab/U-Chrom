@@ -1,4 +1,4 @@
-"""Tests for the pure-stdlib Agent-friendly control CLI (``uchrom-browser-ctl`` / ``uchrom_browser.cli``)."""
+"""Tests for the pure-stdlib Agent-friendly control CLI (``uchrom-web`` / ``uchrom_browser.cli``)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from tests.test_mcp import FakeSSEPage, server  # noqa: F401,E402
 
 def _run_ctl(*args: str, state_file: Path, url: str | None = None, cwd: Path | None = None) -> subprocess.CompletedProcess:
     env = {k: v for k, v in os.environ.items() if k not in ("http_proxy", "https_proxy", "all_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY")}
-    env["UCHROM_BROWSER_CTL_STATE"] = str(state_file)
+    env["UCHROM_WEB_STATE"] = str(state_file)
     cmd = [sys.executable, "-m", "uchrom_browser.cli"]
     if url is not None:
         cmd.extend(["--url", url])
@@ -37,13 +37,26 @@ def test_ctl_python_s_stdlib_only_and_script_help():
         timeout=10,
     )
     assert p_stdlib.returncode == 0, p_stdlib.stderr
-    assert "uchrom-browser-ctl" in p_stdlib.stdout
+    assert "uchrom-web" in p_stdlib.stdout
 
-    ctl_bin = Path(sys.executable).parent / "uchrom-browser-ctl"
-    if ctl_bin.exists():
-        p_bin = subprocess.run([str(ctl_bin), "--help"], capture_output=True, text=True, timeout=10)
+    for sub in (["ctl", "--help"], ["mcp", "--help"], ["ctl", "--url", "http://127.0.0.1:9", "tools", "--schema", "open_view"]):
+        p_sub = subprocess.run(
+            [sys.executable, "-S", "-m", "uchrom_browser", *sub],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=10,
+        )
+        assert p_sub.returncode == 0, (sub, p_sub.stderr)
+
+    web_bin = Path(sys.executable).parent / "uchrom-web"
+    if web_bin.exists():
+        p_bin = subprocess.run([str(web_bin), "--help"], capture_output=True, text=True, timeout=10)
         assert p_bin.returncode == 0, p_bin.stderr
-        assert "uchrom-browser-ctl" in p_bin.stdout
+        assert "uchrom-web" in p_bin.stdout
+        p_mcp = subprocess.run([str(web_bin), "mcp", "--print-config", "claude"], capture_output=True, text=True, timeout=10)
+        assert p_mcp.returncode == 0, p_mcp.stderr
+        assert "uchrom-browser" in json.loads(p_mcp.stdout)["mcpServers"]
 
     mod_check = subprocess.run(
         [
@@ -67,6 +80,16 @@ def test_ctl_python_s_stdlib_only_and_script_help():
     )
     assert tools_p.returncode == 0, tools_p.stderr
     assert json.loads(tools_p.stdout)["name"] == "open_view"
+
+    mcp_cfg_p = subprocess.run(
+        [sys.executable, "-S", "-m", "uchrom_browser.cli", "--url", "http://127.0.0.1:9", "mcp", "--print-config", "claude"],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=10,
+    )
+    assert mcp_cfg_p.returncode == 0, mcp_cfg_p.stderr
+    assert "uchrom-browser" in json.loads(mcp_cfg_p.stdout)["mcpServers"]
 
     doc_p = subprocess.run(
         [sys.executable, "-S", "-m", "uchrom_browser.cli", "--url", "http://127.0.0.1:9", "doctor"],

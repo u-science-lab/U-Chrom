@@ -1,9 +1,10 @@
-"""Pure-stdlib Agent-friendly CLI (``uchrom-browser-ctl``) for controlling a running U-Chrom browser.
+"""Pure-stdlib Agent-friendly CLI (``uchrom-web``) for controlling a running U-Chrom browser.
 
 Shares URL discovery, JSON-schema validation, multi-tab page safety, and exclusive
 (non-overwriting) capture file writes with :mod:`uchrom_browser.mcp`, outputting strict
 JSON on ``stdout``/``stderr`` with semantic exit codes (0 ok, 2 invalid args/schema,
 3 server/page unreachable, 4 tab conflict, 5 browser action or file write error).
+Also exposes ``uchrom-web mcp ...`` as a unified entrypoint for ``uchrom_browser.mcp``.
 """
 
 from __future__ import annotations
@@ -56,7 +57,7 @@ class _JsonArgumentParser(argparse.ArgumentParser):
 
 
 def _ctl_state_path() -> Path:
-    override = os.environ.get("UCHROM_BROWSER_CTL_STATE")
+    override = os.environ.get("UCHROM_WEB_STATE") or os.environ.get("UCHROM_BROWSER_CTL_STATE")
     if override:
         return Path(override)
     cache_root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
@@ -77,7 +78,7 @@ def _load_bindings(path: Path) -> Dict[str, str]:
 def _update_binding_locked(state_path: Path, url: str, target_page: Optional[str]) -> Dict[str, str]:
     if state_path.parent.is_symlink() or state_path.is_symlink():
         raise OSError(f"control state path must not be a symlink: {state_path}")
-    if os.environ.get("UCHROM_BROWSER_CTL_STATE"):
+    if os.environ.get("UCHROM_WEB_STATE") or os.environ.get("UCHROM_BROWSER_CTL_STATE"):
         state_path.parent.mkdir(parents=True, exist_ok=True)
     else:
         state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -193,7 +194,7 @@ def _read_cells(cells_csv: Optional[str], cells_file: Optional[str]) -> List[str
     return out
 
 
-def _build_parser() -> _JsonArgumentParser:
+def _build_parser(prog: str = "uchrom-web") -> _JsonArgumentParser:
     common = _JsonArgumentParser(add_help=False)
     common.add_argument("--url", default=argparse.SUPPRESS, help="Browser server URL (default: $UCHROM_BROWSER_URL, state file, or http://127.0.0.1:8765)")
     common.add_argument("--page", default=argparse.SUPPRESS, help="Target connected browser page id (overrides persisted binding for this command)")
@@ -201,13 +202,14 @@ def _build_parser() -> _JsonArgumentParser:
     common.add_argument("--pretty", action="store_true", default=argparse.SUPPRESS, help="Pretty-print JSON output")
 
     parser = _JsonArgumentParser(
-        prog="uchrom-browser-ctl",
+        prog=prog,
         parents=[common],
         description="Control a running U-Chrom browser from the shell using structured JSON.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("status", parents=[common], help="Check server health, loaded datasets, connected tabs, and bound tab")
+    sub.add_parser("mcp", help="Run stdio MCP server (--print-config, --doctor, or JSON-RPC stdio)")
     sub.add_parser("doctor", parents=[common], help="Diagnose server reachability, proxy hazards, state files, and connected tabs")
     p_pages = sub.add_parser("pages", parents=[common], help="List connected browser tabs, workspace summaries, and current binding")
     p_pages.add_argument("--no-probe", action="store_true", help="Skip querying describe_workspace on each connected tab")
@@ -494,11 +496,38 @@ def _dispatch(args: argparse.Namespace, srv: McpServer, state_path: Path, bindin
     raise _CliUsageError(f"unknown command: {cmd}")
 
 
-def main(argv: Optional[List[str]] = None) -> int:
-    parser = _build_parser()
-    pretty = "--pretty" in (sys.argv[1:] if argv is None else argv)
+def _maybe_extract_mcp_argv(argv: List[str]) -> Optional[List[str]]:
+    leading: List[str] = []
+    idx = 0
+    while idx < len(argv):
+        tok = argv[idx]
+        if tok in ("--url", "--timeout") and idx + 1 < len(argv):
+            leading.extend([tok, argv[idx + 1]])
+            idx += 2
+            continue
+        if tok.startswith("--url=") or tok.startswith("--timeout="):
+            leading.append(tok)
+            idx += 1
+            continue
+        if tok == "mcp":
+            return leading + argv[idx + 1:]
+        return None
+    return None
+
+
+def main(argv: Optional[List[str]] = None, *, prog: str = "uchrom-web") -> int:
+    eff_argv = sys.argv[1:] if argv is None else list(argv)
+    mcp_argv = _maybe_extract_mcp_argv(eff_argv)
+    if mcp_argv is not None:
+        from .mcp import _cli as mcp_cli
+
+        mcp_cli(mcp_argv, prog=f"{prog} mcp")
+        return EXIT_OK
+
+    parser = _build_parser(prog=prog)
+    pretty = "--pretty" in eff_argv
     try:
-        args = parser.parse_args(argv)
+        args = parser.parse_args(eff_argv)
     except _CliUsageError as exc:
         return _fail("INVALID_ARGS", str(exc), EXIT_INVALID, pretty=pretty)
 
@@ -564,7 +593,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 
 def _cli() -> None:
-    """Entrypoint for ``uchrom-browser-ctl``."""
+    """Entrypoint for ``uchrom-web``."""
     raise SystemExit(main())
 
 

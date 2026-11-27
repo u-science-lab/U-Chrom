@@ -1264,10 +1264,10 @@ class McpServer:
             self.handle_line(line, out)
 
 
-def _cli(argv: Optional[List[str]] = None) -> None:
-    """Run the ``uchrom-browser-mcp`` stdio MCP server (or print config / run doctor)."""
+def _cli(argv: Optional[List[str]] = None, *, prog: str = "uchrom-browser-mcp") -> None:
+    """Run the stdio MCP server (or print config / run doctor)."""
     parser = argparse.ArgumentParser(
-        prog="uchrom-browser-mcp",
+        prog=prog,
         description="Stdio JSON-RPC 2.0 MCP server for a running U-Chrom browser.",
     )
     parser.add_argument("--url", default=None, help="Browser server URL (default: $UCHROM_BROWSER_URL, state file, or http://127.0.0.1:8765)")
