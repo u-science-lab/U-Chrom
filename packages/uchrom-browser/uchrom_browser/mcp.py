@@ -1,10 +1,9 @@
 """Pure-stdlib JSON-RPC 2.0 stdio MCP server for the U-Chrom web browser.
 
 Exposes browser actions from ``/api/control/tools`` (fallback: ``ui_tools.json``) as
-``uchrom_<action>`` tools alongside ``uchrom_status``, ``uchrom_list_pages``,
-``uchrom_bind_page``, and ``uchrom_wait_for_page``, with explicit multi-tab safety,
-MCP ``resources`` / ``prompts``, file-backed ``uchrom_capture_view``, ``--doctor``,
-and ``--print-config``.
+``uchrom_<action>`` tools alongside ``uchrom_list_pages``, ``uchrom_bind_page``,
+``uchrom_wait_for_page``, and ``uchrom_batch``, with explicit multi-tab safety,
+file-backed ``uchrom_capture_view``, ``--doctor``, and ``--print-config``.
 """
 
 from __future__ import annotations
@@ -72,12 +71,6 @@ class BatchStepError(BrowserError):
 
 _SESSION_TOOLS: List[Dict[str, Any]] = [
     {
-        "name": "uchrom_status",
-        "description": "Check browser server health, loaded datasets, connected pages, and the currently bound page.",
-        "inputSchema": {"type": "object", "properties": {}},
-        "annotations": {"readOnlyHint": True},
-    },
-    {
         "name": "uchrom_list_pages",
         "description": "List connected browser pages (tabs) with optional per-tab workspace summaries, loaded datasets, and the currently bound page.",
         "inputSchema": {
@@ -141,55 +134,6 @@ _SESSION_TOOLS: List[Dict[str, Any]] = [
             },
         },
         "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False},
-    },
-]
-
-_RESOURCES: List[Dict[str, Any]] = [
-    {
-        "uri": "uchrom://status",
-        "name": "browser-status",
-        "description": "Browser server health, loaded datasets, connected tabs, and current page binding.",
-        "mimeType": "application/json",
-    },
-    {
-        "uri": "uchrom://pages",
-        "name": "connected-pages",
-        "description": "Connected browser tabs with active dataset/workspace summaries, loaded datasets, and bound page.",
-        "mimeType": "application/json",
-    },
-    {
-        "uri": "uchrom://workspace",
-        "name": "active-workspace",
-        "description": "Active dataset metadata, open panes, focus, and lasso selection of the resolved browser page.",
-        "mimeType": "application/json",
-    },
-    {
-        "uri": "uchrom://selection",
-        "name": "current-selection",
-        "description": "Cell IDs currently lassoed or focused by the researcher in the resolved browser page.",
-        "mimeType": "application/json",
-    },
-]
-
-_PROMPTS: List[Dict[str, Any]] = [
-    {
-        "name": "compare-selection",
-        "description": "Inspect the researcher's browser selection, run quantitative comparison checks, and open matching browser views.",
-        "arguments": [
-            {"name": "against", "description": "Reference group spec (default: rest)", "required": False},
-            {"name": "stat", "description": "Comparison metric (default: rg)", "required": False},
-            {"name": "chrom", "description": "Optional chromosome restriction", "required": False},
-        ],
-    },
-    {
-        "name": "inspect-locus",
-        "description": "Focus the browser on a genomic interval, open Genome/Matrix/Stats views, and optionally export a figure.",
-        "arguments": [
-            {"name": "chrom", "description": "Chromosome name (e.g. chr15)", "required": True},
-            {"name": "start", "description": "Optional 0-based start coordinate in bp", "required": False},
-            {"name": "end", "description": "Optional end coordinate in bp", "required": False},
-            {"name": "export_path", "description": "Optional PNG/SVG/PDF export path", "required": False},
-        ],
     },
 ]
 
@@ -532,7 +476,7 @@ def format_mcp_config(client_name: str, url: Optional[str] = None, timeout: Opti
     if timeout is not None:
         cmd_args.extend(["--timeout", str(timeout)])
 
-    if client_name in ("claude", "claude-code", "cursor"):
+    if client_name == "json":
         cfg = {
             "mcpServers": {
                 "uchrom-browser": {
@@ -884,18 +828,6 @@ class McpServer:
             return _tool_err(err)
 
         try:
-            if name == "uchrom_status":
-                health = self._request("GET", "/api/health")
-                datasets = self._request("GET", "/api/datasets")
-                pages = self._connected_pages()
-                return _tool_ok({
-                    "url": self.url,
-                    "health": health,
-                    "datasets": datasets,
-                    "pages": pages,
-                    "bound_page": self.bound_page,
-                })
-
             if name == "uchrom_list_pages":
                 probe = True if arguments.get("probe") is None else bool(arguments["probe"])
                 pages = self._summarize_pages(self._connected_pages(), probe=probe)
@@ -1004,135 +936,6 @@ class McpServer:
             "page": target_page,
         }
 
-    # -- resources & prompts ----------------------------------------------
-    def _read_resource(self, uri: str, explicit_page: Optional[str] = None) -> Dict[str, Any]:
-        if uri == "uchrom://status":
-            try:
-                payload = {
-                    "url": self.url,
-                    "health": self._request("GET", "/api/health"),
-                    "datasets": self._request("GET", "/api/datasets"),
-                    "pages": self._connected_pages(),
-                    "bound_page": self.bound_page,
-                }
-            except BrowserError as exc:
-                raise _RpcError(-32002, str(exc)) from None
-        elif uri == "uchrom://pages":
-            try:
-                payload = {
-                    "pages": self._summarize_pages(self._connected_pages(), probe=True),
-                    "datasets": self._request("GET", "/api/datasets"),
-                    "bound_page": self.bound_page,
-                }
-            except BrowserError as exc:
-                raise _RpcError(-32002, str(exc)) from None
-        elif uri in ("uchrom://workspace", "uchrom://selection"):
-            action = "describe_workspace" if uri == "uchrom://workspace" else "get_selection"
-            try:
-                target_page = self._resolve_page(explicit_page)
-                resp = self._request(
-                    "POST",
-                    "/api/control/actions",
-                    {"name": action, "args": {}, "timeout": self.timeout, "page": target_page},
-                )
-                result = self._extract_action_result(resp, action)
-                payload = {**result, "page": target_page} if isinstance(result, dict) else {"result": result, "page": target_page}
-            except BrowserError as exc:
-                raise _RpcError(-32002, str(exc)) from None
-        else:
-            raise _RpcError(-32602, f"Unknown resource URI: {uri}")
-
-        return {
-            "contents": [
-                {
-                    "uri": uri,
-                    "mimeType": "application/json",
-                    "text": json.dumps(_json_safe(payload), ensure_ascii=False, allow_nan=False),
-                }
-            ]
-        }
-
-    def _get_prompt(self, name: str, raw_args: Dict[str, Any]) -> Dict[str, Any]:
-        prompts = {p["name"]: p for p in _PROMPTS}
-        spec = prompts.get(name)
-        if spec is None:
-            raise _RpcError(-32602, f"Unknown prompt: {name}")
-        args: Dict[str, str] = {}
-        for k, v in raw_args.items():
-            if v is not None and not isinstance(v, str):
-                raise _RpcError(-32602, f"prompt argument {k!r} must be a string")
-            if isinstance(v, str):
-                args[k] = v
-        for arg_spec in spec.get("arguments", []):
-            if arg_spec.get("required") and not args.get(arg_spec["name"], "").strip():
-                raise _RpcError(-32602, f"missing required prompt argument: {arg_spec['name']}")
-
-        if name == "compare-selection":
-            against = args.get("against") or "rest"
-            stat = args.get("stat") or "rg"
-            chrom = args.get("chrom")
-            scope = f" on {chrom}" if chrom else ""
-            text = (
-                "1. Inspect the researcher's browser selection via `uchrom_get_selection` and workspace via `uchrom_describe_workspace` (check `pages` / `bound_page` first).\n"
-                f"2. Run the statistical comparison in Python/skills (`compare-groups`) comparing the selected cells vs `{against}` for `{stat}`{scope}, keeping cell as the statistical unit and checking confounders/depth.\n"
-                "3. Show matching views in the browser via `uchrom_select_cells`, `uchrom_set_locus` (if windowed), and `uchrom_open_view(type='stats', ...)` / `uchrom_open_view(type='genome', ...)`, then report pane IDs alongside exact test statistics."
-            )
-            return {
-                "description": spec["description"],
-                "messages": [{"role": "user", "content": {"type": "text", "text": text}}],
-            }
-
-        chrom = args["chrom"].strip()
-        raw_start = args.get("start")
-        raw_end = args.get("end")
-        start_val: Optional[int] = None
-        end_val: Optional[int] = None
-        if raw_start is not None and raw_start.strip():
-            try:
-                start_val = int(raw_start.strip())
-            except ValueError:
-                raise _RpcError(-32602, f"prompt argument 'start' must be an integer, got {raw_start!r}") from None
-            if start_val < 0:
-                raise _RpcError(-32602, f"prompt argument 'start' must be >= 0, got {start_val}")
-        if raw_end is not None and raw_end.strip():
-            try:
-                end_val = int(raw_end.strip())
-            except ValueError:
-                raise _RpcError(-32602, f"prompt argument 'end' must be an integer, got {raw_end!r}") from None
-            if end_val < 0:
-                raise _RpcError(-32602, f"prompt argument 'end' must be >= 0, got {end_val}")
-        if start_val is not None and end_val is not None and end_val <= start_val:
-            raise _RpcError(-32602, f"prompt argument 'end' ({end_val}) must be > 'start' ({start_val})")
-
-        export_path = args.get("export_path")
-        if start_val is not None and end_val is not None:
-            locus_desc = f"{chrom}:{start_val}-{end_val}"
-            locus_call = f"uchrom_set_locus(chrom={chrom!r}, start={start_val}, end={end_val})"
-        elif start_val is not None:
-            locus_desc = f"{chrom} from {start_val}"
-            locus_call = f"uchrom_set_locus(chrom={chrom!r}, start={start_val})"
-        elif end_val is not None:
-            locus_desc = f"{chrom} up to {end_val}"
-            locus_call = f"uchrom_set_locus(chrom={chrom!r}, end={end_val})"
-        else:
-            locus_desc = chrom
-            locus_call = f"uchrom_set_locus(chrom={chrom!r})"
-        export_step = (
-            f"\n4. Export the active figure cleanly with `uchrom_capture_view(path={export_path!r})` (never overwrite an existing file)."
-            if export_path
-            else "\n4. If the user asks for a figure, capture it with `uchrom_capture_view` (PNG/SVG/PDF)."
-        )
-        text = (
-            f"1. Read `uchrom_describe_workspace` to discover loaded tracks, contact maps, and selected cells.\n"
-            f"2. Focus the browser window on `{locus_desc}` with `{locus_call}`.\n"
-            f"3. Open aligned Genome (`open_view(type='genome', ...)`), Matrix, or Stats (`chrom_scope='locus'` if chrom-specific) panes and arrange with `uchrom_arrange`."
-            + export_step
-        )
-        return {
-            "description": spec["description"],
-            "messages": [{"role": "user", "content": {"type": "text", "text": text}}],
-        }
-
     # -- JSON-RPC dispatch ------------------------------------------------
     def _dispatch(self, method: str, params: Any, *, has_id: bool) -> Any:
         if method.startswith("notifications/"):
@@ -1156,11 +959,7 @@ class McpServer:
             )
             return {
                 "protocolVersion": version,
-                "capabilities": {
-                    "tools": {"listChanged": False},
-                    "resources": {"subscribe": False, "listChanged": False},
-                    "prompts": {"listChanged": False},
-                },
+                "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": "uchrom-browser", "version": __version__},
             }
 
@@ -1183,34 +982,6 @@ class McpServer:
             elif not isinstance(arguments, dict):
                 raise _RpcError(-32602, "tools/call 'arguments' must be an object")
             return self._call_tool(params["name"], arguments)
-
-        if method == "resources/list":
-            if params is not None and not isinstance(params, dict):
-                raise _RpcError(-32602, "resources/list params must be an object")
-            return {"resources": copy.deepcopy(_RESOURCES)}
-
-        if method == "resources/read":
-            if not isinstance(params, dict) or not isinstance(params.get("uri"), str):
-                raise _RpcError(-32602, "resources/read params must include string 'uri'")
-            page = params.get("page")
-            if page is not None and not isinstance(page, str):
-                raise _RpcError(-32602, "resources/read 'page' must be a string")
-            return self._read_resource(params["uri"], explicit_page=page)
-
-        if method == "prompts/list":
-            if params is not None and not isinstance(params, dict):
-                raise _RpcError(-32602, "prompts/list params must be an object")
-            return {"prompts": copy.deepcopy(_PROMPTS)}
-
-        if method == "prompts/get":
-            if not isinstance(params, dict) or not isinstance(params.get("name"), str):
-                raise _RpcError(-32602, "prompts/get params must include string 'name'")
-            pargs = params.get("arguments")
-            if pargs is None:
-                pargs = {}
-            elif not isinstance(pargs, dict):
-                raise _RpcError(-32602, "prompts/get 'arguments' must be an object")
-            return self._get_prompt(params["name"], pargs)
 
         raise _RpcError(-32601, f"Method not found: {method}")
 
@@ -1264,7 +1035,7 @@ class McpServer:
             self.handle_line(line, out)
 
 
-def _cli(argv: Optional[List[str]] = None, *, prog: str = "uchrom-browser-mcp") -> None:
+def _cli(argv: Optional[List[str]] = None, *, prog: str = "uchrom-web mcp") -> None:
     """Run the stdio MCP server (or print config / run doctor)."""
     parser = argparse.ArgumentParser(
         prog=prog,
@@ -1274,9 +1045,9 @@ def _cli(argv: Optional[List[str]] = None, *, prog: str = "uchrom-browser-mcp") 
     parser.add_argument("--timeout", type=float, default=None, help="Action timeout in seconds (default: 30; doctor default: 5)")
     parser.add_argument(
         "--print-config",
-        choices=("claude", "claude-code", "codex", "cursor"),
+        choices=("json", "codex"),
         default=None,
-        help="Print ready-to-paste MCP client configuration using the current Python executable and exit.",
+        help="Print ready-to-paste MCP client configuration (json or codex TOML) and exit.",
     )
     parser.add_argument(
         "--doctor",

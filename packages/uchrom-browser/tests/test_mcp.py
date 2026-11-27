@@ -155,11 +155,7 @@ def test_jsonrpc_handshake_and_errors():
     for ver in ("2025-11-25", "2025-06-18", "2024-11-05"):
         res = _rpc(srv, {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": ver}})
         assert res["result"]["protocolVersion"] == ver
-        assert res["result"]["capabilities"] == {
-            "tools": {"listChanged": False},
-            "resources": {"subscribe": False, "listChanged": False},
-            "prompts": {"listChanged": False},
-        }
+        assert res["result"]["capabilities"] == {"tools": {"listChanged": False}}
         assert res["result"]["serverInfo"]["name"] == "uchrom-browser"
 
     # unknown protocol version falls back to newest supported
@@ -181,7 +177,7 @@ def test_jsonrpc_handshake_and_errors():
     assert res["error"]["code"] == -32602
     res = _rpc(srv, {"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "uchrom_nope"}})
     assert res["error"]["code"] == -32602
-    res = _rpc(srv, {"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "uchrom_status", "arguments": []}})
+    res = _rpc(srv, {"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "uchrom_list_pages", "arguments": []}})
     assert res["error"]["code"] == -32602
 
 
@@ -190,7 +186,6 @@ def test_tools_list_dynamic_and_offline_fallback(server):
 
     expected_ui = load_tools()["tools"]
     expected_names = {f"uchrom_{t['name']}" for t in expected_ui} | {
-        "uchrom_status",
         "uchrom_list_pages",
         "uchrom_bind_page",
         "uchrom_wait_for_page",
@@ -202,7 +197,6 @@ def test_tools_list_dynamic_and_offline_fallback(server):
         res = _rpc(srv, {"jsonrpc": "2.0", "id": 10, "method": "tools/list"})["result"]
         by_name = {t["name"]: t for t in res["tools"]}
         assert set(by_name) == expected_names
-        assert by_name["uchrom_status"]["annotations"]["readOnlyHint"] is True
         assert by_name["uchrom_list_pages"]["annotations"]["readOnlyHint"] is True
         assert by_name["uchrom_wait_for_page"]["annotations"]["readOnlyHint"] is True
         assert "page" in by_name["uchrom_bind_page"]["inputSchema"]["properties"]
@@ -247,12 +241,10 @@ def test_single_page_status_actions_capture_and_schema_validation(server, tmp_pa
     try:
         srv = McpServer(url=server, timeout=5.0)
 
-        # status
-        st = _call_tool(srv, 1, "uchrom_status")
+        # list_pages
+        st = _call_tool(srv, 1, "uchrom_list_pages", {"probe": False})
         assert st["isError"] is False
         st_data = st["structuredContent"]
-        assert st_data["url"] == server
-        assert st_data["health"]["status"] == "ok"
         assert st_data["datasets"] == []
         assert [p["page"] for p in st_data["pages"]] == ["tab1"]
         assert st_data["bound_page"] is None
@@ -306,9 +298,9 @@ def test_single_page_status_actions_capture_and_schema_validation(server, tmp_pa
     finally:
         page.close()
 
-    # offline status returns clear isError
+    # offline list_pages returns clear isError
     offline = McpServer(url="http://127.0.0.1:1", timeout=0.5)
-    st_off = _call_tool(offline, 9, "uchrom_status")
+    st_off = _call_tool(offline, 9, "uchrom_list_pages")
     assert st_off["isError"] is True
     assert "cannot reach" in st_off["content"][0]["text"].lower()
 
@@ -424,7 +416,7 @@ def test_subprocess_stdio_pipe(server):
             {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}},
             {"jsonrpc": "2.0", "method": "notifications/initialized"},
             {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
-            {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "uchrom_status"}},
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "uchrom_list_pages", "arguments": {"probe": False}}},
             {
                 "jsonrpc": "2.0",
                 "id": 4,
@@ -478,7 +470,7 @@ def test_mcp_python_s_stdlib_only_cli():
     assert "uchrom_browser.mcp" in proc.stdout or "--url" in proc.stdout
 
     cfg_proc = subprocess.run(
-        [sys.executable, "-S", "-m", "uchrom_browser.mcp", "--print-config", "claude", "--url", "http://127.0.0.1:9"],
+        [sys.executable, "-S", "-m", "uchrom_browser.mcp", "--print-config", "json", "--url", "http://127.0.0.1:9"],
         capture_output=True,
         text=True,
         env=env,
@@ -703,43 +695,17 @@ def test_mcp_p2_hardening_overflow_and_intmaxstrdigits(server):
         page.close()
 
 
-def test_mcp_resources_prompts_wait_doctor_and_print_config(server):
+def test_mcp_wait_doctor_and_print_config(server):
     from uchrom_browser.mcp import McpServer
 
-    # initialize advertises tools, resources, and prompts
     srv = McpServer(url=server, timeout=5.0)
     init = _rpc(srv, {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})["result"]
-    assert set(init["capabilities"]) >= {"tools", "resources", "prompts"}
+    assert set(init["capabilities"]) == {"tools"}
 
-    res_list = _rpc(srv, {"jsonrpc": "2.0", "id": 2, "method": "resources/list"})["result"]
-    uris = {r["uri"] for r in res_list["resources"]}
-    assert uris == {"uchrom://status", "uchrom://pages", "uchrom://workspace", "uchrom://selection"}
-
-    st_read = _rpc(srv, {"jsonrpc": "2.0", "id": 3, "method": "resources/read", "params": {"uri": "uchrom://status"}})
-    st_json = json.loads(st_read["result"]["contents"][0]["text"])
-    assert st_json["health"]["status"] == "ok" and st_json["pages"] == []
-
-    bad_uri = _rpc(srv, {"jsonrpc": "2.0", "id": 4, "method": "resources/read", "params": {"uri": "uchrom://unknown"}})
-    assert bad_uri["error"]["code"] == -32602
-
-    # prompts/list and prompts/get
-    pr_list = _rpc(srv, {"jsonrpc": "2.0", "id": 5, "method": "prompts/list"})["result"]
-    assert {p["name"] for p in pr_list["prompts"]} == {"compare-selection", "inspect-locus"}
-
-    pr_miss = _rpc(srv, {"jsonrpc": "2.0", "id": 6, "method": "prompts/get", "params": {"name": "inspect-locus", "arguments": {}}})
-    assert pr_miss["error"]["code"] == -32602
-
-    pr_ok = _rpc(srv, {"jsonrpc": "2.0", "id": 7, "method": "prompts/get", "params": {"name": "compare-selection", "arguments": {"chrom": "chr3"}}})["result"]
-    assert "chr3" in pr_ok["messages"][0]["content"]["text"]
-
-    pr_lone = _rpc(srv, {"jsonrpc": "2.0", "id": 71, "method": "prompts/get", "params": {"name": "inspect-locus", "arguments": {"chrom": "chr7", "start": "1000"}}})["result"]
-    assert "1000" in pr_lone["messages"][0]["content"]["text"]
-
-    pr_neg = _rpc(srv, {"jsonrpc": "2.0", "id": 72, "method": "prompts/get", "params": {"name": "inspect-locus", "arguments": {"chrom": "chr7", "start": "-5"}}})
-    assert pr_neg["error"]["code"] == -32602
-
-    pr_bad = _rpc(srv, {"jsonrpc": "2.0", "id": 8, "method": "prompts/get", "params": {"name": "no-such-prompt"}})
-    assert pr_bad["error"]["code"] == -32602
+    # removed resources/prompts methods return -32601 Method not found
+    for req_id, method in ((2, "resources/list"), (3, "prompts/list")):
+        err_res = _rpc(srv, {"jsonrpc": "2.0", "id": req_id, "method": method})
+        assert err_res["error"]["code"] == -32601
 
     # wait_for_page timeout when no tab connected (and bounded within wait_seconds)
     t0 = time.monotonic()
@@ -747,7 +713,7 @@ def test_mcp_resources_prompts_wait_doctor_and_print_config(server):
     assert w_to["isError"] is True
     assert time.monotonic() - t0 < 2.0
 
-    # wait_for_page succeeds when tab connects asynchronously; resources work; 2-tab safety enforced
+    # wait_for_page succeeds when tab connects asynchronously
     page_a = FakeSSEPage(
         server,
         lambda n, a: {"cells": ["c1"]} if n == "get_selection" else {"panes": [{"pane": "P1"}]},
@@ -764,30 +730,18 @@ def test_mcp_resources_prompts_wait_doctor_and_print_config(server):
         w_ok = _call_tool(srv, 10, "uchrom_wait_for_page", {"page": "tabR1", "wait_seconds": 5.0})
         assert w_ok["isError"] is False
         assert w_ok["structuredContent"]["pages"][0]["page"] == "tabR1"
-
-        sel_read = _rpc(srv, {"jsonrpc": "2.0", "id": 11, "method": "resources/read", "params": {"uri": "uchrom://selection"}})
-        assert json.loads(sel_read["result"]["contents"][0]["text"])["cells"] == ["c1"]
-
-        page_b = FakeSSEPage(server, lambda n, a: {"cells": ["c2"]}, page="tabR2")
-        page_b.start()
-        assert page_b.ready.wait(5)
-        try:
-            amb = _rpc(srv, {"jsonrpc": "2.0", "id": 12, "method": "resources/read", "params": {"uri": "uchrom://workspace"}})
-            assert amb["error"]["code"] == -32002
-        finally:
-            page_b.close()
     finally:
         page_a.close()
 
     # --print-config keeps venv python (abspath, not resolved symlink) & valid JSON/TOML
     py_abs = os.path.abspath(sys.executable)
-    p_claude = subprocess.run(
-        [sys.executable, "-m", "uchrom_browser.mcp", "--print-config", "claude", "--url", server],
+    p_json = subprocess.run(
+        [sys.executable, "-m", "uchrom_browser.mcp", "--print-config", "json", "--url", server],
         capture_output=True,
         text=True,
         check=True,
     )
-    cfg_c = json.loads(p_claude.stdout)
+    cfg_c = json.loads(p_json.stdout)
     assert cfg_c["mcpServers"]["uchrom-browser"]["command"] == py_abs
     assert cfg_c["mcpServers"]["uchrom-browser"]["args"] == ["-m", "uchrom_browser.mcp", "--url", server]
 
@@ -861,16 +815,12 @@ def test_mcp_page_summaries_and_batch(server, tmp_path):
     try:
         srv = McpServer(url=server, timeout=5.0)
 
-        # list_pages and uchrom://pages attach per-tab summaries
+        # list_pages attaches per-tab summaries
         lp = _call_tool(srv, 1, "uchrom_list_pages")
         assert lp["isError"] is False
         by_id = {p["page"]: p for p in lp["structuredContent"]["pages"]}
         assert by_id["tabA"]["summary"]["dataset"] == "alpha"
         assert by_id["tabB"]["summary"]["dataset"] == "beta"
-
-        pages_res = _rpc(srv, {"jsonrpc": "2.0", "id": 2, "method": "resources/read", "params": {"uri": "uchrom://pages"}})
-        pages_json = json.loads(pages_res["result"]["contents"][0]["text"])
-        assert {p["summary"]["dataset"] for p in pages_json["pages"]} == {"alpha", "beta"}
 
         # probe=False skips describe_workspace calls
         before_a, before_b = len(tab_a.seen), len(tab_b.seen)
@@ -1066,9 +1016,9 @@ def test_mcp_batch_and_summary_hardening(tmp_path):
         assert sc_b64["completed"] == 1 and sc_b64["failed_step"] == 1 and sc_b64["failed_action"] == "capture_view"
         assert "base64" in sc_b64["error"]
 
-    # Verify _request itself wraps IncompleteRead cleanly on status
+    # Verify _request itself wraps IncompleteRead cleanly
     with patch("urllib.request.urlopen", side_effect=http.client.IncompleteRead(b"", 5)):
-        res_wrap = _call_tool(srv, 4, "uchrom_status")
+        res_wrap = _call_tool(srv, 4, "uchrom_list_pages")
         assert res_wrap["isError"] is True
         assert "connection error" in res_wrap["content"][0]["text"]
 

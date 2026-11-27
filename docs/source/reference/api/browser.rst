@@ -33,6 +33,5 @@ Command-line & MCP interfaces
 
 Both agent control entrypoints use only the Python standard library and never import ``uchrom``:
 
-- ``uchrom-browser`` (``python -m uchrom_browser``) — start the local web server (also dispatches ``uchrom-browser ctl ...`` and ``uchrom-browser mcp ...``).
-- ``uchrom-web`` (``python -m uchrom_browser.cli``) — agent-friendly JSON control CLI with semantic exit codes (``0``/``2``/``3``/``4``/``5``), persistent multi-tab binding, and ``uchrom-web mcp``.
-- ``uchrom-browser-mcp`` (``python -m uchrom_browser.mcp``) — stdio JSON-RPC 2.0 MCP server (supports ``--print-config``, ``--doctor``, ``resources``, and ``prompts``).
+- ``uchrom-browser`` (``python -m uchrom_browser``) — start the local web server.
+- ``uchrom-web`` (``python -m uchrom_browser.cli``) — agent-friendly JSON control CLI with semantic exit codes (``0``/``2``/``3``/``4``/``5``), persistent multi-tab binding, and ``uchrom-web mcp`` (``python -m uchrom_browser.mcp``, stdio JSON-RPC 2.0 MCP server with ``--print-config`` and ``--doctor``).

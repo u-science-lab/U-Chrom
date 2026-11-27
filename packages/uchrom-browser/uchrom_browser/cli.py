@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -42,8 +41,6 @@ EXIT_UNREACHABLE = 3
 EXIT_TAB_CONFLICT = 4
 EXIT_ACTION_ERROR = 5
 
-_LOCUS_RANGE_RE = re.compile(r"^([0-9][0-9,_]*)(?:-|\.\.)([0-9][0-9,_]*)$")
-
 
 class _CliUsageError(Exception):
     """Raised on CLI argument / input validation failures (exit code 2)."""
@@ -57,11 +54,11 @@ class _JsonArgumentParser(argparse.ArgumentParser):
 
 
 def _ctl_state_path() -> Path:
-    override = os.environ.get("UCHROM_WEB_STATE") or os.environ.get("UCHROM_BROWSER_CTL_STATE")
+    override = os.environ.get("UCHROM_WEB_STATE")
     if override:
         return Path(override)
     cache_root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-    return cache_root / "uchrom" / "browser_ctl.json"
+    return cache_root / "uchrom" / "web.json"
 
 
 def _load_bindings(path: Path) -> Dict[str, str]:
@@ -78,7 +75,7 @@ def _load_bindings(path: Path) -> Dict[str, str]:
 def _update_binding_locked(state_path: Path, url: str, target_page: Optional[str]) -> Dict[str, str]:
     if state_path.parent.is_symlink() or state_path.is_symlink():
         raise OSError(f"control state path must not be a symlink: {state_path}")
-    if os.environ.get("UCHROM_WEB_STATE") or os.environ.get("UCHROM_BROWSER_CTL_STATE"):
+    if os.environ.get("UCHROM_WEB_STATE"):
         state_path.parent.mkdir(parents=True, exist_ok=True)
     else:
         state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -138,62 +135,6 @@ def _fail(
     return exit_code
 
 
-def _parse_int_token(raw: str, label: str) -> int:
-    cleaned = raw.replace(",", "").replace("_", "").strip()
-    if not cleaned or not cleaned.isdigit():
-        raise _CliUsageError(f"invalid {label} coordinate: {raw!r}")
-    return int(cleaned)
-
-
-def _parse_locus(target: str, start: Optional[int], end: Optional[int]) -> Dict[str, Any]:
-    raw = target.strip()
-    if not raw or raw == "*":
-        raise _CliUsageError("chrom must be non-empty and not '*'")
-    if ":" in raw:
-        if start is not None or end is not None:
-            raise _CliUsageError("pass either chrom:start-end or --start/--end, not both")
-        chrom, span = raw.split(":", 1)
-        chrom = chrom.strip()
-        if not chrom or chrom == "*":
-            raise _CliUsageError("chrom must be non-empty and not '*'")
-        m = _LOCUS_RANGE_RE.match(span.strip())
-        if not m:
-            raise _CliUsageError(f"invalid locus interval {span!r}; expected start-end or start..end")
-        s_val = _parse_int_token(m.group(1), "start")
-        e_val = _parse_int_token(m.group(2), "end")
-        if e_val <= s_val:
-            raise _CliUsageError(f"locus end ({e_val}) must be > start ({s_val})")
-        return {"chrom": chrom, "start": s_val, "end": e_val}
-
-    out: Dict[str, Any] = {"chrom": raw}
-    if start is not None:
-        if start < 0:
-            raise _CliUsageError(f"start ({start}) must be >= 0")
-        out["start"] = start
-    if end is not None:
-        if end < 0:
-            raise _CliUsageError(f"end ({end}) must be >= 0")
-        if start is not None and end <= start:
-            raise _CliUsageError(f"end ({end}) must be > start ({start})")
-        out["end"] = end
-    return out
-
-
-def _read_cells(cells_csv: Optional[str], cells_file: Optional[str]) -> List[str]:
-    out: List[str] = []
-    if cells_csv is not None:
-        out.extend(part.strip() for part in cells_csv.split(",") if part.strip())
-    if cells_file is not None:
-        lines = Path(cells_file).read_text(encoding="utf-8").splitlines()
-        for line in lines:
-            stripped = line.strip()
-            if stripped and not stripped.startswith("#"):
-                out.append(stripped)
-    if not out:
-        raise _CliUsageError("at least one cell id must be provided via --cells or --cells-file")
-    return out
-
-
 def _build_parser(prog: str = "uchrom-web") -> _JsonArgumentParser:
     common = _JsonArgumentParser(add_help=False)
     common.add_argument("--url", default=argparse.SUPPRESS, help="Browser server URL (default: $UCHROM_BROWSER_URL, state file, or http://127.0.0.1:8765)")
@@ -208,9 +149,9 @@ def _build_parser(prog: str = "uchrom-web") -> _JsonArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("status", parents=[common], help="Check server health, loaded datasets, connected tabs, and bound tab")
-    sub.add_parser("mcp", help="Run stdio MCP server (--print-config, --doctor, or JSON-RPC stdio)")
     sub.add_parser("doctor", parents=[common], help="Diagnose server reachability, proxy hazards, state files, and connected tabs")
+    sub.add_parser("mcp", help="Run stdio MCP server (--print-config, --doctor, or JSON-RPC stdio)")
+
     p_pages = sub.add_parser("pages", parents=[common], help="List connected browser tabs, workspace summaries, and current binding")
     p_pages.add_argument("--no-probe", action="store_true", help="Skip querying describe_workspace on each connected tab")
 
@@ -226,49 +167,6 @@ def _build_parser(prog: str = "uchrom-web") -> _JsonArgumentParser:
 
     sub.add_parser("describe", parents=[common], help="Describe active dataset, open panes, focus, and selection")
     sub.add_parser("selection", parents=[common], help="Get currently lassoed or focused cell IDs")
-    sub.add_parser("groups", parents=[common], help="List automatic and saved cell groups")
-
-    p_sel = sub.add_parser("select", parents=[common], help="Select/focus cells and optionally save them as a named group")
-    p_sel.add_argument("--cells", default=None, help="Comma-separated cell IDs")
-    p_sel.add_argument("--cells-file", default=None, help="File with one cell ID per line")
-    p_sel.add_argument("--name", default=None, help="Optional group name to save")
-
-    p_focus = sub.add_parser("focus", parents=[common], help="Focus one cell or group (or --clear to release focus)")
-    p_focus.add_argument("--cell", default=None, help="Cell ID to focus")
-    p_focus.add_argument("--group", default=None, help="Group reference to focus")
-    p_focus.add_argument("--clear", action="store_true", help="Clear focus (return to all cells)")
-
-    p_locus = sub.add_parser("locus", parents=[common], help="Set shared genomic locus (chrom or chrom:start-end)")
-    p_locus.add_argument("target", help="Chromosome or interval such as chr15:3000000-33000000")
-    p_locus.add_argument("--start", type=int, default=None, help="Optional start coordinate in bp")
-    p_locus.add_argument("--end", type=int, default=None, help="Optional end coordinate in bp")
-
-    p_open = sub.add_parser("open", parents=[common], help="Open a new view pane")
-    p_open.add_argument("view_type", choices=("3d", "spatial", "embedding", "genome", "matrix", "stats"), help="View type")
-    p_open.add_argument("--cells", default=None, help="Cell scope ('focus', 'all', cell id, or group ref)")
-    p_open.add_argument("--stats", choices=("rg", "scaling", "hist", "scatter"), default=None, help="Stats view sub-type")
-    p_open.add_argument("--chrom-scope", choices=("all", "locus"), default=None, help="Stats chromosome scope")
-    p_open.add_argument("--compare", default=None, help="Comma-separated group refs for stats compare_groups")
-    p_open.add_argument("--field-x", default=None, help="X cell field for hist/scatter stats")
-    p_open.add_argument("--field-y", default=None, help="Y cell field for scatter stats")
-    p_open.add_argument("--embedding", default=None, help="Embedding key for embedding view")
-    p_open.add_argument("--source", default=None, help="Contact map key or 'distance' for matrix view")
-    p_open.add_argument("--spatial", default=None, help="Cell-position set key for spatial view")
-    p_open.add_argument("--region", default=None, help="Spatial section/region")
-    p_open.add_argument("--image-opacity", type=float, default=None, help="Spatial background image opacity (0-1)")
-    p_open.add_argument("--rows-json", default=None, help="JSON array of row specs for genome view")
-
-    p_show = sub.add_parser("show", parents=[common], help="Make a pane active")
-    p_show.add_argument("pane", help="Pane id")
-
-    p_close = sub.add_parser("close", parents=[common], help="Close a pane")
-    p_close.add_argument("pane", help="Pane id")
-
-    p_arr = sub.add_parser("arrange", parents=[common], help="Arrange open panes as grid or tabs")
-    p_arr.add_argument("layout", choices=("grid", "tabs"), help="Workspace layout")
-
-    p_col = sub.add_parser("color-by", parents=[common], help="Color all cells by a cell field")
-    p_col.add_argument("field", help="Cell column name (e.g. cell_type, rna.Nanog, if.H3K9me3)")
 
     p_cap = sub.add_parser("capture", parents=[common], help="Render a pane to PNG, SVG, or PDF and return its file path")
     p_cap.add_argument("--pane", default=None, help="Pane id (default: active pane)")
@@ -302,7 +200,7 @@ def _execute_action(srv: McpServer, action: str, arguments: Dict[str, Any], expl
         "/api/control/actions",
         {"name": action, "args": cleaned, "timeout": srv.timeout, "page": target_page},
     )
-    result = resp["result"]
+    result = srv._extract_action_result(resp, action)
     if isinstance(result, dict):
         return {**result, "page": target_page}
     return {"result": result, "page": target_page}
@@ -317,18 +215,6 @@ def _dispatch(args: argparse.Namespace, srv: McpServer, state_path: Path, bindin
         rep["ctl_state_file"] = {"path": str(state_path), "exists": state_path.exists()}
         rep["bound_page"] = srv.bound_page
         return rep, (EXIT_OK if rep["ok"] else EXIT_UNREACHABLE)
-
-    if cmd == "status":
-        health = srv._request("GET", "/api/health")
-        datasets = srv._request("GET", "/api/datasets")
-        pages = srv._connected_pages()
-        return {
-            "url": srv.url,
-            "health": health,
-            "datasets": datasets,
-            "pages": pages,
-            "bound_page": srv.bound_page,
-        }, EXIT_OK
 
     if cmd == "pages":
         pages = srv._summarize_pages(srv._connected_pages(), probe=not args.no_probe)
@@ -379,72 +265,6 @@ def _dispatch(args: argparse.Namespace, srv: McpServer, state_path: Path, bindin
         return _execute_action(srv, "describe_workspace", {}, explicit_page), EXIT_OK
     if cmd == "selection":
         return _execute_action(srv, "get_selection", {}, explicit_page), EXIT_OK
-    if cmd == "groups":
-        return _execute_action(srv, "list_groups", {}, explicit_page), EXIT_OK
-
-    if cmd == "select":
-        cells = _read_cells(args.cells, args.cells_file)
-        act_args: Dict[str, Any] = {"cells": cells}
-        if args.name is not None:
-            act_args["name"] = args.name
-        return _execute_action(srv, "select_cells", act_args, explicit_page), EXIT_OK
-
-    if cmd == "focus":
-        if args.clear and (args.cell is not None or args.group is not None):
-            raise _CliUsageError("--clear cannot be combined with --cell or --group")
-        if args.cell is not None and args.group is not None:
-            raise _CliUsageError("pass at most one of --cell or --group")
-        act_args = {}
-        if args.cell is not None:
-            act_args["cell"] = args.cell
-        if args.group is not None:
-            act_args["group"] = args.group
-        return _execute_action(srv, "focus", act_args, explicit_page), EXIT_OK
-
-    if cmd == "locus":
-        loc = _parse_locus(args.target, args.start, args.end)
-        return _execute_action(srv, "set_locus", loc, explicit_page), EXIT_OK
-
-    if cmd == "open":
-        act_args: Dict[str, Any] = {"type": args.view_type}
-        mapping = (
-            ("cells", args.cells),
-            ("stats", args.stats),
-            ("chrom_scope", args.chrom_scope),
-            ("field_x", args.field_x),
-            ("field_y", args.field_y),
-            ("embedding", args.embedding),
-            ("source", args.source),
-            ("spatial", args.spatial),
-            ("region", args.region),
-            ("image_opacity", args.image_opacity),
-        )
-        for key, val in mapping:
-            if val is not None:
-                act_args[key] = val
-        if args.compare is not None:
-            groups = [g.strip() for g in args.compare.split(",") if g.strip()]
-            if not groups:
-                raise _CliUsageError("--compare must contain at least one group reference")
-            act_args["compare_groups"] = groups
-        if args.rows_json is not None:
-            try:
-                rows = _json_loads_strict(args.rows_json)
-            except (json.JSONDecodeError, ValueError) as exc:
-                raise _CliUsageError(f"invalid --rows-json: {exc}") from None
-            if not isinstance(rows, list):
-                raise _CliUsageError("--rows-json must decode to a JSON array")
-            act_args["rows"] = rows
-        return _execute_action(srv, "open_view", act_args, explicit_page), EXIT_OK
-
-    if cmd == "show":
-        return _execute_action(srv, "show_view", {"pane": args.pane}, explicit_page), EXIT_OK
-    if cmd == "close":
-        return _execute_action(srv, "close_view", {"pane": args.pane}, explicit_page), EXIT_OK
-    if cmd == "arrange":
-        return _execute_action(srv, "arrange", {"layout": args.layout}, explicit_page), EXIT_OK
-    if cmd == "color-by":
-        return _execute_action(srv, "color_by", {"field": args.field}, explicit_page), EXIT_OK
 
     if cmd == "capture":
         cap_args: Dict[str, Any] = {}

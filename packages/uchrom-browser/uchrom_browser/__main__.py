@@ -1,6 +1,6 @@
-"""``python -m uchrom_browser [PATH ...] [--host 127.0.0.1] [--port 8765] [--noopen_browser] [--atlas URL] [--hosted]``
-or subcommands ``python -m uchrom_browser ctl ...`` / ``python -m uchrom_browser mcp ...``."""
+"""``python -m uchrom_browser [PATH ...] [--host 127.0.0.1] [--port 8765] [--noopen_browser] [--atlas URL] [--hosted]``"""
 
+import fire
 
 _BOOL = ("true", "false", "1", "0", "yes", "no")
 

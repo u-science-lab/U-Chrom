@@ -7,8 +7,8 @@ description: Only when a U-Chrom web browser is running or the user asks to show
 
 The browser is visualization only; analysis stays in Python (`uchrom`). Choose the control transport in this order:
 
-1. **MCP tools (`uchrom_*`)** — when connected via `uchrom-browser-mcp` / `uchrom-browser mcp` / `uchrom-web mcp` (stdio: includes session tools `uchrom_status` / `uchrom_list_pages` / `uchrom_bind_page` / `uchrom_wait_for_page` / `uchrom_batch`, `uchrom://` resources including `uchrom://pages`, and file-backed `uchrom_capture_view(path=...)`), or when running inside a WebMCP browser tab (exposes `ui_tools.json` actions directly; `uchrom_capture_view` returns base64 rather than writing files).
-2. **Control CLI (`uchrom-web`, or `uchrom-browser ctl`)** — in terminal coding agents (Claude Code, Codex) without MCP config. Zero setup, compact JSON on stdout/stderr, semantic exit codes (`0` ok, `2` bad args, `3` unreachable/no tab, `4` multi-tab conflict or disconnected tab, `5` action/file error).
+1. **MCP tools (`uchrom_*`)** — when connected via `uchrom-web mcp` (stdio: includes session tools `uchrom_list_pages` / `uchrom_bind_page` / `uchrom_wait_for_page` / `uchrom_batch`, and file-backed `uchrom_capture_view(path=...)`), or when running inside a WebMCP browser tab (exposes `ui_tools.json` actions directly; `uchrom_capture_view` returns base64 rather than writing files).
+2. **Control CLI (`uchrom-web`)** — in terminal coding agents (Claude Code, Codex) without MCP config. Zero setup, compact JSON on stdout/stderr, semantic exit codes (`0` ok, `2` bad args, `3` unreachable/no tab, `4` multi-tab conflict or disconnected tab, `5` action/file error).
 3. **Python client (`uchrom_browser.connect()`)** — inside Python scripts that already compute on `chromdata`/`uchrom` (`ws = ub.connect()`; use `ws.capture(path=...)` for file-backed figure exports and `page=...` when multiple tabs are open).
 
 ```bash
@@ -17,9 +17,8 @@ uchrom-web doctor
 uchrom-web pages
 uchrom-web bind <page_id>                  # required when 2+ browser tabs are open
 uchrom-web selection                       # read researcher's lassoed / focused cells
-uchrom-web locus chr15:3000000-33000000
-uchrom-web open stats --stats rg --chrom-scope locus --compare g123,field:cell_type=Granule
-uchrom-web arrange grid
+uchrom-web call set_locus --json '{"chrom":"chr15","start":3000000,"end":33000000}'
+uchrom-web call open_view --json '{"type":"stats","stats":"rg","chrom_scope":"locus","compare_groups":["g123","field:cell_type=Granule"]}'
 uchrom-web batch --steps-json '[{"action":"arrange","args":{"layout":"grid"}},{"action":"capture_view","args":{"path":"overview.svg"}}]'
 uchrom-web capture --out fig.svg
 ```
@@ -41,7 +40,7 @@ cd = ws.dataset()                    # the same ChromData, for analysis
 | `open_view(type, cells=…, rows=[…], stats=…, chrom_scope="all"|"locus", compare_groups=[…], field_x, field_y, embedding)` | new view; returns `{"pane": id}` |
 | `arrange(layout="grid")`, `show_view(pane)`, `close_view(pane)` | layout |
 | `color_by(field)` | colour cells by a field |
-| `capture_view` (`ws.capture(pane, path, format=None)`) | save PNG/SVG/PDF (`uchrom-browser-mcp` / `uchrom-web capture --out` refuse overwriting, `..`, and symlinks; `ws.capture` writes to `path` or a temp file directly; WebMCP returns base64) |
+| `capture_view` (`ws.capture(pane, path, format=None)`) | save PNG/SVG/PDF (`uchrom-web mcp` / `uchrom-web capture --out` refuse overwriting, `..`, and symlinks; `ws.capture` writes to `path` or a temp file directly; WebMCP returns base64) |
 
 Group references: the `group` returned by `select_cells`, `field:<column>=<value>`, or `all`.
 Genome rows: `{"kind": "track", "track": "H3K27ac", "cells": ref}`, `{"kind": "distance", "cells": ref}`,
@@ -67,4 +66,4 @@ ws.arrange(layout="grid")
 - Show what the answer claims: the views must use the same groups and chromosome scope as the numbers.
 - Don't close or rearrange the researcher's existing views unless asked; add views.
 - Name the pane ids in the answer so the researcher can find them.
-- No browser open (`BrowserError: 409`, exit code `3`, or `uchrom_status` empty `pages`) → give the result without views and say so.
+- No browser open (`BrowserError: 409`, exit code `3`, or `uchrom_list_pages` empty `pages`) → give the result without views and say so.

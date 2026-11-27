@@ -32,17 +32,3 @@ def test_hosted_and_atlas(monkeypatch):
 def test_unknown_option_is_an_error():
     with pytest.raises(SystemExit):
         fire.Fire(cli.main, command=["--bogus", "x"])
-
-
-def test_subcommand_dispatch_ctl_and_mcp(capsys):
-    import json
-
-    cli._cli(["mcp", "--print-config", "claude"])
-    cfg = json.loads(capsys.readouterr().out)
-    assert "uchrom-browser" in cfg["mcpServers"]
-
-    with pytest.raises(SystemExit) as exc:
-        cli._cli(["ctl", "--url", "http://127.0.0.1:9", "tools", "--schema", "open_view"])
-    assert exc.value.code == 0
-    tool_info = json.loads(capsys.readouterr().out)
-    assert tool_info["name"] == "open_view"

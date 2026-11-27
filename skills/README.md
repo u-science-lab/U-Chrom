@@ -4,7 +4,7 @@ Skills in the [Agent Skills](https://docs.claude.com/en/docs/claude-code/skills)
 (`&lt;name&gt;/SKILL.md`, optional `scripts/`). They teach a coding agent (Claude Code, Codex,
 `uchrom_discovery`, …) *how* to use U-Chrom well: which API calls, in which order, and which checks an
 answer must pass. They add no new API — analysis is the `uchrom` Python API, visualization the web
-browser (`uchrom-web`, `uchrom-browser-mcp`, `uchrom_browser.connect()`, or WebMCP).
+browser (`uchrom-web`, `uchrom-web mcp`, `uchrom_browser.connect()`, or WebMCP).
 
 | skill | for | script |
 |---|---|---|

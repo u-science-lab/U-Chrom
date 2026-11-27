@@ -120,7 +120,7 @@ so a 10-million-spot dataset opens in seconds. More: [Concepts](docs/source/star
 | `uc.pp` | imaging preprocessing | `align_spots`, `impute`, `merge_duplicate_spots` |
 | `uc.tl` | structures, reconstruction, embeddings | `call_tads`, `call_loops`, `call_compartments`, `single_cell_boundaries`, `pseudobulk`, `reconstruct_sc`, `reconstruct_bulk`, `embed_cells`, `embed_higashi`, `cluster_cells` |
 | `uchrom.pl` | plots (matplotlib) | `plot_contact_map`, `plot_distance_matrix`, `plot_spatial`, `plot_structure_3d` |
-| `uchrom_browser` | the web browser, driven via MCP, CLI, or Python | `uchrom-browser`, `uchrom-web`, `uchrom-browser-mcp`, `ub.connect()` |
+| `uchrom_browser` | the web browser, driven via MCP, CLI, or Python | `uchrom-browser`, `uchrom-web`, `ub.connect()` |
 
 `uc.pp` and `uc.tl` come with `import uchrom as uc`; import `uchrom.io` and `uchrom.pl` explicitly.
 Full reference: [API](docs/source/reference/api/index.md).
@@ -138,15 +138,9 @@ sources, cached under `$UCHROM_DATA` (default `~/.cache/uchrom`). How each one i
 
 ## From scripts and AI agents
 
-- **Stdio MCP server (`uchrom-browser-mcp`, `uchrom-browser mcp`, or `uchrom-web mcp`)** — pure-stdlib JSON-RPC 2.0 server exposing browser tools
-  (`uchrom_*`, including `uchrom_wait_for_page` and safe file-backed `uchrom_capture_view`), read-only
-  `uchrom://` resources, workflow prompts, and explicit multi-tab binding for Claude Desktop, Cursor,
-  Claude Code, and Codex. Run `uchrom-browser-mcp --print-config claude` (or `uchrom-web mcp --print-config claude`) for a
-  ready-to-paste snippet, and `--doctor` to verify connectivity and connected tabs.
-- **Agent-friendly CLI (`uchrom-web`, or `uchrom-browser ctl`)** — lightweight pure-stdlib shell interface sharing the same
-  schema validation, multi-tab safety, and exclusive (non-overwriting) PNG/SVG/PDF capture for coding agents (`doctor`, `pages`,
-  `bind`, `selection`, `locus`, `open`, `arrange`, `capture`, `batch`, `call`, `mcp`), emitting strict JSON and semantic
-  exit codes (`0`/`2`/`3`/`4`/`5`).
+- **Agent CLI (`uchrom-web`)** — lightweight pure-stdlib shell interface for coding agents and scripts (`doctor`, `pages`,
+  `bind`, `wait`, `tools`, `describe`, `selection`, `capture`, `batch`, `call`, `mcp`), emitting strict JSON and semantic
+  exit codes (`0`/`2`/`3`/`4`/`5`). Run `uchrom-web mcp --print-config json` (or `codex`) for an MCP host config snippet.
 - **Python client & WebMCP** — `ws = uchrom_browser.connect()` drives an open browser from Python analysis
   scripts (`ws.selected_cells()`, `ws.open_view(...)`, `ws.capture(path="fig.svg")`); the same `ui_tools.json`
   actions are registered as WebMCP tools in compatible browsers. See [The web browser](docs/source/viz/browser.md).
@@ -172,7 +166,7 @@ each with tutorials on real data:
 |---|---|---|
 | `packages/chromdata/` | `chromdata` | the data model and the `.chromdata.zarr` store (numpy / pandas / zarr / pyarrow only) |
 | `packages/uchrom/` | `u-chrom` (`uchrom`) | the analysis library: I/O, imaging, structures, reconstruction, features, embeddings, plots |
-| `packages/uchrom-browser/` | `uchrom-browser` (`uchrom_browser`) | the web browser (needs `chromdata` only); commands `uchrom-browser`, `uchrom-web`, `uchrom-browser-mcp` |
+| `packages/uchrom-browser/` | `uchrom-browser` (`uchrom_browser`) | the web browser (needs `chromdata` only); commands `uchrom-browser`, `uchrom-web` |
 | `packages/uchrom-recon/` | `uchrom-recon` | native reconstruction engine: NucDynamics, EMber, IGM (Rust; LGPL-3.0) |
 | `packages/uchrom-maps/` | `uchrom-maps` | native Hi-C map kernels: HiCCUPS, Mustache (Rust) |
 | `packages/uchrom-discovery/` | `uchrom-discovery` | LLM-driven auto-discovery (Python ≥ 3.10); command `uchrom-discovery` |

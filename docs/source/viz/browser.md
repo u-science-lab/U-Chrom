@@ -195,10 +195,10 @@ ws.capture(path="rg.png")              # or rg.svg / rg.pdf: editable vectors (f
 
 `ws.tools()` lists the schemas; pass `page="<id>"` when multiple tabs are open (including `ws.dataset(page="<id>")` to inspect that tab's dataset).
 
-### 2. Agent-friendly Control CLI (`uchrom-web` / `uchrom-browser ctl`)
+### 2. Agent Control CLI (`uchrom-web`)
 
 Terminal coding agents (Claude Code, Codex) can drive a running browser without writing Python glue or
-loading MCP schemas upfront. Both `uchrom-web` (`python -m uchrom_browser.cli` / `uchrom-browser ctl`) and `uchrom-browser-mcp` (`uchrom-browser mcp` / `uchrom-web mcp`)
+loading MCP schemas upfront. Both `uchrom-web` (`python -m uchrom_browser.cli`) and `uchrom-web mcp` (`python -m uchrom_browser.mcp`)
 use only the Python standard library and emit strict JSON:
 
 ```bash
@@ -208,9 +208,9 @@ uchrom-web pages                           # list connected tabs (with workspace
 uchrom-web bind <page_id>                  # bind session for this server URL (needed if 2+ tabs)
 uchrom-web tools --schema open_view
 uchrom-web selection
-uchrom-web locus chr15:3000000-33000000
-uchrom-web open stats --stats rg --chrom-scope locus --compare g123,field:cell_type=Granule
-uchrom-web arrange grid
+uchrom-web describe
+uchrom-web call set_locus --json '{"chrom":"chr15","start":3000000,"end":33000000}'
+uchrom-web call open_view --json '{"type":"stats","stats":"rg","chrom_scope":"locus","compare_groups":["g123","field:cell_type=Granule"]}'
 uchrom-web batch --steps-json '[{"action":"arrange","args":{"layout":"grid"}},{"action":"capture_view","args":{"path":"overview.svg"}}]'
 uchrom-web capture --out fig.svg           # refuses overwrite, '..', or symlinks
 ```
@@ -218,19 +218,17 @@ uchrom-web capture --out fig.svg           # refuses overwrite, '..', or symlink
 Exit codes: `0` success, `2` invalid flags/schema, `3` server/tab unreachable, `4` multi-tab ambiguity or
 missing bound tab, `5` browser execution or file-write error.
 
-### 3. Stdio MCP Server (`uchrom-browser-mcp`) & WebMCP
+### 3. Stdio MCP Server (`uchrom-web mcp`) & WebMCP
 
 MCP hosts (Claude Desktop, Cursor, Claude Code, Codex, Antigravity) can connect over `stdio` JSON-RPC 2.0:
 
 ```bash
-uchrom-browser-mcp --print-config claude   # or: uchrom-web mcp --print-config claude (also: claude-code, codex, cursor)
-uchrom-browser-mcp --doctor                # check server health, datasets, tabs & loopback proxies
+uchrom-web mcp --print-config json         # or: codex (TOML)
+uchrom-web mcp --doctor                    # check server health, datasets, tabs & loopback proxies
 ```
 
-- **Tools**: `uchrom_status`, `uchrom_list_pages` (tabs + optional workspace summary + datasets), `uchrom_bind_page`,
+- **Tools**: `uchrom_list_pages` (tabs + optional workspace summary + datasets), `uchrom_bind_page`,
   `uchrom_wait_for_page`, `uchrom_batch` (validate and execute `1..20` sequential steps on one resolved tab), and `uchrom_<action>` for every entry in `ui_tools.json`.
-- **Resources & Prompts**: read-only `uchrom://status`, `uchrom://pages`, `uchrom://workspace`, and `uchrom://selection`
-  resources, plus guided `compare-selection` and `inspect-locus` workflow prompts.
 - **Multi-tab & file safety**: both MCP and `uchrom-web` refuse mutating/reading an ambiguous
   workspace when multiple tabs are connected until `page` is passed or a tab is bound, and never silently
   fail over if a bound tab closes. `capture` writes exclusively to a non-existing PNG/SVG/PDF path (never

@@ -12,19 +12,20 @@ uchrom-browser --atlas https://uchrom-atlas-r2.u-science.org      # the Open dia
 
 Coding agents and Python drive an open browser using the same actions (`ui_tools.json`) via three interfaces — all pure Python stdlib on the client side with no `u-chrom` dependency:
 
-- **Stdio MCP server (`uchrom-browser-mcp` / `uchrom-browser mcp` / `uchrom-web mcp`)**:
+- **Control CLI (`uchrom-web`)** — strict JSON output and semantic exit codes for terminal agents:
   ```bash
-  uchrom-browser-mcp --print-config claude   # or: claude-code, codex, cursor
-  uchrom-browser-mcp --doctor                # check server health, connected tabs & proxy env
-  ```
-- **Control CLI (`uchrom-web`, or `uchrom-browser ctl`)** — strict JSON output and semantic exit codes for terminal agents:
-  ```bash
+  uchrom-web doctor                          # check server reachability, tabs & proxy env
   uchrom-web pages                           # connected tabs + active dataset summary
   uchrom-web bind <page_id>                  # when multiple tabs are open
-  uchrom-web selection
-  uchrom-web open stats --stats rg --compare field:cell_type=Purkinje,field:cell_type=Granule
+  uchrom-web selection                       # current lasso / focused cells
+  uchrom-web call open_view --json '{"type":"stats","stats":"rg","compare_groups":["field:cell_type=Purkinje","field:cell_type=Granule"]}'
   uchrom-web batch --steps-json '[{"action":"arrange","args":{"layout":"grid"}}]'
   uchrom-web capture --out rg.svg
+  ```
+- **Stdio MCP server (`uchrom-web mcp`)** — JSON-RPC 2.0 server exposing browser tools and multi-tab safety:
+  ```bash
+  uchrom-web mcp --print-config json         # or: codex (TOML)
+  uchrom-web mcp --doctor                    # check server health, connected tabs & proxy env
   ```
 - **Python client (`uchrom_browser.connect()`)**:
   ```python

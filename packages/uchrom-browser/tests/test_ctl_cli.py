@@ -39,22 +39,12 @@ def test_ctl_python_s_stdlib_only_and_script_help():
     assert p_stdlib.returncode == 0, p_stdlib.stderr
     assert "uchrom-web" in p_stdlib.stdout
 
-    for sub in (["ctl", "--help"], ["mcp", "--help"], ["ctl", "--url", "http://127.0.0.1:9", "tools", "--schema", "open_view"]):
-        p_sub = subprocess.run(
-            [sys.executable, "-S", "-m", "uchrom_browser", *sub],
-            capture_output=True,
-            text=True,
-            env=env,
-            timeout=10,
-        )
-        assert p_sub.returncode == 0, (sub, p_sub.stderr)
-
     web_bin = Path(sys.executable).parent / "uchrom-web"
     if web_bin.exists():
         p_bin = subprocess.run([str(web_bin), "--help"], capture_output=True, text=True, timeout=10)
         assert p_bin.returncode == 0, p_bin.stderr
         assert "uchrom-web" in p_bin.stdout
-        p_mcp = subprocess.run([str(web_bin), "mcp", "--print-config", "claude"], capture_output=True, text=True, timeout=10)
+        p_mcp = subprocess.run([str(web_bin), "mcp", "--print-config", "json"], capture_output=True, text=True, timeout=10)
         assert p_mcp.returncode == 0, p_mcp.stderr
         assert "uchrom-browser" in json.loads(p_mcp.stdout)["mcpServers"]
 
@@ -82,7 +72,7 @@ def test_ctl_python_s_stdlib_only_and_script_help():
     assert json.loads(tools_p.stdout)["name"] == "open_view"
 
     mcp_cfg_p = subprocess.run(
-        [sys.executable, "-S", "-m", "uchrom_browser.cli", "--url", "http://127.0.0.1:9", "mcp", "--print-config", "claude"],
+        [sys.executable, "-S", "-m", "uchrom_browser.cli", "--url", "http://127.0.0.1:9", "mcp", "--print-config", "json"],
         capture_output=True,
         text=True,
         env=env,
@@ -105,10 +95,10 @@ def test_ctl_python_s_stdlib_only_and_script_help():
 def test_ctl_exit_codes_and_strict_json(server, tmp_path):  # noqa: F811
     state = tmp_path / "ctl.json"
 
-    # Exit 2: invalid CLI arguments / bad locus / bad JSON payload / schema violation
-    r_bad_locus = _run_ctl("locus", "chr1:500-100", state_file=state, url=server)
-    assert r_bad_locus.returncode == 2
-    assert json.loads(r_bad_locus.stderr)["code"] == "INVALID_ARGS"
+    # Exit 2: invalid CLI arguments / unknown command / bad JSON payload / schema violation
+    r_bad_cmd = _run_ctl("bogus-cmd", state_file=state, url=server)
+    assert r_bad_cmd.returncode == 2
+    assert json.loads(r_bad_cmd.stderr)["code"] == "INVALID_ARGS"
 
     r_bad_json = _run_ctl("call", "open_view", "--json", '{"type":NaN}', state_file=state, url=server)
     assert r_bad_json.returncode == 2
@@ -119,7 +109,7 @@ def test_ctl_exit_codes_and_strict_json(server, tmp_path):  # noqa: F811
     assert json.loads(r_bad_schema.stderr)["code"] == "INVALID_ARGS"
 
     # Exit 3: unreachable server or zero connected tabs
-    r_off = _run_ctl("status", "--timeout", "0.5", state_file=state, url="http://127.0.0.1:1")
+    r_off = _run_ctl("pages", "--timeout", "0.5", state_file=state, url="http://127.0.0.1:1")
     assert r_off.returncode == 3
     assert json.loads(r_off.stderr)["code"] == "UNREACHABLE"
 
@@ -188,7 +178,14 @@ def test_ctl_multitab_binding_actions_and_capture(server, tmp_path):  # noqa: F8
         assert json.loads(r_bind.stdout)["bound_page"] == "tabB"
 
         # Subsequent calls route to tabB automatically
-        r_loc = _run_ctl("locus", "chr15:3,000,000-33,000,000", state_file=state, url=server)
+        r_loc = _run_ctl(
+            "call",
+            "set_locus",
+            "--json",
+            '{"chrom":"chr15","start":3000000,"end":33000000}',
+            state_file=state,
+            url=server,
+        )
         assert r_loc.returncode == 0
         assert tab_b.seen[-1]["name"] == "set_locus"
         assert tab_b.seen[-1]["args"] == {"chrom": "chr15", "start": 3_000_000, "end": 33_000_000}
@@ -198,24 +195,12 @@ def test_ctl_multitab_binding_actions_and_capture(server, tmp_path):  # noqa: F8
         assert r_sel_a.returncode == 0
         assert json.loads(r_sel_a.stdout)["cells"] == ["c_A"]
 
-        # select, focus, open, arrange, color-by, call
-        cells_txt = tmp_path / "cells.txt"
-        cells_txt.write_text("# comment\nc1\nc2\n")
-        assert _run_ctl("select", "--cells-file", str(cells_txt), "--name", "grp", state_file=state, url=server).returncode == 0
-        assert tab_b.seen[-1]["args"] == {"cells": ["c1", "c2"], "name": "grp"}
-
-        assert _run_ctl("focus", "--group", "g1", state_file=state, url=server).returncode == 0
-        assert tab_b.seen[-1]["args"] == {"group": "g1"}
-
+        # Generic call for select_cells, open_view, arrange, color_by
         r_open = _run_ctl(
-            "open",
-            "stats",
-            "--stats",
-            "rg",
-            "--chrom-scope",
-            "locus",
-            "--compare",
-            "g1,field:cell_type=B",
+            "call",
+            "open_view",
+            "--json",
+            '{"type":"stats","stats":"rg","chrom_scope":"locus","compare_groups":["g1","field:cell_type=B"]}',
             state_file=state,
             url=server,
         )
@@ -227,8 +212,8 @@ def test_ctl_multitab_binding_actions_and_capture(server, tmp_path):  # noqa: F8
             "compare_groups": ["g1", "field:cell_type=B"],
         }
 
-        assert _run_ctl("arrange", "grid", state_file=state, url=server).returncode == 0
-        assert _run_ctl("color-by", "cell_type", state_file=state, url=server).returncode == 0
+        assert _run_ctl("call", "arrange", "--json", '{"layout":"grid"}', state_file=state, url=server).returncode == 0
+        assert _run_ctl("call", "color_by", "--json", '{"field":"cell_type"}', state_file=state, url=server).returncode == 0
 
         # Capture relative path + overwrite refusal (exit 5)
         r_cap = _run_ctl("capture", "--out", "rel_out.png", state_file=state, url=server, cwd=tmp_path)
@@ -272,13 +257,13 @@ def test_ctl_concurrent_binds_permissions_and_transport_codes(tmp_path):
     import threading
     import stat
 
-    # 1. Parent directory permissions under UCHROM_BROWSER_CTL_STATE are NOT modified
+    # 1. Parent directory permissions under UCHROM_WEB_STATE are NOT modified
     custom_dir = tmp_path / "custom_state_dir"
     custom_dir.mkdir(mode=0o755)
     os.chmod(custom_dir, 0o755)
     custom_state = custom_dir / "ctl.json"
-    old_env = os.environ.get("UCHROM_BROWSER_CTL_STATE")
-    os.environ["UCHROM_BROWSER_CTL_STATE"] = str(custom_state)
+    old_env = os.environ.get("UCHROM_WEB_STATE")
+    os.environ["UCHROM_WEB_STATE"] = str(custom_state)
     try:
         # Interleaved concurrent updates for two distinct server URLs preserve both bindings
         errors = []
@@ -302,9 +287,9 @@ def test_ctl_concurrent_binds_permissions_and_transport_codes(tmp_path):
         assert stat.S_IMODE(custom_dir.stat().st_mode) == 0o755
     finally:
         if old_env is None:
-            os.environ.pop("UCHROM_BROWSER_CTL_STATE", None)
+            os.environ.pop("UCHROM_WEB_STATE", None)
         else:
-            os.environ["UCHROM_BROWSER_CTL_STATE"] = old_env
+            os.environ["UCHROM_WEB_STATE"] = old_env
 
     # 2. HTTP 409 on targeted page race -> exit 4; HTTP 504 / timeout -> exit 3
     class _MockHandler(http.server.BaseHTTPRequestHandler):
@@ -345,7 +330,7 @@ def test_ctl_concurrent_binds_permissions_and_transport_codes(tmp_path):
         assert r_409.returncode == 4
         assert json.loads(r_409.stderr)["code"] == "PAGE_CONFLICT"
 
-        r_504 = _run_ctl("--page", "tabA", "groups", state_file=tmp_path / "m.json", url=mock_url)
+        r_504 = _run_ctl("--page", "tabA", "describe", state_file=tmp_path / "m.json", url=mock_url)
         assert r_504.returncode == 3
         assert json.loads(r_504.stderr)["code"] == "UNREACHABLE"
     finally:
@@ -446,7 +431,7 @@ def test_ctl_batch_midflight_disconnect_returns_exit_4_with_recovery_fields(tmp_
         [{"step": 0, "action": "arrange", "result": {"layout": "grid"}}],
     )
     with (
-        patch.dict(os.environ, {"UCHROM_BROWSER_CTL_STATE": str(state)}),
+        patch.dict(os.environ, {"UCHROM_WEB_STATE": str(state)}),
         patch.object(cli.McpServer, "execute_batch", side_effect=partial_err),
         contextlib.redirect_stdout(out_buf),
         contextlib.redirect_stderr(err_buf),
