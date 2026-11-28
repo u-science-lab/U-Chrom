@@ -120,7 +120,7 @@ so a 10-million-spot dataset opens in seconds. More: [Concepts](docs/source/star
 | `uc.pp` | imaging preprocessing | `align_spots`, `impute`, `merge_duplicate_spots` |
 | `uc.tl` | structures, reconstruction, embeddings | `call_tads`, `call_loops`, `call_compartments`, `single_cell_boundaries`, `pseudobulk`, `reconstruct_sc`, `reconstruct_bulk`, `embed_cells`, `embed_higashi`, `cluster_cells` |
 | `uchrom.pl` | plots (matplotlib) | `plot_contact_map`, `plot_distance_matrix`, `plot_spatial`, `plot_structure_3d` |
-| `uchrom_browser` | the web browser, also driven from Python | `uchrom-browser data.chromdata.zarr`; `ub.connect()` |
+| `uchrom_browser` | the web browser, driven via MCP, CLI, or Python | `uchrom-browser`, `uchrom-web`, `ub.connect()` |
 
 `uc.pp` and `uc.tl` come with `import uchrom as uc`; import `uchrom.io` and `uchrom.pl` explicitly.
 Full reference: [API](docs/source/reference/api/index.md).
@@ -138,12 +138,14 @@ sources, cached under `$UCHROM_DATA` (default `~/.cache/uchrom`). How each one i
 
 ## From scripts and AI agents
 
-- **Drive the browser from Python** — `ws = uchrom_browser.connect()` reads the cells you
-  lasso-selected, opens and arranges views, and saves any view as PNG, SVG or PDF
-  (`ws.capture(path="fig.svg")`); the same actions are exposed to in-browser agents through WebMCP.
-  See [The web browser](docs/source/viz/browser.md).
+- **Agent CLI (`uchrom-web`)** — lightweight pure-stdlib shell interface for coding agents and scripts (`doctor`, `pages`,
+  `bind`, `wait`, `tools`, `describe`, `selection`, `capture`, `batch`, `call`, `mcp`), emitting strict JSON and semantic
+  exit codes (`0`/`2`/`3`/`4`/`5`). Run `uchrom-web mcp --print-config json` (or `codex`) for an MCP host config snippet.
+- **Python client & WebMCP** — `ws = uchrom_browser.connect()` drives an open browser from Python analysis
+  scripts (`ws.selected_cells()`, `ws.open_view(...)`, `ws.capture(path="fig.svg")`); the same `ui_tools.json`
+  actions are registered as WebMCP tools in compatible browsers. See [The web browser](docs/source/viz/browser.md).
 - **Agent skills** — [`skills/`](skills/README.md) holds skills for coding agents (load data, call
-  structures, compare groups, associate modalities, show results in the browser); copy a skill
+  structures, compare groups, associate modalities, show results in the browser); copy or symlink a skill
   folder into `.claude/skills/` to use it.
 - **Auto-discovery** (experimental, not in the documentation yet) — `packages/uchrom-discovery`:
   LLM agents that propose, run and check analyses on a dataset.
@@ -164,7 +166,7 @@ each with tutorials on real data:
 |---|---|---|
 | `packages/chromdata/` | `chromdata` | the data model and the `.chromdata.zarr` store (numpy / pandas / zarr / pyarrow only) |
 | `packages/uchrom/` | `u-chrom` (`uchrom`) | the analysis library: I/O, imaging, structures, reconstruction, features, embeddings, plots |
-| `packages/uchrom-browser/` | `uchrom-browser` (`uchrom_browser`) | the web browser (needs `chromdata` only); command `uchrom-browser` |
+| `packages/uchrom-browser/` | `uchrom-browser` (`uchrom_browser`) | the web browser (needs `chromdata` only); commands `uchrom-browser`, `uchrom-web` |
 | `packages/uchrom-recon/` | `uchrom-recon` | native reconstruction engine: NucDynamics, EMber, IGM (Rust; LGPL-3.0) |
 | `packages/uchrom-maps/` | `uchrom-maps` | native Hi-C map kernels: HiCCUPS, Mustache (Rust) |
 | `packages/uchrom-discovery/` | `uchrom-discovery` | LLM-driven auto-discovery (Python ≥ 3.10); command `uchrom-discovery` |

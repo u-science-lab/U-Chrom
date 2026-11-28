@@ -10,15 +10,29 @@ uchrom-browser data.chromdata.zarr                 # or: python -m uchrom_browse
 uchrom-browser --atlas https://uchrom-atlas-r2.u-science.org      # the Open dialog lists an atlas
 ```
 
-Python and coding agents drive an open browser with the same actions as the page (`ui_tools.json`):
+Coding agents and Python drive an open browser using the same actions (`ui_tools.json`) via three interfaces — all pure Python stdlib on the client side with no `u-chrom` dependency:
 
-```python
-import uchrom_browser as ub
-ws = ub.connect()
-cells = ws.get_selection()["cells"]
-ws.open_view(type="genome", rows=[{"kind": "contacts", "source": "per_cell"}], cells=cells)
-```
+- **Control CLI (`uchrom-web`)** — strict JSON output and semantic exit codes for terminal agents:
+  ```bash
+  uchrom-web doctor                          # check server reachability, tabs & proxy env
+  uchrom-web pages                           # connected tabs + active dataset summary
+  uchrom-web bind <page_id>                  # when multiple tabs are open
+  uchrom-web selection                       # current lasso / focused cells
+  uchrom-web call open_view --json '{"type":"stats","stats":"rg","compare_groups":["field:cell_type=Purkinje","field:cell_type=Granule"]}'
+  uchrom-web batch --steps-json '[{"action":"arrange","args":{"layout":"grid"}}]'
+  uchrom-web capture --out rg.svg
+  ```
+- **Stdio MCP server (`uchrom-web mcp`)** — JSON-RPC 2.0 server exposing browser tools and multi-tab safety:
+  ```bash
+  uchrom-web mcp --print-config json         # or: codex (TOML)
+  uchrom-web mcp --doctor                    # check server health, connected tabs & proxy env
+  ```
+- **Python client (`uchrom_browser.connect()`)**:
+  ```python
+  import uchrom_browser as ub
+  ws = ub.connect()
+  cells = ws.get_selection()["cells"]
+  ws.open_view(type="genome", rows=[{"kind": "contacts", "source": "per_cell"}], cells=cells)
+  ```
 
-It needs only the data model, [`chromdata`](../chromdata); the analysis library (`u-chrom`) is not required.  The
-server's API is [`uchrom_browser/API.md`](uchrom_browser/API.md); the front end (`uchrom_browser/frontend`, React +
-Three.js) is built with `npm run build` into `uchrom_browser/static`, which is committed.
+The server's HTTP, CLI, and MCP contracts live in [`uchrom_browser/API.md`](uchrom_browser/API.md); the front end (`uchrom_browser/frontend`, React + Three.js) is built with `npm run build` into `uchrom_browser/static`, which is committed.

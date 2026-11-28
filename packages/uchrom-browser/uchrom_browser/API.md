@@ -622,3 +622,32 @@ The page marks itself active on window focus; `pages` lists connected pages, act
 
 `python -m uchrom_browser` records its URL in `~/.cache/uchrom/browser.json` (removed on
 exit) so that `connect()` finds a server that moved to another port.
+
+## Control CLI (`uchrom-web`)
+
+Pure-stdlib CLI sharing URL resolution, schema validation, multi-tab safety, and exclusive (non-overwriting) capture logic with `uchrom_browser.mcp`:
+
+```bash
+uchrom-web [--url URL] [--page ID] [--timeout 30] [--pretty] <command> ...
+# or: python -m uchrom_browser.cli ...
+```
+
+- **Subcommands**: `doctor`, `pages [--no-probe]`, `bind [PAGE|--clear]`, `wait [--wait-seconds S]`, `tools [--schema ACTION]`, `describe`, `selection`, `capture [--pane ...] [--out ...] [--format png|svg|pdf]`, `call ACTION [--json '{...}']`, `batch (--steps-json JSON | --steps-file PATH)`, `mcp ...`.
+- **Tab binding state**: `bind` updates `{url: page}` under a file lock in `$UCHROM_WEB_STATE` (default `$XDG_CACHE_HOME/uchrom/web.json`, `0600` file, symlinks refused); `--page` overrides per invocation.
+- **Output & exit codes**: normal commands write strict JSON (`allow_nan=False`) to `stdout` on success (`0`) or structured `{ok: false, code, error}` JSON to `stderr` on non-zero exits (`2` invalid CLI args/schema, `3` browser server or page unreachable/timeout, `4` multi-tab ambiguity or disconnected target/bound tab with `connected_pages`, `5` browser execution or file-write error). Exception: `doctor` writes its diagnostic JSON (`{ok, code, ...}`) to `stdout` on both `0` and `3`.
+
+## Stdio MCP Server (`uchrom-web mcp`)
+
+Run a pure-stdlib JSON-RPC 2.0 MCP server over `stdin`/`stdout` against a running browser:
+
+```bash
+uchrom-web mcp [--url http://127.0.0.1:8765] [--timeout 30]
+uchrom-web mcp --print-config {json|codex} [--url ...]
+uchrom-web mcp --doctor [--url ...]
+# or: python -m uchrom_browser.mcp ...
+```
+
+- **Session & batch tools**: `uchrom_list_pages` (`pages` with optional per-tab `summary`, `datasets`, `bound_page`; `probe` defaults to `true`), `uchrom_bind_page` (`page` id or `null` to clear), `uchrom_wait_for_page` (`page?`, `wait_seconds?` in `0..60`, default `10`), and `uchrom_batch` (upfront validation + sequential execution of `1..20` `{action, args?}` steps on one resolved tab).
+- **Browser actions**: every tool from `GET /api/control/tools` (falling back to `ui_tools.json` when offline) is exposed as `uchrom_<name>` with an optional `page` argument and strict schema + finite 64-bit numeric validation before dispatch.
+- **Multi-tab safety**: actions resolve `page` explicitly, else the session's `bound_page` (erroring without failover if that tab closes), else the single connected page — refusing when 0 or 2+ pages are connected.
+- **`uchrom_capture_view`**: accepts optional `path` (non-existing destination; no `..`, symlinks, or conflicting extension; written using `dir_fd` + `O_NOFOLLOW` + `O_CREAT|O_EXCL`, defaults to a private `0700` temp directory where callers manage temp cleanup) and returns `{path, pane, format, width, height, bytes, sha256, notes, page}` with no base64 payload.

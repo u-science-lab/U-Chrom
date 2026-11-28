@@ -13,9 +13,23 @@ import uchrom.datasets as ds
 from uchrom.datasets import _sources
 
 
-def test_every_source_names_its_files_and_urls():
+def test_every_source_names_its_files_and_urls(monkeypatch):
+    import re
+
+    def fake_geo_filelist(gse, pattern="", cache=None):
+        assert gse.startswith("GSE"), gse
+        re.compile(pattern)
+        return ["GSM0000001_mock"]
+
+    def fake_nemo_bag_files(bag, pattern="", cache=None):
+        assert bag.startswith(("https://", "http://")), bag
+        re.compile(pattern)
+        return [("mock.tar", "https://data.nemoarchive.org/mock.tar")]
+
+    monkeypatch.setattr(_sources, "_geo_filelist", fake_geo_filelist)
+    monkeypatch.setattr(_sources, "_nemo_bag_files", fake_nemo_bag_files)
     for name, entry in _sources.DATASETS.items():
-        if name in ("tan2021_cortex", "hires2023", "unic2025"):     # lists read from GEO / a cell table
+        if name == "tan2021_cortex" and not _sources._TAN_CELLS.exists():     # unpublished cell table
             continue
         paths = ds.files(name)
         assert paths, name

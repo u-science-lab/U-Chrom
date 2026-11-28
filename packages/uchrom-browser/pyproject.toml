@@ -25,6 +25,7 @@ test = ["pytest", "httpx", "requests", "pillow"]
 
 [project.scripts]
 uchrom-browser = "uchrom_browser.__main__:_cli"
+uchrom-web = "uchrom_browser.cli:_cli"
 
 [tool.setuptools]
 packages = ["uchrom_browser"]

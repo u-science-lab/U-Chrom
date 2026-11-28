@@ -33,10 +33,25 @@ def main(*paths, host="127.0.0.1", port=8765, open_browser=True, atlas=None, hos
     serve(paths, host=host, port=port, open_browser=open_browser, atlas=atlas, hosted=bool(hosted))
 
 
+def _cli(argv=None):
+    """The ``uchrom-browser`` command (serves stores, or dispatches ``ctl`` / ``mcp`` subcommands)."""
+    eff_argv = __import__("sys").argv[1:] if argv is None else list(argv)
+    if eff_argv and eff_argv[0] == "mcp":
+        from .mcp import _cli as mcp_cli
+
+        mcp_cli(eff_argv[1:], prog="uchrom-browser mcp")
+        return
+    if eff_argv and eff_argv[0] == "ctl":
+        from .cli import main as ctl_main
+
+        raise SystemExit(ctl_main(eff_argv[1:], prog="uchrom-browser ctl"))
+    import fire
+
+    if argv is None:
+        fire.Fire(main)
+    else:
+        fire.Fire(main, command=argv)
+
+
 if __name__ == "__main__":
-    fire.Fire(main)
-
-
-def _cli():
-    """The ``uchrom-browser`` command."""
-    fire.Fire(main)
+    _cli()

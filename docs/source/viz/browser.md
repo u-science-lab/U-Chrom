@@ -169,10 +169,14 @@ nuclear size: Granule 1.16 µm (22 cells) < Bergmann 1.47 µm (8) < Purkinje
 1.86 µm (3).  On scHiCAR MOp the pseudo-bulk of a subclass is identical
 to that subclass's own `.cool` (coarsened to the same 1 Mb bins).
 
-## Driving the browser from Python (and agents)
+## Driving the browser from Python and AI agents
 
-The open page can be driven from code with the same actions as its GUI — read what the researcher
-selected, open and arrange views, capture a view:
+The open page can be driven with the same GUI actions defined in
+`packages/uchrom-browser/uchrom_browser/ui_tools.json` (`describe_workspace`, `get_selection`,
+`select_cells`, `list_groups`, `focus`, `set_locus`, `open_view`, `show_view`, `close_view`,
+`arrange`, `color_by`, `capture_view`):
+
+### 1. Python client (`uchrom_browser.connect()`)
 
 ```python
 import uchrom_browser as ub
@@ -189,12 +193,50 @@ ws.open_view("stats", stats="rg", compare_groups=[g, "field:cell_type=Granule"])
 ws.capture(path="rg.png")              # or rg.svg / rg.pdf: editable vectors (format= to override)
 ```
 
-`ws.tools()` lists the actions (`describe_workspace`, `get_selection`, `select_cells`,
-`list_groups`, `focus`, `set_locus`, `open_view`, `show_view`, `close_view`, `arrange`, `color_by`,
-`capture_view`); they are defined in `packages/uchrom-browser/uchrom_browser/ui_tools.json`.  Coding agents use the
-same client.  In browsers that support WebMCP (a W3C Community Group draft; Chrome behind a flag),
-the page also registers these actions as tools (`uchrom_open_view`, …) for agents running in the
-browser.  The HTTP side is documented under *Control* in `packages/uchrom-browser/uchrom_browser/API.md`.
+`ws.tools()` lists the schemas; pass `page="<id>"` when multiple tabs are open (including `ws.dataset(page="<id>")` to inspect that tab's dataset).
+
+### 2. Agent Control CLI (`uchrom-web`)
+
+Terminal coding agents (Claude Code, Codex) can drive a running browser without writing Python glue or
+loading MCP schemas upfront. Both `uchrom-web` (`python -m uchrom_browser.cli`) and `uchrom-web mcp` (`python -m uchrom_browser.mcp`)
+use only the Python standard library and emit strict JSON:
+
+```bash
+uchrom-web doctor                          # verify URL, connected tabs, and proxy settings
+uchrom-web wait                            # wait for a browser tab to connect
+uchrom-web pages                           # list connected tabs (with workspace summary) + datasets
+uchrom-web bind <page_id>                  # bind session for this server URL (needed if 2+ tabs)
+uchrom-web tools --schema open_view
+uchrom-web selection
+uchrom-web describe
+uchrom-web call set_locus --json '{"chrom":"chr15","start":3000000,"end":33000000}'
+uchrom-web call open_view --json '{"type":"stats","stats":"rg","chrom_scope":"locus","compare_groups":["g123","field:cell_type=Granule"]}'
+uchrom-web batch --steps-json '[{"action":"arrange","args":{"layout":"grid"}},{"action":"capture_view","args":{"path":"overview.svg"}}]'
+uchrom-web capture --out fig.svg           # refuses overwrite, '..', or symlinks
+```
+
+Exit codes: `0` success, `2` invalid flags/schema, `3` server/tab unreachable, `4` multi-tab ambiguity or
+missing bound tab, `5` browser execution or file-write error.
+
+### 3. Stdio MCP Server (`uchrom-web mcp`) & WebMCP
+
+MCP hosts (Claude Desktop, Cursor, Claude Code, Codex, Antigravity) can connect over `stdio` JSON-RPC 2.0:
+
+```bash
+uchrom-web mcp --print-config json         # or: codex (TOML)
+uchrom-web mcp --doctor                    # check server health, datasets, tabs & loopback proxies
+```
+
+- **Tools**: `uchrom_list_pages` (tabs + optional workspace summary + datasets), `uchrom_bind_page`,
+  `uchrom_wait_for_page`, `uchrom_batch` (validate and execute `1..20` sequential steps on one resolved tab), and `uchrom_<action>` for every entry in `ui_tools.json`.
+- **Multi-tab & file safety**: both MCP and `uchrom-web` refuse mutating/reading an ambiguous
+  workspace when multiple tabs are connected until `page` is passed or a tab is bound, and never silently
+  fail over if a bound tab closes. `capture` writes exclusively to a non-existing PNG/SVG/PDF path (never
+  traversing `..` or symlinks) or to a private `0700` temp directory and returns metadata only (never raw base64).
+
+In browsers that support **WebMCP** (a W3C Community Group draft; Chrome behind a flag), the page also registers
+the same `uchrom_*` tools directly in the browser. HTTP endpoints are documented under *Control* in
+`packages/uchrom-browser/uchrom_browser/API.md`.
 
 ## Themes
 
