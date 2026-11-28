@@ -166,7 +166,8 @@ function PaneTypeSwitch({ pane }: { pane: Pane }) {
   )
 }
 /** Whether a pane shows the shared genomic locus (Stats only when it looks at the locus chromosome). */
-const usesLocus = (p: Pane) => p.type === 'genome' || p.type === 'matrix' || (p.type === 'stats' && p.chromScope === 'locus')
+const usesLocus = (p: Pane) =>
+  p.type === 'genome' || p.type === 'matrix' || (p.type === 'stats' && (p.chromScope === 'locus' || p.chromScope === 'window'))
 const LAYOUT_LABEL: Record<WsLayout, [string, string]> = {
   tabs: ['Tabs', 'one view at a time, switch with tabs'],
   grid: ['Grid', 'all views at once, in a grid'],

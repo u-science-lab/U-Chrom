@@ -514,18 +514,38 @@ as many as the statistic's budget holds; `note` says how many.
 distance < `threshold`, default 0.5 × dataset unit… or `threshold`).
 Binary payload above (`value`: `distance` or `contact_frequency`).
 
-### `GET /api/datasets/{id}/stats/rg?chrom=&cell_id=&group=`
+### `GET /api/datasets/{id}/stats/rg?chrom=&start=&end=&cell_id=&group=`
 
 Radius of gyration per trace: `{"trace_ids": [...], "cell_ids": [...],
-"chroms": [...], "rg": [...], "n_spots": [...], "unit": "um",
-"group": null, "n_cells": 47, "note": null}`.  A large store (see geometry): over a random sample of
-the matching cells (about `STATS_MAX_SPOTS`, 2,000,000 spots); `note` = `"80 of 399 cells (random sample)"`.
+"chroms": [...], "rg": [...], "n_spots": [...], "per_cell_median": 0.42,
+"unit": "um", "group": null, "n_cells": 47, "note": null}`.  Passing `start` /
+`end` filters spots overlapping `[start, end)` on a single named chromosome
+(`chrom=*` or missing `chrom` with `start`/`end` → `422`) and omits trace
+fragments with `< 2` finite spots in the window.  A large store (see geometry):
+over a random sample of the matching cells (about `STATS_MAX_SPOTS`, 2,000,000
+spots); `note` = `"80 of 399 cells (random sample)"`.
 
-### `GET /api/datasets/{id}/stats/scaling?chrom=&cell_id=&group=`
+### `GET /api/datasets/{id}/stats/scaling?chrom=&start=&end=&cell_id=&n_bins=24&group=`
 
 Distance vs genomic separation (log-spaced separation bins):
 `{"sep_bp": [...], "median": [...], "q25": [...], "q75": [...], "n_pairs": [...],
-"unit": "um", "group": null, "n_cells": 47, "note": null}` (a large store: a sample, as `stats/rg`).
+"unit": "um", "group": null, "n_cells": 47, "note": null}` (windowed by `[start, end)`
+when set; a large store: a sample, as `stats/rg`).
+
+### `GET /api/datasets/{id}/stats/ps?key=&chrom=&start=&end=&resolution=&cell_id=&group=&n_bins=24&smin=&smax=`
+
+Raw cis contact probability decay $P(s)$ on upper-triangle counts (`balance=false`),
+per diagonal pair count divided by total cis contacts in scope, binned into
+`n_bins` (1–200) log-spaced separation bins for plotting and fitted by OLS on
+unbinned positive diagonals in `[smin, smax]`:
+`{"key": "cells", "resolution": 500000, "chrom": "chr1", "start": 0, "end": 100000000,
+"sep_bp": [...], "p": [...], "n_pairs": [...], "n_contacts": [...], "slope": -1.02,
+"intercept": 2.31, "fit_range_bp": [500000, 99500000], "total_cis_contacts": 50000.0,
+"group": null, "cell_id": null, "n_cells": 312, "note": null}`.  On a per-cell
+(`.scool`) map with both `cell_id` and `group` omitted, pools all cells (identical to
+`group=all` with `group: null` returned).  `404` unknown dataset, explicit map `key`,
+missing `cell_id`, or unknown group id; `422` missing default map, empty group, bad
+window/resolution/`n_bins`/`smin`/`smax`, or grouping on a bulk map.
 
 ## Cell groups
 
@@ -575,10 +595,10 @@ tools (`frontend/src/webmcp.ts`, feature-detected, experimental).  Python:
 
 `select_cells` returns the canonical cell IDs accepted by the server; the browser selection and any
 named group use that same list. `set_locus` returns the resolved, chromosome-clamped locus reported
-by `describe_workspace`. For Rg / scaling stats, `open_view` accepts `chrom_scope="all"` (default)
-or `chrom_scope="locus"`; the latter filters by the current locus chromosome, over the whole
-chromosome rather than only the locus start/end interval. `describe_workspace` reports this setting
-as `chrom_scope` for each stats pane.
+by `describe_workspace`. For Rg / scaling / P(s) stats, `open_view` accepts `stats="rg" | "scaling" | "ps" | "hist" | "scatter"`,
+`chrom_scope="all"` (default), `"locus"` (whole current locus chromosome), or `"window"` (current locus
+`[start, end)` interval), `source` (contact-map key for `stats="ps"`), and `rg_unit="trace" | "cell"`.
+`describe_workspace` reports `chrom_scope` and, when set, `rg_unit` and `source` for each stats pane.
 
 ### `POST /api/control/actions`
 

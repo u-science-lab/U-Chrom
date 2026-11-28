@@ -33,10 +33,34 @@ MIN_DETECTED = 0.5       # auto resolution: median trace must observe at least t
 
 
 # ------------------------------------------------------------------ tracing: tables and binning
-def trace_table(cd, chrom=None, dedup: bool = False) -> pd.DataFrame:
+def trace_table(cd, chrom=None, dedup: bool = False, start: int | None = None, end: int | None = None) -> pd.DataFrame:
     """chrom, start, end, mid, x, y, z, trace_id, cell_id; ``dedup`` averages duplicate (trace, locus) spots.
 
-    Statistics keep every spot (the ``uchrom.fea`` convention); binning for the callers always dedups."""
+    Statistics keep every spot (the ``uchrom.fea`` convention); binning for the callers always dedups.
+    Optional ``start`` / ``end`` filter spots by half-open overlap with [start, end) on ``chrom``."""
+    lo, hi = 0, None
+    if start is not None or end is not None:
+        if chrom is None or str(chrom) == "" or str(chrom) == "*":
+            raise ValueError("start and end require a single named chrom (not '*')")
+        lo_raw = 0 if start is None else int(start)
+        hi_raw = int(end) if end is not None else None
+        if start is not None and end is not None and hi_raw <= lo_raw:
+            raise ValueError("end must be greater than start")
+        lo = max(0, lo_raw)
+        s_raw = cd.spots
+        sc = s_raw[s_raw["chrom"].astype(str) == str(chrom)] if len(s_raw) else s_raw
+        clen = None
+        if len(sc):
+            clen = int(sc["end"].max())
+        else:
+            bins = getattr(cd, "bins", None)
+            if bins is not None and len(bins):
+                bc = bins[bins["chrom"].astype(str) == str(chrom)]
+                if len(bc):
+                    clen = int(bc["end"].max())
+        hi = clen if hi_raw is None else (min(clen, hi_raw) if clen is not None else hi_raw)
+        if hi is not None and hi <= lo:
+            raise ValueError("empty region")
     s = cd.spots
     df = pd.DataFrame({"chrom": s["chrom"].astype(str).to_numpy(), "start": s["start"].to_numpy(np.int64),
                        "end": s["end"].to_numpy(np.int64), "trace_id": s["trace_id"].astype(str).to_numpy(),
@@ -44,6 +68,11 @@ def trace_table(cd, chrom=None, dedup: bool = False) -> pd.DataFrame:
     df[["x", "y", "z"]] = np.asarray(cd.coords, dtype=float)
     if chrom is not None:
         df = df[df["chrom"] == str(chrom)]
+    if start is not None or end is not None:
+        mask = df["end"] > lo
+        if hi is not None:
+            mask &= df["start"] < hi
+        df = df[mask]
     df = df.dropna(subset=["x", "y", "z"])
     if dedup:
         df = df.groupby(["trace_id", "chrom", "start", "end"], as_index=False, observed=True).agg(
@@ -105,9 +134,10 @@ def _pairs_at(mid: np.ndarray, lo: float, hi: float):
     return i, j
 
 
-def distance_at_separation(cd, chrom: str, sep: float, tol: float = 0.1) -> dict:
+def distance_at_separation(cd, chrom: str, sep: float, tol: float = 0.1,
+                           start: int | None = None, end: int | None = None) -> dict:
     """3-D distance between loci whose genomic separation is sep·(1±tol), all traces pooled."""
-    df = trace_table(cd, chrom)
+    df = trace_table(cd, chrom, start=start, end=end)
     lo, hi = sep * (1 - tol), sep * (1 + tol)
     d_all, per_trace = [], {}
     for tid, t in df.groupby("trace_id", sort=False):
@@ -120,18 +150,30 @@ def distance_at_separation(cd, chrom: str, sep: float, tol: float = 0.1) -> dict
     d = np.concatenate(d_all) if d_all else np.array([])
     pt = pd.DataFrame(per_trace, index=["med", "cell"]).T
     per_cell = pt.groupby("cell")["med"].median() if len(pt) else pd.Series(dtype=float)
-    return {"chrom": chrom, "sep_bp": sep, "window_bp": [lo, hi], "unit": cd.uns.get("xyz_unit", "unknown"),
-            "median_over_pairs": float(np.median(d)) if len(d) else None, "mean_over_pairs": float(d.mean()) if len(d) else None,
-            "n_pairs": int(len(d)), "n_traces": int(len(pt)), "n_cells": int(len(per_cell)),
-            "median_of_per_cell_medians": float(per_cell.median()) if len(per_cell) else None}
+    out = {"chrom": chrom, "sep_bp": sep, "window_bp": [lo, hi], "unit": cd.uns.get("xyz_unit", "unknown"),
+           "median_over_pairs": float(np.median(d)) if len(d) else None, "mean_over_pairs": float(d.mean()) if len(d) else None,
+           "n_pairs": int(len(d)), "n_traces": int(len(pt)), "n_cells": int(len(per_cell)),
+           "median_of_per_cell_medians": float(per_cell.median()) if len(per_cell) else None}
+    if start is not None or end is not None:
+        out["start"] = start
+        out["end"] = end
+    return out
 
 
-def scaling(cd, chrom: str, smin: float | None = None, smax: float | None = None, n: int = 20) -> dict:
+def scaling(cd, chrom: str, smin: float | None = None, smax: float | None = None, n: int = 20,
+            start: int | None = None, end: int | None = None) -> dict:
     """Median distance vs genomic separation (log bins) and the power-law exponent d ~ s^alpha."""
-    df = trace_table(cd, chrom)
+    df = trace_table(cd, chrom, start=start, end=end)
+    if not len(df):
+        out = {"chrom": chrom, "unit": cd.uns.get("xyz_unit", "unknown"), "range_bp": None,
+               "exponent_alpha": None, "fit": "OLS of log10 median distance on log10 separation", "curve": []}
+        if start is not None or end is not None:
+            out["start"] = start
+            out["end"] = end
+        return out
     nat = native_bin_size(cd, chrom)
     span = df["mid"].max() - df["mid"].min()
-    smin, smax = smin or 2 * nat, smax or span / 2
+    smin, smax = smin or 2 * nat, smax or max(span / 2, 2 * nat)
     edges = np.geomspace(smin, smax, n + 1)
     sums = [[] for _ in range(n)]
     for _, t in df.groupby("trace_id", sort=False):
@@ -147,16 +189,23 @@ def scaling(cd, chrom: str, smin: float | None = None, smax: float | None = None
     med = np.array([np.median(np.concatenate(x)) if x else np.nan for x in sums])
     cnt = np.array([sum(len(y) for y in x) for x in sums])
     ok = np.isfinite(med) & (med > 0)
-    alpha, c = np.polyfit(np.log10(s_mid[ok]), np.log10(med[ok]), 1) if ok.sum() >= 3 else (np.nan, np.nan)
-    return {"chrom": chrom, "unit": cd.uns.get("xyz_unit", "unknown"), "range_bp": [float(smin), float(smax)],
-            "exponent_alpha": float(alpha), "fit": "OLS of log10 median distance on log10 separation",
-            "curve": [{"s_bp": float(a), "median_distance": float(b), "n_pairs": int(k)}
-                      for a, b, k in zip(s_mid, med, cnt)]}
+    alpha, _ = np.polyfit(np.log10(s_mid[ok]), np.log10(med[ok]), 1) if ok.sum() >= 3 else (np.nan, np.nan)
+    out = {"chrom": chrom, "unit": cd.uns.get("xyz_unit", "unknown"), "range_bp": [float(smin), float(smax)],
+           "exponent_alpha": float(alpha), "fit": "OLS of log10 median distance on log10 separation",
+           "curve": [{"s_bp": float(a), "median_distance": float(b), "n_pairs": int(k)}
+                     for a, b, k in zip(s_mid, med, cnt)]}
+    if start is not None or end is not None:
+        out["start"] = start
+        out["end"] = end
+    return out
 
 
-def rg_table(cd, min_spots: int = 3) -> pd.DataFrame:
-    """One row per trace: trace_id, cell_id, chrom, n_loci, rg (duplicates averaged)."""
-    df = trace_table(cd)
+def rg_table(cd, min_spots: int = 3, chrom: str | None = None,
+             start: int | None = None, end: int | None = None) -> pd.DataFrame:
+    """One row per trace: trace_id, cell_id, chrom, n_loci, rg."""
+    df = trace_table(cd, chrom=chrom, start=start, end=end)
+    if not len(df):
+        return pd.DataFrame(columns=["trace_id", "cell_id", "chrom", "n_loci", "rg"])
     xyz = df[["x", "y", "z"]].to_numpy()
     cen = df.groupby("trace_id")[["x", "y", "z"]].transform("mean").to_numpy()
     df["r2"] = ((xyz - cen) ** 2).sum(1)
@@ -166,8 +215,12 @@ def rg_table(cd, min_spots: int = 3) -> pd.DataFrame:
     return t[t["n_loci"] >= min_spots].reset_index()
 
 
-def rg_by_chrom(cd) -> dict:
-    t = rg_table(cd)
+def rg_by_chrom(cd, chrom: str | None = None, start: int | None = None, end: int | None = None) -> dict:
+    min_spots = 2 if (start is not None or end is not None) else 3
+    t = rg_table(cd, min_spots=min_spots, chrom=chrom, start=start, end=end)
+    if not len(t):
+        return {"unit": cd.uns.get("xyz_unit", "unknown"), "per_chrom": {}, "largest_median_over_traces": None,
+                "start": start, "end": end}
     per_cell = t.groupby(["chrom", "cell_id"])["rg"].median()
     out = {}
     for c, g in t.groupby("chrom"):
@@ -175,9 +228,13 @@ def rg_by_chrom(cd) -> dict:
                   "median_of_per_cell_medians": float(per_cell[c].median()), "n_cells": int(len(per_cell[c])),
                   "median_n_loci": float(g["n_loci"].median())}
     top = max(out, key=lambda c: out[c]["median_over_traces"])
-    return {"unit": cd.uns.get("xyz_unit", "unknown"), "per_chrom": out, "largest_median_over_traces": top,
-            "note": "Rg grows with chromosome length and with the genomic spread of detected loci; "
-                    "compare chromosomes/groups at matched loci if that matters"}
+    res = {"unit": cd.uns.get("xyz_unit", "unknown"), "per_chrom": out, "largest_median_over_traces": top,
+           "note": "Rg grows with chromosome length and with the genomic spread of detected loci; "
+                   "compare chromosomes/groups at matched loci if that matters"}
+    if start is not None or end is not None:
+        res["start"] = start
+        res["end"] = end
+    return res
 
 
 # ------------------------------------------------------------------ tracing: callers
@@ -244,56 +301,77 @@ def _caller_checks(res, sub, nat, bs, cov):
 
 
 # ------------------------------------------------------------------ contact maps: P(s)
-def open_cooler(spec: str, cd=None, res: float | None = None):
-    """A cooler from a ``uns['linked_cool'|'linked_scool']`` key or a path/URI; ``res`` picks an mcool level."""
-    import cooler
-    path = spec
-    if cd is not None:
-        for fam in ("linked_cool", "linked_scool"):
-            rec = (cd.uns.get(fam) or {}).get(spec)
-            if rec:
-                path = str(cd.resolve_link_path(rec["path"]))
-    if "::" not in path and path.endswith(".mcool"):
-        levels = [int(u.rsplit("/", 1)[1]) for u in cooler.fileops.list_coolers(path)]
-        r = int(float(res)) if res else min(levels)
-        if r not in levels:
-            raise ValueError(f"{path} has resolutions {levels}, not {r}")
-        path = f"{path}::/resolutions/{r}"
-    return cooler.Cooler(path)
+def _store_location(cd):
+    p = getattr(cd, "_store_path", None)
+    if p is not None:
+        return str(p)
+    lf = getattr(cd, "_links_from", None)
+    if callable(lf):
+        v = lf()
+        if v is not None:
+            return str(v)
+    return None
 
 
-def _chrom_matrix(clr, chrom):
-    return np.asarray(clr.matrix(balance=False, sparse=True).fetch(chrom).toarray(), dtype=float)
+def _pick_embedded_resolution(e, chrom: str, res: float | None, start: int | None, end: int | None) -> int:
+    avail = sorted(int(r) for r in e.resolutions)
+    if not avail:
+        raise ValueError(f"embedded contact map {e.key!r} has no resolutions")
+    if res is not None:
+        r = int(float(res))
+        if r not in avail:
+            raise ValueError(f"embedded map {e.key!r} has resolutions {avail}, not {r}")
+        return r
+    if len(avail) == 1:
+        return avail[0]
+    span = None
+    for cand in avail:
+        clen = int(e.chromsizes(cand).get(chrom, 0))
+        if clen > 0:
+            lo = max(0, int(start)) if start is not None else 0
+            hi = min(clen, int(end)) if end is not None else clen
+            span = max(0, hi - lo)
+            break
+    if not span:
+        return avail[-1]
+    fits = [r for r in avail if span / r <= 25_000]
+    return fits[0] if fits else avail[-1]
 
 
-def contact_ps(coolers, chrom: str, smin: float, smax: float, normalize: bool = True) -> dict:
-    """P(s) on raw counts: per diagonal, mean contacts per bin pair; summed over ``coolers`` (pseudo-bulk);
-    normalised by the total cis contacts of ``chrom`` (depth).  Slope = OLS of log10 P on log10 s over
-    diagonals with smin <= s <= smax."""
-    if not isinstance(coolers, (list, tuple)):
-        coolers = [coolers]
-    bs = {int(c.binsize) for c in coolers}
-    if len(bs) != 1:
-        raise ValueError(f"coolers have different bin sizes {bs}; coarsen first")
-    bs = bs.pop()
-    M = sum(_chrom_matrix(c, chrom) for c in coolers)
-    M = np.triu(M)                                   # cooler returns the symmetric matrix
-    total = float(M.sum())
-    n = M.shape[0]
-    k = np.arange(int(np.ceil(smin / bs)), int(np.floor(smax / bs)) + 1)
-    k = k[(k >= 1) & (k < n)]
-    p = np.array([np.diagonal(M, int(kk)).mean() for kk in k])
-    if normalize:
-        p = p / total
-    s = k * bs
+def _ps_finalize(diag_counts: np.ndarray, pair_counts: np.ndarray, bs: int, chrom: str,
+                 smin: float | None, smax: float | None, normalize: bool, n_maps: int,
+                 start: int | None = None, end: int | None = None) -> dict:
+    total = float(diag_counts.sum())
+    nc = len(diag_counts)
+    k_lo = 1 if smin is None else max(1, int(np.ceil(float(smin) / bs)))
+    k_hi = (nc - 1) if smax is None else min(nc - 1, int(np.floor(float(smax) / bs)))
+    k = np.arange(k_lo, k_hi + 1, dtype=np.int64) if k_hi >= k_lo else np.array([], dtype=np.int64)
+    if len(k):
+        cnts = pair_counts[k]
+        raw = diag_counts[k]
+        p = np.where(cnts > 0, raw / cnts, 0.0)
+        if normalize and total > 0:
+            p = p / total
+    else:
+        p = np.array([], dtype=np.float64)
+    s = k * int(bs)
     ok = p > 0
-    slope, icpt = np.polyfit(np.log10(s[ok]), np.log10(p[ok]), 1) if ok.sum() >= 3 else (np.nan, np.nan)
-    res = {"chrom": chrom, "bin_size_bp": bs, "range_bp": [float(smin), float(smax)], "n_diagonals": int(ok.sum()),
-           "total_cis_contacts": total, "n_maps_summed": len(coolers), "slope": float(slope), "intercept": float(icpt),
+    if ok.sum() >= 3:
+        slope, icpt = [float(v) for v in np.polyfit(np.log10(s[ok]), np.log10(p[ok]), 1)]
+    else:
+        slope, icpt = None, None
+    rmin = float(smin) if smin is not None else (float(s[0]) if len(s) else None)
+    rmax = float(smax) if smax is not None else (float(s[-1]) if len(s) else None)
+    res = {"chrom": chrom, "bin_size_bp": int(bs), "range_bp": [rmin, rmax] if rmin is not None and rmax is not None else None,
+           "n_diagonals": int(ok.sum()), "total_cis_contacts": total, "n_maps_summed": int(n_maps),
+           "slope": slope, "intercept": icpt,
            "normalisation": "mean raw count per diagonal / total cis contacts of the chromosome" if normalize
            else "mean raw count per diagonal (not depth-normalised)",
            "fit": "OLS of log10 P(s) on log10 s, one point per diagonal",
            "ps": [{"s_bp": int(a), "p": float(b)} for a, b in zip(s, p)], "checks": []}
+    if start is not None or end is not None:
+        res["start"] = start
+        res["end"] = end
     if ok.sum() < 5:
         res["checks"].append("fewer than 5 diagonals in the fit range: slope is unstable — widen the range or use a "
                              "finer resolution")
@@ -303,12 +381,236 @@ def contact_ps(coolers, chrom: str, smin: float, smax: float, normalize: bool = 
     return res
 
 
-def compare_ps(groups: dict, chrom, smin, smax) -> dict:
+def _embedded_ps(embs, chrom: str, smin: float | None = None, smax: float | None = None,
+                 normalize: bool = True, *, res: float | None = None,
+                 cells: list[str] | str | None = None, start: int | None = None, end: int | None = None) -> dict:
+    if not isinstance(embs, (list, tuple)):
+        embs = [embs]
+    rs = {_pick_embedded_resolution(e, chrom, res, start, end) for e in embs}
+    if len(rs) != 1:
+        raise ValueError(f"embedded maps resolved different bin sizes {rs}; pass explicit --res")
+    bs = rs.pop()
+    if isinstance(cells, str):
+        cell_list = [c for c in cells.split(",") if c]
+    elif cells is not None:
+        cell_list = [str(c) for c in cells]
+    else:
+        cell_list = None
+    if start is not None or end is not None:
+        lo_raw = 0 if start is None else max(0, int(start))
+        if start is not None and end is not None and int(end) <= int(start):
+            raise ValueError("end must be greater than start")
+    else:
+        lo_raw = None
+
+    e0 = embs[0]
+    clen = int(e0.chromsizes(bs).get(chrom, 0))
+    if clen <= 0:
+        raise ValueError(f"chromosome {chrom!r} not in embedded map {e0.key!r}")
+    lo = 0 if lo_raw is None else lo_raw
+    hi = clen if end is None else min(clen, int(end))
+    if hi <= lo:
+        raise ValueError("empty region")
+    n_cbins = -(-clen // bs)
+    b0 = 0 if (start is None and end is None) else lo // bs
+    b1 = n_cbins if (start is None and end is None) else min(n_cbins, -(-hi // bs))
+    nc = max(0, b1 - b0)
+    ks = np.arange(nc, dtype=np.int64)
+    pair_counts = (nc - ks) if nc >= 2 else np.zeros(nc, dtype=np.int64)
+    diag_counts = np.zeros(nc, dtype=np.float64)
+    part = f"cis/{chrom}"
+    n_summed = 0
+
+    for e in embs:
+        if nc < 2 or part not in e.g[f"r{bs}"]:
+            continue
+        if cell_list is not None:
+            if e.kind != "per_cell":
+                raise ValueError(f"embedded map {e.key!r} is not per-cell; omit cells=")
+            avail = {c: i for i, c in enumerate(e.cells)}
+            idx = [avail[c] for c in cell_list if c in avail]
+            if not idx:
+                raise ValueError("none of the requested cells are in this embedded contact map")
+            blocks = e.cell_pixel_blocks(part, idx, bs)
+            n_summed += len(idx)
+        elif e.kind == "per_cell" and e.has_sum(bs):
+            blocks = [e.sum_pixels(part, bs)]
+            n_summed += len(e.cells)
+        elif e.kind == "per_cell":
+            idx = list(range(len(e.cells)))
+            blocks = e.cell_pixel_blocks(part, idx, bs)
+            n_summed += len(idx)
+        else:
+            blocks = [e.region_pixels(chrom, b0, b1, bs)]
+            n_summed += 1
+        for d in blocks:
+            if not len(d):
+                continue
+            ok = (d[:, 0] >= b0) & (d[:, 1] < b1) & (d[:, 1] >= d[:, 0])
+            if ok.any():
+                diag_counts += np.bincount(d[ok, 1] - d[ok, 0], weights=d[ok, 2].astype(np.float64), minlength=nc)
+
+    return _ps_finalize(diag_counts, pair_counts, bs, chrom, smin, smax, normalize, max(n_summed, len(embs)),
+                        start=lo if (start is not None or end is not None) else None,
+                        end=hi if (start is not None or end is not None) else None)
+
+
+def open_cooler(spec: str, cd=None, res: float | None = None, *,
+                chrom: str | None = None, start: int | None = None, end: int | None = None):
+    """A cooler from a ``uns['linked_cool'|'linked_scool']`` key or a path/URI; ``res`` picks an mcool level."""
+    import cooler
+    path = spec
+    if cd is not None:
+        for fam in ("linked_cool", "linked_scool"):
+            rec = (cd.uns.get(fam) or {}).get(spec)
+            if rec:
+                path = str(cd.resolve_link_path(rec["path"]))
+    if "::" not in path and path.endswith(".mcool"):
+        levels = sorted(int(u.rsplit("/", 1)[1]) for u in cooler.fileops.list_coolers(path))
+        if res is not None:
+            r = int(float(res))
+            if r not in levels:
+                raise ValueError(f"{path} has resolutions {levels}, not {r}")
+        elif chrom is not None and levels:
+            clen = int(cooler.Cooler(f"{path}::/resolutions/{levels[-1]}").chromsizes.get(chrom, 0))
+            if clen > 0:
+                lo = max(0, int(start)) if start is not None else 0
+                hi = min(clen, int(end)) if end is not None else clen
+                span = max(0, hi - lo)
+                r = next((lv for lv in levels if lv > 0 and span / lv <= 25_000), levels[-1])
+            else:
+                r = levels[-1]
+        else:
+            r = levels[0]
+        path = f"{path}::/resolutions/{r}"
+    return cooler.Cooler(path)
+
+
+def _chrom_matrix(clr, chrom):
+    return np.asarray(clr.matrix(balance=False, sparse=True).fetch(chrom).toarray(), dtype=float)
+
+
+def _scool_ps(path: str, chrom: str, smin: float | None = None, smax: float | None = None,
+              normalize: bool = True, *, cells: list[str] | str | None = None,
+              start: int | None = None, end: int | None = None) -> dict:
+    import cooler
+    import h5py
+
+    if isinstance(cells, str):
+        cell_list = [c for c in cells.split(",") if c]
+    elif cells is not None:
+        cell_list = [str(c) for c in cells]
+    else:
+        cell_list = None
+    if start is not None and end is not None and int(end) <= int(start):
+        raise ValueError("end must be greater than start")
+
+    with h5py.File(path, "r") as f:
+        avail = list(f["cells"])
+        if cell_list is None:
+            names = avail
+        else:
+            avail_set = set(avail)
+            names = [c for c in cell_list if c in avail_set]
+            if not names:
+                raise ValueError("none of the requested cells are in this scool file")
+        clr = cooler.Cooler(f"{path}::/cells/{names[0]}")
+        bs = int(clr.binsize)
+        clen = int(clr.chromsizes[chrom])
+        cb0, cb1 = clr.extent(chrom)
+        n_cbins = cb1 - cb0
+        lo = 0 if start is None else max(0, int(start))
+        hi = clen if end is None else min(clen, int(end))
+        if hi <= lo:
+            raise ValueError("empty region")
+        lb0 = 0 if (start is None and end is None) else lo // bs
+        lb1 = n_cbins if (start is None and end is None) else min(n_cbins, -(-hi // bs))
+        b0, b1 = cb0 + lb0, cb0 + lb1
+        nc = max(0, b1 - b0)
+        diag_counts = np.zeros(nc, dtype=np.float64)
+        ks = np.arange(nc, dtype=np.int64)
+        pair_counts = (nc - ks) if nc >= 2 else np.zeros(nc, dtype=np.int64)
+        if nc >= 2:
+            step = 2_000_000
+            for nm in names:
+                grp = f["cells"][nm]
+                off = np.asarray(grp["indexes/bin1_offset"][b0:b1 + 1], dtype=np.int64)
+                s0, s1 = int(off[0]), int(off[-1])
+                px = grp["pixels"]
+                for cur in range(s0, s1, step):
+                    stop = min(s1, cur + step)
+                    p1 = np.asarray(px["bin1_id"][cur:stop], dtype=np.int64)
+                    p2 = np.asarray(px["bin2_id"][cur:stop], dtype=np.int64)
+                    cnt = np.asarray(px["count"][cur:stop], dtype=np.float64)
+                    ok = (p2 >= p1) & (p2 < b1)
+                    if ok.any():
+                        diag_counts += np.bincount(p2[ok] - p1[ok], weights=cnt[ok], minlength=nc)
+    return _ps_finalize(diag_counts, pair_counts, bs, chrom, smin, smax, normalize, len(names),
+                        start=lo if (start is not None or end is not None) else None,
+                        end=hi if (start is not None or end is not None) else None)
+
+
+def contact_ps(coolers, chrom: str, smin: float | None = None, smax: float | None = None,
+               normalize: bool = True, *, cool: str | None = None, res: float | None = None,
+               cells: list[str] | str | None = None, start: int | None = None, end: int | None = None) -> dict:
+    """P(s) on raw counts: per diagonal, mean contacts per bin pair; summed over embedded maps or ``coolers``.
+    Normalised by the total cis contacts of ``chrom`` (or [start, end) window). Slope = OLS of log10 P on log10 s."""
+    from chromdata.embedded import EmbeddedContacts, open_all
+
+    if isinstance(coolers, EmbeddedContacts) or (isinstance(coolers, (list, tuple)) and coolers and isinstance(coolers[0], EmbeddedContacts)):
+        return _embedded_ps(coolers, chrom, smin, smax, normalize, res=res, cells=cells, start=start, end=end)
+
+    if hasattr(coolers, "embedded_links") and hasattr(coolers, "uns"):
+        cd = coolers
+        loc = _store_location(cd)
+        emb_links = cd.embedded_links().get("contacts", {}) if loc else {}
+        keys = [k.strip() for k in cool.split(",") if k.strip()] if cool else (
+            [next(iter(emb_links))] if emb_links else [next(iter(cd.uns.get("linked_cool") or cd.uns.get("linked_scool") or {}))]
+        )
+        if loc and keys and all(k in emb_links for k in keys):
+            emb_map = open_all(loc)
+            if all(k in emb_map for k in keys):
+                return _embedded_ps([emb_map[k] for k in keys], chrom, smin, smax, normalize, res=res, cells=cells, start=start, end=end)
+        if len(keys) == 1 and keys[0] in (cd.uns.get("linked_scool") or {}):
+            p = str(cd.resolve_link_path(cd.uns["linked_scool"][keys[0]]["path"]))
+            return _scool_ps(p, chrom, smin, smax, normalize, cells=cells, start=start, end=end)
+        coolers = [open_cooler(k, cd, res, chrom=chrom, start=start, end=end) for k in keys]
+
+    if not isinstance(coolers, (list, tuple)):
+        coolers = [coolers]
+    bs = {int(c.binsize) for c in coolers}
+    if len(bs) != 1:
+        raise ValueError(f"coolers have different bin sizes {bs}; coarsen first")
+    bs = bs.pop()
+    M = sum(_chrom_matrix(c, chrom) for c in coolers)
+    M = np.triu(M)                                   # cooler returns the symmetric matrix
+    if start is not None or end is not None:
+        clen = int(coolers[0].chromsizes[chrom])
+        lo = 0 if start is None else max(0, int(start))
+        hi = clen if end is None else min(clen, int(end))
+        if hi <= lo:
+            raise ValueError("empty region")
+        b0 = lo // bs
+        b1 = min(M.shape[0], -(-hi // bs))
+        M = M[b0:b1, b0:b1]
+    else:
+        lo, hi = None, None
+    nc = M.shape[0]
+    if nc < 2:
+        diag_counts = np.zeros(0, dtype=np.float64)
+        pair_counts = np.zeros(0, dtype=np.int64)
+    else:
+        diag_counts = np.array([float(np.diagonal(M, kk).sum()) for kk in range(nc)], dtype=np.float64)
+        pair_counts = np.arange(nc, 0, -1, dtype=np.int64)
+    return _ps_finalize(diag_counts, pair_counts, bs, chrom, smin, smax, normalize, len(coolers), start=lo, end=hi)
+
+
+def compare_ps(groups: dict, chrom, smin: float | None = None, smax: float | None = None, **kw) -> dict:
     """P(s) slope per group; ``groups`` maps a name to a list of coolers (summed as pseudo-bulk)."""
-    out = {g: contact_ps(c, chrom, smin, smax) for g, c in groups.items()}
+    out = {g: contact_ps(c, chrom, smin, smax, **kw) for g, c in groups.items()}
     names = list(out)
     res = {"per_group": {g: {k: v for k, v in r.items() if k != "ps"} for g, r in out.items()}}
-    if len(names) == 2:
+    if len(names) == 2 and out[names[0]]["slope"] is not None and out[names[1]]["slope"] is not None:
         res["slope_difference"] = out[names[0]]["slope"] - out[names[1]]["slope"]
     res["checks"] = ["pseudo-bulk P(s) has no cell-level replication: no p-value from one map per group; for a test, "
                      "compute per-cell slopes (scool) and compare cells (compare-groups)"]
@@ -321,6 +623,8 @@ def main():
     ap.add_argument("cmd", choices=["dist-at", "scaling", "rg", "coverage", "tads", "comps", "ps"])
     ap.add_argument("data")
     ap.add_argument("--chrom")
+    ap.add_argument("--start", type=int)
+    ap.add_argument("--end", type=int)
     ap.add_argument("--sep", type=float)
     ap.add_argument("--tol", type=float, default=0.1)
     ap.add_argument("--bin-size", default="auto")
@@ -337,23 +641,18 @@ def main():
         is_cd = a.data.rstrip("/").endswith((".chromdata.zarr", ".cdz", ".zarr", ".h5cd"))
         cd = ChromData.read(a.data) if is_cd else None
         if cd is None:
-            clrs = [open_cooler(a.data, res=a.res)]
-        elif a.cells:
-            import cooler
-            key = a.cool or next(iter(cd.uns.get("linked_scool", {})))
-            p = cd.resolve_link_path(cd.uns["linked_scool"][key]["path"])
-            clrs = [cooler.Cooler(f"{p}::/cells/{c}") for c in a.cells.split(",")]
+            clrs = [open_cooler(a.data, res=a.res, chrom=a.chrom, start=a.start, end=a.end)]
+            out = contact_ps(clrs, a.chrom, a.smin, a.smax, start=a.start, end=a.end)
         else:
-            clrs = [open_cooler(k, cd, a.res) for k in a.cool.split(",")]
-        out = contact_ps(clrs, a.chrom, a.smin, a.smax)
+            out = contact_ps(cd, a.chrom, a.smin, a.smax, cool=a.cool, res=a.res, cells=a.cells, start=a.start, end=a.end)
     else:
         cd = ChromData.read(a.data)
         if a.cmd == "dist-at":
-            out = distance_at_separation(cd, a.chrom, a.sep, a.tol)
+            out = distance_at_separation(cd, a.chrom, a.sep, a.tol, start=a.start, end=a.end)
         elif a.cmd == "scaling":
-            out = scaling(cd, a.chrom, a.smin, a.smax)
+            out = scaling(cd, a.chrom, a.smin, a.smax, start=a.start, end=a.end)
         elif a.cmd == "rg":
-            out = rg_by_chrom(cd)
+            out = rg_by_chrom(cd, chrom=a.chrom, start=a.start, end=a.end)
         elif a.cmd == "coverage":
             out = coverage(cd, a.chrom).to_dict("records")
         elif a.cmd == "tads":

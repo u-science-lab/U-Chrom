@@ -97,7 +97,7 @@
     },
     {
       "name": "open_view",
-      "description": "Open a new view (pane) and make it active. `cells`: 'focus' (default: follow the focus), 'all', a cell id or a group reference. Genome views take `rows` (top to bottom): {kind:'track', track, cells?} or {kind:'distance', cells?, stat?} or {kind:'contacts', source, cells?, ratio_to?, smooth?} (ratio_to: a group or 'all' -> log2 of this map over that group's, each over its total; smooth: odd pixels summed, default 3) or {kind:'intervals', key}. Stats views take `stats` (rg | scaling | hist | scatter), `chrom_scope` ('all' by default, or 'locus' to use the current locus chromosome for Rg / scaling; this is chromosome-wide, not limited to the locus start/end), `compare_groups` (group references overlaid), and `field_x` / `field_y` (cell fields for hist / scatter). Embedding views take `embedding` (a cellm key). Spatial views (cells in the tissue, over its image) take `spatial` (a cell-position set), `region` and `image_opacity`. Returns {pane}.",
+      "description": "Open a new view (pane) and make it active. `cells`: 'focus' (default: follow the focus), 'all', a cell id or a group reference. Genome views take `rows` (top to bottom): {kind:'track', track, cells?} or {kind:'distance', cells?, stat?} or {kind:'contacts', source, cells?, ratio_to?, smooth?} (ratio_to: a group or 'all' -> log2 of this map over that group's, each over its total; smooth: odd pixels summed, default 3) or {kind:'intervals', key}. Stats views take `stats` (rg | scaling | ps | hist | scatter), `chrom_scope` ('all' by default, 'locus' for the whole locus chromosome, or 'window' for the current locus [start, end) interval for Rg / scaling / ps), `source` (contact-map key for stats='ps'), `rg_unit` ('trace' by default or 'cell' for per-cell medians on Rg), `compare_groups` (group references overlaid), and `field_x` / `field_y` (cell fields for hist / scatter). Embedding views take `embedding` (a cellm key). Spatial views (cells in the tissue, over its image) take `spatial` (a cell-position set), `region` and `image_opacity`. Returns {pane}.",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -132,6 +132,7 @@
             "enum": [
               "rg",
               "scaling",
+              "ps",
               "hist",
               "scatter"
             ]
@@ -140,9 +141,18 @@
             "type": "string",
             "enum": [
               "all",
-              "locus"
+              "locus",
+              "window"
             ],
-            "description": "Rg / scaling chromosome scope: all chromosomes (default), or the current locus chromosome. Locus scope uses the whole chromosome, not the displayed start/end interval."
+            "description": "Rg / scaling / ps chromosome scope: all chromosomes (default), the whole current locus chromosome ('locus'), or the displayed locus [start, end) window ('window')."
+          },
+          "rg_unit": {
+            "type": "string",
+            "enum": [
+              "trace",
+              "cell"
+            ],
+            "description": "Rg distribution unit: 'trace' (per chromosome copy, default) or 'cell' (per-cell median Rg)."
           },
           "compare_groups": {
             "type": "array",
@@ -161,7 +171,7 @@
           },
           "source": {
             "type": "string",
-            "description": "matrix view: a contact-map key or 'distance'"
+            "description": "matrix view: a contact-map key or 'distance'; stats view with stats='ps': a contact-map key"
           },
           "spatial": {
             "type": "string",

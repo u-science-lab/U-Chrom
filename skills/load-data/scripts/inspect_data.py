@@ -53,38 +53,95 @@ def _jsonable(v):
     return v
 
 
-def linked_maps(cd) -> dict:
-    """Linked .cool / .mcool / .scool files: path, existence, resolutions, cell count."""
+def _store_location(cd, path=None):
+    if path is not None:
+        return str(path)
+    p = getattr(cd, "_store_path", None)
+    if p is not None:
+        return str(p)
+    lf = getattr(cd, "_links_from", None)
+    if callable(lf):
+        v = lf()
+        if v is not None:
+            return str(v)
+    return None
+
+
+def _embedded_map_info(family: str, key: str, e, rec: dict | None = None) -> dict:
+    rec = rec or {}
+    resolutions = sorted(int(r) for r in e.resolutions)
+    first_res = resolutions[0] if resolutions else None
+    info = {
+        "family": family,
+        "key": key,
+        "format": rec.get("format", e.kind),
+        "label": rec.get("label", e.label),
+        "path": rec.get("path"),
+        "embedded": True,
+        "exists": True,
+        "resolutions": resolutions,
+        "has_sum": bool(e.has_sum(first_res)) if first_res is not None else False,
+    }
+    if first_res is not None:
+        info["chroms"] = list(e.chromsizes(first_res).keys())
+    if e.kind == "per_cell":
+        info["n_cells"] = len(e.cells)
+    return info
+
+
+def linked_maps(cd, path=None) -> dict:
+    """Linked or embedded .cool / .mcool / .scool contact maps: resolutions, chroms, cell count."""
     out = {}
-    try:
-        import cooler
-    except ImportError:  # pragma: no cover
-        cooler = None
+    loc = _store_location(cd, path)
+    emb_names = cd.embedded_links().get("contacts", {}) if loc and hasattr(cd, "embedded_links") else {}
+    emb_maps = {}
+    if loc and emb_names:
+        from chromdata.embedded import open_all
+        emb_maps = open_all(loc)
+
+    cooler = None
+    seen_emb: set[str] = set()
     for family in ("linked_cool", "linked_scool"):
         for key, rec in (cd.uns.get(family) or {}).items():
             rec = dict(rec)
+            if key in emb_maps:
+                seen_emb.add(key)
+                out[f"{family}:{key}"] = _embedded_map_info(family, key, emb_maps[key], rec)
+                continue
+
             info = {"family": family, "key": key, "format": rec.get("format"), "label": rec.get("label"),
-                    "path": rec.get("path")}
+                    "path": rec.get("path"), "embedded": key in emb_names}
             p = cd.resolve_link_path(rec["path"]) if rec.get("path") else None
             info["exists"] = bool(p and p.exists())
-            if cooler is not None and info["exists"]:
-                try:
-                    if str(p).endswith(".mcool"):
-                        info["resolutions"] = [int(u.rsplit("/", 1)[1]) for u in cooler.fileops.list_coolers(str(p))]
-                        info["uri_example"] = f"{p}::/resolutions/{info['resolutions'][0]}"
-                    elif family == "linked_scool" or str(p).endswith(".scool"):
-                        cells = cooler.fileops.list_scool_cells(str(p))
-                        info["n_cells"] = len(cells)
-                        info["resolutions"] = [int(cooler.Cooler(f"{p}::{cells[0]}").binsize)] if cells else []
-                    else:
-                        c = cooler.Cooler(str(p))
-                        info["resolutions"] = [int(c.binsize)]
-                        info["total_contacts"] = int(c.info.get("sum", 0))
-                except Exception as e:  # noqa: BLE001 — report, don't fail the summary
-                    info["error"] = repr(e)
-            elif rec.get("bin_size"):
+            if info["exists"]:
+                if cooler is None:
+                    try:
+                        import cooler as _cooler
+                        cooler = _cooler
+                    except ImportError:
+                        cooler = False
+                if cooler:
+                    try:
+                        if str(p).endswith(".mcool"):
+                            info["resolutions"] = [int(u.rsplit("/", 1)[1]) for u in cooler.fileops.list_coolers(str(p))]
+                            info["uri_example"] = f"{p}::/resolutions/{info['resolutions'][0]}"
+                        elif family == "linked_scool" or str(p).endswith(".scool"):
+                            cells = cooler.fileops.list_scool_cells(str(p))
+                            info["n_cells"] = len(cells)
+                            info["resolutions"] = [int(cooler.Cooler(f"{p}::{cells[0]}").binsize)] if cells else []
+                        else:
+                            c = cooler.Cooler(str(p))
+                            info["resolutions"] = [int(c.binsize)]
+                            info["total_contacts"] = int(c.info.get("sum", 0))
+                    except Exception as e:  # noqa: BLE001 — report, don't fail the summary
+                        info["error"] = repr(e)
+            if "resolutions" not in info and rec.get("bin_size"):
                 info["resolutions"] = [int(rec["bin_size"])]
             out[f"{family}:{key}"] = info
+
+    for key, e in emb_maps.items():
+        if key not in seen_emb:
+            out[f"embedded:{key}"] = _embedded_map_info("embedded", key, e)
     return out
 
 
@@ -136,19 +193,22 @@ def tracing_qc(cd, group: str | None = "cell_type") -> dict:
     qc["loci_per_chrom"] = {c: {"n_loci": int(n_loci[c]), "median_spacing_bp": spacing[c],
                                 "median_detected_frac_per_trace": float(det[c])} for c in n_loci.index}
     # --- consecutive detected loci within a trace ---------------------------------------------------
-    order = np.lexsort((df["start"].to_numpy(), df["trace_id"].to_numpy()))
-    t = df["trace_id"].to_numpy()[order]
-    same = t[1:] == t[:-1]
-    d3 = np.linalg.norm(np.diff(xyz[order], axis=0), axis=1)[same]
-    gap = np.diff(df["start"].to_numpy()[order])[same]
-    ok = gap > 0                                         # skip duplicate loci
-    chrom_o = df["chrom"].to_numpy()[order][1:][same][ok]
-    cons = pd.DataFrame({"chrom": chrom_o, "d": d3[ok], "gap": gap[ok]})
-    qc["consecutive_loci"] = {
-        "unit": cd.uns.get("xyz_unit", "unknown"),
-        "median_distance": float(cons["d"].median()) if len(cons) else None,
-        "median_genomic_gap_bp": float(cons["gap"].median()) if len(cons) else None,
-        "per_chrom_median_distance": cons.groupby("chrom")["d"].median().round(4).to_dict()}
+    if cd.uns.get("trace_kind") == "set":
+        qc["consecutive_loci"] = None
+    else:
+        order = np.lexsort((df["start"].to_numpy(), df["trace_id"].to_numpy()))
+        t = df["trace_id"].to_numpy()[order]
+        same = t[1:] == t[:-1]
+        d3 = np.linalg.norm(np.diff(xyz[order], axis=0), axis=1)[same]
+        gap = np.diff(df["start"].to_numpy()[order])[same]
+        ok = gap > 0                                         # skip duplicate loci
+        chrom_o = df["chrom"].to_numpy()[order][1:][same][ok]
+        cons = pd.DataFrame({"chrom": chrom_o, "d": d3[ok], "gap": gap[ok]})
+        qc["consecutive_loci"] = {
+            "unit": cd.uns.get("xyz_unit", "unknown"),
+            "median_distance": float(cons["d"].median()) if len(cons) else None,
+            "median_genomic_gap_bp": float(cons["gap"].median()) if len(cons) else None,
+            "per_chrom_median_distance": cons.groupby("chrom")["d"].median().round(4).to_dict()}
     return qc
 
 
@@ -159,7 +219,8 @@ def summarize(cd, path=None, group: str | None = "cell_type") -> dict:
                    if "cell_id" in cd.spots.columns else None,
                    "n_traces": int(cd.n_traces), "n_spots": int(cd.n_spots), "chroms": list(map(str, cd.chroms))}
     s["uns"] = {k: _jsonable(cd.uns.get(k)) for k in ("genome_assembly", "xyz_unit", "coordinate_status", "source",
-                                                      "spot_semantics", "allele_col") if k in cd.uns}
+                                                      "spot_semantics", "allele_col", "trace_kind") if k in cd.uns}
+    s["trace_kind"] = str(cd.uns.get("trace_kind", "fibre"))
     s["cells"] = {"n_columns": int(cells.shape[1]),
                   "by_prefix": {k: {"n": len(v), "first": v[:5]} for k, v in _prefix_groups(cells.columns).items()}}
     cats = {}
@@ -179,11 +240,33 @@ def summarize(cd, path=None, group: str | None = "cell_type") -> dict:
     s["cellm"] = {k: {"shape": list(np.shape(v)),
                       **{f: _jsonable(emb.get(k, {}).get(f)) for f in ("label", "modality", "method", "input")
                          if f in emb.get(k, {})}} for k, v in (cd.cellm or {}).items()}
+    cl = getattr(cd, "clusters", None) or {}
+    if cl:
+        s["clusters"] = {
+            str(k): {
+                "n_clusters": int(t.n_clusters),
+                "n_fragments": int(t.n_members),
+                "per_cell": bool(t.cells is not None),
+                "assay": (t.attrs or {}).get("assay"),
+            }
+            for k, t in cl.items()
+        }
+    cs_uns = cd.uns.get("cell_spatial") if isinstance(cd.uns, dict) else None
+    shapes = getattr(cd, "cell_shapes", None) or {}
+    if cs_uns or shapes:
+        cs_out = {
+            str(k): {"unit": rec.get("unit"), "frame": rec.get("in_coords_frame")}
+            for k, rec in (cs_uns or {}).items()
+            if isinstance(rec, dict)
+        }
+        if shapes:
+            cs_out["cell_shapes"] = {str(k): int(len(v)) for k, v in shapes.items()}
+        s["cell_spatial"] = cs_out
     for name in ("layers", "points", "results"):
         d = getattr(cd, name, None) or {}
         if d:
             s[name] = list(map(str, d.keys()))
-    s["linked"] = linked_maps(cd)
+    s["linked"] = linked_maps(cd, path=path)
     s["qc"] = tracing_qc(cd, group)
     s["checks"] = checks(cd, s)
     return s
@@ -199,6 +282,8 @@ def checks(cd, s) -> list[str]:
     if cd.n_spots == 0:
         out.append("no 3-D coordinates (" + str(cd.uns.get("coordinate_status", "no spots"))
                    + "): structure comes from the linked contact maps, not from coords")
+    elif cd.uns.get("trace_kind") == "set":
+        out.append("trace_kind='set' (unordered point set): territory Rg is valid, consecutive-locus polymer step does not apply")
     qc = s.get("qc", {})
     tp = qc.get("traces_per_cell_chrom")
     if tp and tp["frac_gt2_of_nonempty"] > 0:

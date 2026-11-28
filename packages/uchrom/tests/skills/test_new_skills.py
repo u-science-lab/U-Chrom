@@ -172,3 +172,152 @@ def test_rest_nspots_equalize_and_scan():
     s = cg.scan(cd, "field:cell_type=A", "rest", columns=["nuc_volume_um3", "if.X"])
     assert s["n_fields_tested"] == 2 and all("q" in t for t in s["top"])
     assert s["composition"]["cell_type"]["enrichment"]["value"] == "A"
+
+
+def test_inspect_embedded_and_format24(tmp_path, monkeypatch):
+    import sys
+    from chromdata import embedded
+    from chromdata.testing import LINKED_RES, linked_store
+    from chromdata.zarrcd import _zip_tree
+
+    _, emb = linked_store(tmp_path)
+    embedded.embed_links(emb, verbose=False, trans_min_resolution=LINKED_RES)
+    cdz = tmp_path / "emb.cdz"
+    _zip_tree(emb, cdz)
+    for f in ("bulk.mcool", "bulk.cool", "cells.scool", "ssab.h5ad", "sec.png"):
+        p = tmp_path / f
+        if p.exists():
+            p.unlink()
+
+    monkeypatch.setitem(sys.modules, "cooler", None)
+    monkeypatch.setitem(sys.modules, "h5py", None)
+
+    for target in (emb, cdz):
+        cd_e = ChromData.read(target, backed=True)
+        s = insp.summarize(cd_e, path=target)
+        cells_info = s["linked"]["linked_scool:cells"]
+        assert cells_info["embedded"] is True
+        assert cells_info["exists"] is True
+        assert cells_info["resolutions"] == [LINKED_RES]
+        assert cells_info["n_cells"] == 3
+        assert cells_info["has_sum"] is True
+        assert "chr1" in cells_info["chroms"]
+        assert not any("linked file" in c for c in s["checks"])
+
+    # Format 2.3/2.4: point-set trace_kind="set", clusters, cell_spatial
+    cd_pt = _tracing(n_cells=4, loci=10)
+    cd_pt.uns["trace_kind"] = "set"
+    cd_pt.uns["cell_spatial"] = {"tissue": {"unit": "um", "in_coords_frame": False}}
+    cd_pt.set_clusters(
+        "spr",
+        pd.DataFrame({
+            "cluster_id": ["k0", "k0", "k1", "k1"],
+            "chrom": ["chr1", "chr1", "chr1", "chr1"],
+            "start": [0, 25_000, 50_000, 75_000],
+            "end": [25_000, 50_000, 75_000, 100_000],
+            "cell_id": ["c0", "c0", "c1", "c1"],
+        }),
+        cluster="cluster_id",
+        cell="cell_id",
+    )
+    s2 = insp.summarize(cd_pt)
+    assert s2["trace_kind"] == "set"
+    assert s2["clusters"]["spr"]["n_clusters"] == 2
+    assert s2["clusters"]["spr"]["n_fragments"] == 4
+    assert "tissue" in s2["cell_spatial"]
+    assert s2["qc"]["consecutive_loci"] is None
+    assert any("point set" in c.lower() for c in s2["checks"])
+
+
+def test_structures_window_and_embedded_ps_parity(tmp_path, monkeypatch):
+    import sys
+    from chromdata import embedded
+    from chromdata.testing import LINKED_BINS, LINKED_RES, linked_store
+    from chromdata.zarrcd import _zip_tree
+    from uchrom_browser.data import Dataset, DatasetStore
+
+    cd = _tracing(n_cells=4, loci=40, bin_bp=25_000)
+    with pytest.raises(ValueError, match="chrom"):
+        strc.trace_table(cd, start=100_000, end=400_000)
+    with pytest.raises(ValueError, match="chrom"):
+        strc.trace_table(cd, chrom="*", start=100_000, end=400_000)
+    with pytest.raises(ValueError, match="empty region"):
+        strc.trace_table(cd, chrom="chr1", start=10_000_000, end=20_000_000)
+
+    win_rg = strc.rg_table(cd, min_spots=2, chrom="chr1", start=100_000, end=500_000)
+    bds = Dataset(id="d", name="d", path="d", cd=cd)
+    ref_rg = bds.stats_rg(chrom="chr1", start=100_000, end=500_000)
+    assert len(win_rg) == len(ref_rg["trace_ids"])
+    by_tid = dict(zip(ref_rg["trace_ids"], ref_rg["rg"]))
+    for row in win_rg.itertuples():
+        assert row.rg == pytest.approx(by_tid[row.trace_id])
+
+    da = strc.distance_at_separation(cd, "chr1", 50_000, tol=0.1, start=100_000, end=500_000)
+    assert da["n_pairs"] > 0 and da["start"] == 100_000 and da["end"] == 500_000
+    sc = strc.scaling(cd, "chr1", start=100_000, end=500_000)
+    assert sc["start"] == 100_000 and sc["end"] == 500_000
+
+    # Trailing unused bins mismatch prevention + direct .mcool CLI span-aware resolution
+    cd_trail = ChromData(
+        np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+        pd.DataFrame({"chrom": ["chr1", "chr1"], "start": [0, 50], "end": [50, 100], "trace_id": ["t0", "t0"], "cell_id": ["c0", "c0"]}),
+        bins=pd.DataFrame({"chrom": ["chr1", "chr1", "chr1"], "start": [0, 50, 100], "end": [50, 100, 200]}),
+    )
+    with pytest.raises(ValueError, match="empty region"):
+        strc.trace_table(cd_trail, chrom="chr1", start=120, end=180)
+
+    # Linked (non-embedded) scool with cells=None and windowed cells subset + direct .mcool resolution
+    linked_path, emb = linked_store(tmp_path)
+    mcool_clr = strc.open_cooler(str(linked_path.parent / "bulk.mcool"), chrom="chr1")
+    assert mcool_clr.binsize == LINKED_RES
+    cd_linked = ChromData.read(linked_path, backed=True)
+    ds_linked = DatasetStore().load(linked_path)
+    assert strc.contact_ps(cd_linked, "chr1", cool="cells")["total_cis_contacts"] == pytest.approx(
+        ds_linked.stats_ps(key="cells", chrom="chr1")["total_cis_contacts"]
+    )
+    assert strc.contact_ps(cd_linked, "chr1", cool="cells", cells=["c0", "c1"], start=LINKED_RES, end=(LINKED_BINS - 2) * LINKED_RES)["total_cis_contacts"] == pytest.approx(
+        ds_linked.stats_ps(key="cells", chrom="chr1", group="field:cell_type=A", start=LINKED_RES, end=(LINKED_BINS - 2) * LINKED_RES)["total_cis_contacts"]
+    )
+    p_1bin = strc.contact_ps(cd_linked, "chr1", cool="bulk", start=0, end=LINKED_RES)
+    b_1bin = ds_linked.stats_ps(key="bulk", chrom="chr1", start=0, end=LINKED_RES)
+    assert p_1bin["total_cis_contacts"] == 0.0 and b_1bin["total_cis_contacts"] == 0.0
+
+    # Embedded P(s) parity without cooler/h5py or external files
+    embedded.embed_links(emb, verbose=False, trans_min_resolution=LINKED_RES)
+    cdz = tmp_path / "emb.cdz"
+    _zip_tree(emb, cdz)
+    for f in ("bulk.mcool", "bulk.cool", "cells.scool", "ssab.h5ad", "sec.png"):
+        p = tmp_path / f
+        if p.exists():
+            p.unlink()
+
+    monkeypatch.setitem(sys.modules, "cooler", None)
+    monkeypatch.setitem(sys.modules, "h5py", None)
+
+    ds = DatasetStore().load(emb)
+    for target in (emb, cdz):
+        cd_e = ChromData.read(target, backed=True)
+        # full chr1 on embedded scool sum
+        p_all = strc.contact_ps(cd_e, "chr1", cool="cells")
+        b_all = ds.stats_ps(key="cells", chrom="chr1", n_bins=50)
+        assert p_all["total_cis_contacts"] == pytest.approx(b_all["total_cis_contacts"])
+        assert p_all["slope"] == pytest.approx(b_all["slope"])
+        assert p_all["intercept"] == pytest.approx(b_all["intercept"])
+        # windowed chr1 on selected cells
+        end_bp = (LINKED_BINS - 2) * LINKED_RES
+        p_sub = strc.contact_ps(cd_e, "chr1", cool="cells", cells=["c0", "c1"], start=LINKED_RES, end=end_bp)
+        b_sub = ds.stats_ps(key="cells", chrom="chr1", start=LINKED_RES, end=end_bp, group="field:cell_type=A", n_bins=50)
+        assert p_sub["total_cis_contacts"] == pytest.approx(b_sub["total_cis_contacts"])
+        if b_sub["slope"] is not None:
+            assert p_sub["slope"] == pytest.approx(b_sub["slope"])
+        # bulk mcool map embedded
+        p_bulk = strc.contact_ps(cd_e, "chr2", cool="bulk", res=LINKED_RES)
+        b_bulk = ds.stats_ps(key="bulk", chrom="chr2", resolution=LINKED_RES, n_bins=50)
+        assert p_bulk["total_cis_contacts"] == pytest.approx(b_bulk["total_cis_contacts"])
+
+    # Directly embedded map without uns['linked_cool'/'linked_scool']
+    cd_nolink = ChromData.read(emb, backed=False)
+    cd_nolink.uns.pop("linked_cool", None)
+    cd_nolink.uns.pop("linked_scool", None)
+    s_direct = insp.summarize(cd_nolink, path=emb)
+    assert "embedded:cells" in s_direct["linked"] and s_direct["linked"]["embedded:cells"]["embedded"] is True

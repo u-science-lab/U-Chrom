@@ -1,6 +1,6 @@
 import { WAKE_HINT, useActivity } from './activity'
 import { decodeMatrix, tileLoci, type MatrixData } from './matrix'
-import type { AtlasResponse, CellDetails, CellPage, CellValues, ClusterWindow, DatasetSummary, Embedding, FileListing, FilePlace, Geometry, GeometryHeader, IntervalTable, LayerFilter, PointSet, PointSetPayload, RgStats, ScalingStats, SpatialPoints, StoreNode, TracePage, TrackData } from './types'
+import type { AtlasResponse, CellDetails, CellPage, CellValues, ClusterWindow, DatasetSummary, Embedding, FileListing, FilePlace, Geometry, GeometryHeader, IntervalTable, LayerFilter, PointSet, PointSetPayload, PsStats, RgStats, ScalingStats, SpatialPoints, StoreNode, TracePage, TrackData } from './types'
 
 async function fetchChecked(url: string, init?: RequestInit): Promise<Response> {
   const act = useActivity.getState()
@@ -323,12 +323,26 @@ export async function fetchDistance(
   return { ...m, header: { ...m.header, bin_ends: tileLoci(m.header.bin_starts, m.header.bin_ends) } }
 }
 
-export async function fetchRg(id: string, opts: { chrom?: string | null; cellId?: string | null; group?: string | null } = {}): Promise<RgStats> {
+export async function fetchRg(
+  id: string,
+  opts: { chrom?: string | null; start?: number | null; end?: number | null; cellId?: string | null; group?: string | null } = {},
+): Promise<RgStats> {
   const group = await groupParam(id, opts.group)
-  return (await request(`${ds(id)}/stats/rg${query({ chrom: opts.chrom, cell_id: opts.cellId, group })}`)).json()
+  return (await request(`${ds(id)}/stats/rg${query({ chrom: opts.chrom, start: opts.start, end: opts.end, cell_id: opts.cellId, group })}`)).json()
 }
 
-export async function fetchScaling(id: string, opts: { chrom?: string | null; cellId?: string | null; group?: string | null } = {}): Promise<ScalingStats> {
+export async function fetchScaling(
+  id: string,
+  opts: { chrom?: string | null; start?: number | null; end?: number | null; cellId?: string | null; group?: string | null } = {},
+): Promise<ScalingStats> {
   const group = await groupParam(id, opts.group)
-  return (await request(`${ds(id)}/stats/scaling${query({ chrom: opts.chrom, cell_id: opts.cellId, group })}`)).json()
+  return (await request(`${ds(id)}/stats/scaling${query({ chrom: opts.chrom, start: opts.start, end: opts.end, cell_id: opts.cellId, group })}`)).json()
+}
+
+export async function fetchPs(
+  id: string,
+  opts: { key?: string | null; chrom?: string | null; start?: number | null; end?: number | null; resolution?: number | null; cellId?: string | null; group?: string | null } = {},
+): Promise<PsStats> {
+  const group = await groupParam(id, opts.group)
+  return (await request(`${ds(id)}/stats/ps${query({ key: opts.key, chrom: opts.chrom, start: opts.start, end: opts.end, resolution: opts.resolution, cell_id: opts.cellId, group })}`)).json()
 }

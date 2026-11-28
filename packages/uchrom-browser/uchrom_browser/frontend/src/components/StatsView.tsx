@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCaptureEpoch } from '../vectorcapture'
-import { fetchCellValues, fetchRg, fetchScaling } from '../api'
+import { fetchCellValues, fetchPs, fetchRg, fetchScaling } from '../api'
 import { cellRgb } from '../colors'
 import { useFieldColors } from '../useFieldColors'
 import { fmtBp } from '../filters'
@@ -8,8 +8,8 @@ import { logTicks, niceTicks } from '../genome'
 import { nearestPoint } from '../render/embedding'
 import { scopeLabel, type GroupInfo } from '../groups'
 import { activeView, fieldKey, useStore } from '../store'
-import { extent, fmtAxis, histogram, integerBins, linear, logScale, statsChrom } from '../stats'
-import type { CellField, CellValue, RgStats, ScalingStats } from '../types'
+import { extent, fmtAxis, hasOverlappingCells, histogram, integerBins, linear, logScale, mannWhitneyTwoSided, perCellMedians, statsRegion, type StatsChromScope } from '../stats'
+import type { CellField, CellValue, ContactMapInfo, PsStats, RgStats, ScalingStats } from '../types'
 import { useLocus } from '../useLocus'
 import { useTheme } from '../useTheme'
 import { useGroupChoices, useGroupInfos, usePaneScope } from '../useGroups'
@@ -23,16 +23,110 @@ const M = { left: 62, top: 14, right: 16, bottom: 44 }
 const KIND_LABEL: Record<StatsKind, string> = {
   rg: 'Rg per trace',
   scaling: 'Distance vs genomic distance',
+  ps: 'Contact decay P(s)',
   hist: 'Cell field histogram',
   scatter: 'Field scatter',
 }
 
-function availableKinds(hasCoords: boolean, hasFields: boolean): StatsKind[] {
-  return [...(hasCoords ? (['rg', 'scaling'] as StatsKind[]) : []), ...(hasFields ? (['hist', 'scatter'] as StatsKind[]) : [])]
+export function availableKinds(hasCoords: boolean, hasFields: boolean, hasContactMaps = false): StatsKind[] {
+  return [
+    ...(hasCoords ? (['rg', 'scaling'] as StatsKind[]) : []),
+    ...(hasContactMaps ? (['ps'] as StatsKind[]) : []),
+    ...(hasFields ? (['hist', 'scatter'] as StatsKind[]) : []),
+  ]
+}
+
+export function resolvePsMapKey(source: string | null | undefined, maps: readonly ContactMapInfo[]): string | null {
+  const usable = maps.filter((m) => m.kind !== 'error')
+  if (!usable.length) return null
+  if (source && usable.some((m) => m.key === source)) return source
+  return usable[0].key
 }
 
 export function resolveKind(pane: Pane, kinds: StatsKind[]): StatsKind | null {
   return pane.statsKind && kinds.includes(pane.statsKind) ? pane.statsKind : (kinds[0] ?? null)
+}
+
+export function drawPsChart(
+  g: CanvasRenderingContext2D,
+  plot: Box,
+  ps: { pop: PsStats; cell: PsStats | null },
+  overlays: { info: GroupInfo | null; data: PsStats }[],
+  baseGroup: string | null,
+  baseInfo: GroupInfo | null,
+  focus: string | null,
+  strongColor = '#ffffff',
+) {
+  const all = [ps.pop, ...(ps.cell ? [ps.cell] : []), ...overlays.map((o) => o.data)]
+  const sepAll = all.flatMap((s) => s.sep_bp).filter((v) => v > 0)
+  const pAll = all.flatMap((s) => s.p).filter((v) => Number.isFinite(v) && v > 0)
+  if (!sepAll.length || !pAll.length) return
+  const [sx0, sx1] = [Math.min(...sepAll), Math.max(...sepAll)]
+  const [y0, y1] = [Math.min(...pAll), Math.max(...pAll)]
+  const sx = logScale(sx0, sx1 > sx0 ? sx1 : sx0 * 10, plot.x, plot.x + plot.w)
+  const sy = logScale(y0, y1 > y0 ? y1 : y0 * 10, plot.y + plot.h, plot.y)
+
+  const curve = (s: PsStats, color: string) => {
+    const pts = s.sep_bp
+      .map((x, i) => ({ x, y: s.p[i] }))
+      .filter((pt) => pt.x > 0 && Number.isFinite(pt.y) && pt.y > 0)
+    if (!pts.length) return
+    g.strokeStyle = color
+    g.lineWidth = 2
+    g.beginPath()
+    pts.forEach((pt, k) => (k ? g.lineTo(sx(pt.x), sy(pt.y)) : g.moveTo(sx(pt.x), sy(pt.y))))
+    g.stroke()
+  }
+
+  const baseColor = baseGroup && baseInfo ? baseInfo.color : CHART.accent
+  curve(ps.pop, baseColor)
+  for (const o of overlays) curve(o.data, o.info?.color ?? strongColor)
+  if (ps.cell) curve(ps.cell, strongColor)
+
+  if (ps.pop.slope !== null && ps.pop.intercept !== null && ps.pop.fit_range_bp) {
+    const [f0, f1] = ps.pop.fit_range_bp
+    const fy0 = Math.pow(10, ps.pop.intercept + ps.pop.slope * Math.log10(f0))
+    const fy1 = Math.pow(10, ps.pop.intercept + ps.pop.slope * Math.log10(f1))
+    if (f0 > 0 && f1 > f0 && Number.isFinite(fy0) && fy0 > 0 && Number.isFinite(fy1) && fy1 > 0) {
+      g.save()
+      g.strokeStyle = CHART.muted
+      g.lineWidth = 1.5
+      g.setLineDash([4, 4])
+      g.beginPath()
+      g.moveTo(sx(f0), sy(fy0))
+      g.lineTo(sx(f1), sy(fy1))
+      g.stroke()
+      g.restore()
+    }
+  }
+
+  const yt = logTicks(y0, y1)
+  drawAxes(
+    g,
+    plot,
+    { ticks: logTicks(sx0, sx1), pos: sx, fmt: fmtBp, label: 'genomic separation s (bp, log)' },
+    { ticks: yt.length >= 2 ? yt : niceTicks(y0, y1, 4), pos: sy, fmt: fmtAxis, label: 'contact probability P(s), log' },
+  )
+
+  g.font = CHART.font
+  g.textAlign = 'right'
+  const slopeStr = (s: PsStats) => (s.slope !== null ? `, slope=${s.slope.toFixed(2)}` : '')
+  const legend = [
+    {
+      color: baseColor,
+      text: `${baseGroup ? scopeLabel({ kind: 'group', group: baseGroup }, baseInfo) : 'all'} (${fmtBp(ps.pop.resolution)}${slopeStr(ps.pop)})`,
+    },
+    ...overlays.map((o) => ({
+      color: o.info?.color ?? strongColor,
+      text: `${o.info?.name ?? o.data.group ?? 'group'}${o.data.slope !== null ? ` (slope=${o.data.slope.toFixed(2)}${o.data.n_cells ? `, n=${o.data.n_cells}` : ''})` : ''}`,
+    })),
+    ...(ps.cell ? [{ color: strongColor, text: `cell ${focus}${slopeStr(ps.cell)}` }] : []),
+  ]
+  legend.forEach((l, i) => {
+    g.fillStyle = l.color
+    g.fillText(l.text, plot.x + plot.w - 4, plot.y + 10 + 14 * i)
+  })
+  g.textAlign = 'left'
 }
 
 function FieldSelect({ fields, value, onChange, title }: { fields: CellField[]; value: string; onChange(v: string): void; title: string }) {
@@ -59,19 +153,23 @@ function useStatsSetup(pane: Pane) {
   const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
   const overviewField = useStore((s) => activeView(s).cellField)
   const hasCoords = ds?.has_coords !== false && (ds?.n_spots ?? 0) > 0
+  const usableMaps = useMemo(() => (ds?.contact_maps ?? []).filter((m) => m.kind !== 'error'), [ds])
+  const hasContactMaps = usableMaps.length > 0
   // histogram / scatter axes are numeric: category fields colour the dots instead
   const fields = useMemo(() => colourableFields(ds?.cell_fields ?? []).filter((f) => f.kind !== 'category'), [ds])
-  const kinds = availableKinds(hasCoords, fields.length > 0)
+  const kinds = availableKinds(hasCoords, fields.length > 0, hasContactMaps)
   const kind = resolveKind(pane, kinds)
+  const psKey = resolvePsMapKey(pane.source, usableMaps)
+  const psMap = useMemo(() => usableMaps.find((m) => m.key === psKey) ?? null, [usableMaps, psKey])
   const fx = pane.fieldX && fields.some((f) => f.name === pane.fieldX) ? pane.fieldX : (overviewField && fields.some((f) => f.name === overviewField) ? overviewField : fields[0]?.name ?? null)
   const fy = pane.fieldY && fields.some((f) => f.name === pane.fieldY) ? pane.fieldY : (fields.find((f) => f.name !== fx)?.name ?? fx)
-  return { ds, fields, kinds, kind, fx, fy }
+  return { ds, fields, kinds, kind, fx, fy, usableMaps, psKey, psMap }
 }
 
 /** Pane-header controls: which chart and its inputs. */
 export function StatsControls({ pane }: { pane: Pane }) {
   const setWorkspace = useStore((s) => s.setWorkspace)
-  const { fields, kinds, kind, fx, fy } = useStatsSetup(pane)
+  const { ds, fields, kinds, kind, fx, fy, usableMaps, psKey, psMap } = useStatsSetup(pane)
   const upd = (p: Partial<Pane>) => setWorkspace((w) => updatePane(w, pane.id, p))
   if (!kind) return null
   return (
@@ -83,10 +181,26 @@ export function StatsControls({ pane }: { pane: Pane }) {
           </option>
         ))}
       </Select>
-      {(kind === 'rg' || kind === 'scaling') && (
-        <Select value={pane.chromScope ?? 'all'} onChange={(e) => upd({ chromScope: e.target.value as 'all' | 'locus' })} title="Chromosomes">
+      {(kind === 'rg' || kind === 'scaling' || kind === 'ps') && (
+        <Select value={pane.chromScope ?? 'all'} onChange={(e) => upd({ chromScope: e.target.value as StatsChromScope })} title="Chromosomes">
           <option value="all">all chromosomes</option>
           <option value="locus">locus chromosome</option>
+          <option value="window">locus window</option>
+        </Select>
+      )}
+      {kind === 'rg' && (ds?.n_cells ?? 0) > 1 && (
+        <Select value={pane.rgUnit ?? 'trace'} onChange={(e) => upd({ rgUnit: e.target.value as 'trace' | 'cell' })} title="Unit">
+          <option value="trace">per trace</option>
+          <option value="cell">per cell median</option>
+        </Select>
+      )}
+      {kind === 'ps' && usableMaps.length > 1 && psKey && (
+        <Select value={psKey} onChange={(e) => upd({ source: e.target.value })} title="Contact map">
+          {usableMaps.map((m) => (
+            <option key={m.key} value={m.key}>
+              {m.label || m.key}
+            </option>
+          ))}
         </Select>
       )}
       {(kind === 'hist' || kind === 'scatter') && fx && <FieldSelect fields={fields} value={fx} onChange={(v) => upd({ fieldX: v })} title="x field" />}
@@ -96,7 +210,7 @@ export function StatsControls({ pane }: { pane: Pane }) {
           <FieldSelect fields={fields} value={fy} onChange={(v) => upd({ fieldY: v })} title="y field" />
         </>
       )}
-      {(kind === 'rg' || kind === 'scaling' || kind === 'hist') && <CompareGroups pane={pane} />}
+      {(kind === 'rg' || kind === 'scaling' || (kind === 'ps' && !!psMap?.per_cell) || kind === 'hist') && <CompareGroups pane={pane} />}
     </>
   )
 }
@@ -159,7 +273,7 @@ function useFieldValues(datasetId: string | undefined, field: string | null): Ma
  * histogram / scatter of cell fields (click a scatter dot to focus the cell).
  */
 export function StatsView({ pane }: { pane: Pane }) {
-  const { ds, kind, fx, fy } = useStatsSetup(pane)
+  const { ds, kind, fx, fy, psKey, psMap } = useStatsSetup(pane)
   const scope = usePaneScope(pane)
   const focus = scope.kind === 'cell' ? scope.cell : null
   const baseGroup = scope.kind === 'group' ? scope.group : null
@@ -177,57 +291,83 @@ export function StatsView({ pane }: { pane: Pane }) {
   const boxRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const size = useSize(boxRef)
-  // the whole-genome window: every chromosome
-  const chrom = statsChrom(pane.chromScope, locus)
-  const [rg, setRg] = useState<RgStats | null>(null)
-  const [scaling, setScaling] = useState<{ pop: ScalingStats; cell: ScalingStats | null } | null>(null)
-  // overlaid groups: ref → stats of the current kind
-  const [groupRg, setGroupRg] = useState<Record<string, RgStats>>({})
-  const [groupScaling, setGroupScaling] = useState<Record<string, ScalingStats>>({})
-  const [error, setError] = useState<string | null>(null)
+  const { chrom, start, end } = statsRegion(pane.chromScope, locus)
+  const rgUnit = pane.rgUnit === 'cell' && (ds?.n_cells ?? 0) > 1 ? 'cell' : 'trace'
+  const psPerCell = !!psMap?.per_cell
+  const followFocus = kind === 'scaling' || (kind === 'ps' && psPerCell) ? focus : null
+  const compareKey = compare.join('\u0001')
+  const reqKey = JSON.stringify([ds?.id ?? null, kind, chrom, start, end, baseGroup, psKey, psPerCell, followFocus])
+  const ovKey = JSON.stringify([ds?.id ?? null, kind, chrom, start, end, compareKey, psKey, psPerCell])
+  const [rgState, setRgState] = useState<{ key: string; data: RgStats } | null>(null)
+  const [scalingState, setScalingState] = useState<{ key: string; data: { pop: ScalingStats; cell: ScalingStats | null } } | null>(null)
+  const [psState, setPsState] = useState<{ key: string; data: { pop: PsStats; cell: PsStats | null } } | null>(null)
+  // overlaid groups: ref -> stats of the current kind
+  const [groupRgState, setGroupRgState] = useState<{ key: string; data: Record<string, RgStats> }>({ key: '', data: {} })
+  const [groupScalingState, setGroupScalingState] = useState<{ key: string; data: Record<string, ScalingStats> }>({ key: '', data: {} })
+  const [groupPsState, setGroupPsState] = useState<{ key: string; data: Record<string, PsStats> }>({ key: '', data: {} })
+  const [errState, setErrState] = useState<{ key: string; msg: string } | null>(null)
+  const rg = rgState?.key === reqKey ? rgState.data : null
+  const scaling = scalingState?.key === reqKey ? scalingState.data : null
+  const ps = psState?.key === reqKey ? psState.data : null
+  const groupRg = groupRgState.key === ovKey ? groupRgState.data : {}
+  const groupScaling = groupScalingState.key === ovKey ? groupScalingState.data : {}
+  const groupPs = groupPsState.key === ovKey ? groupPsState.data : {}
+  const error = errState?.key === reqKey || errState?.key === ovKey ? errState.msg : null
   const [hover, setHover] = useState<{ x: number; y: number; text: string } | null>(null)
   const xs = useFieldValues(ds?.id, kind === 'hist' || kind === 'scatter' ? fx : null)
   const ys = useFieldValues(ds?.id, kind === 'scatter' ? fy : null)
 
   useEffect(() => {
-    if (!ds || (kind !== 'rg' && kind !== 'scaling')) return
+    if (!ds || (kind !== 'rg' && kind !== 'scaling' && kind !== 'ps')) return
     let live = true
-    setError(null)
-    // the base is the pane's group when it has one, else every cell
     if (kind === 'rg') {
-      fetchRg(ds.id, { chrom, group: baseGroup })
-        .then((r) => live && setRg(r))
-        .catch((e: Error) => live && setError(e.message))
-    } else {
-      Promise.all([fetchScaling(ds.id, { chrom, group: baseGroup }), focus ? fetchScaling(ds.id, { chrom, cellId: focus }).catch(() => null) : Promise.resolve(null)])
-        .then(([pop, cell]) => live && setScaling({ pop, cell }))
-        .catch((e: Error) => live && setError(e.message))
+      fetchRg(ds.id, { chrom, start, end, group: baseGroup })
+        .then((r) => live && setRgState({ key: reqKey, data: r }))
+        .catch((e: Error) => live && setErrState({ key: reqKey, msg: e.message }))
+    } else if (kind === 'scaling') {
+      Promise.all([
+        fetchScaling(ds.id, { chrom, start, end, group: baseGroup }),
+        focus ? fetchScaling(ds.id, { chrom, start, end, cellId: focus }).catch(() => null) : Promise.resolve(null),
+      ])
+        .then(([pop, cell]) => live && setScalingState({ key: reqKey, data: { pop, cell } }))
+        .catch((e: Error) => live && setErrState({ key: reqKey, msg: e.message }))
+    } else if (psKey) {
+      Promise.all([
+        fetchPs(ds.id, { key: psKey, chrom, start, end, group: psPerCell ? baseGroup : null }),
+        psPerCell && focus
+          ? fetchPs(ds.id, { key: psKey, chrom, start, end, cellId: focus }).catch(() => null)
+          : Promise.resolve(null),
+      ])
+        .then(([pop, cell]) => live && setPsState({ key: reqKey, data: { pop, cell } }))
+        .catch((e: Error) => live && setErrState({ key: reqKey, msg: e.message }))
     }
     return () => {
       live = false
     }
-  }, [ds?.id, kind, chrom, baseGroup, kind === 'scaling' ? focus : null]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ds?.id, kind, chrom, start, end, baseGroup, psKey, psPerCell, followFocus, reqKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const compareKey = compare.join('\u0001')
   useEffect(() => {
-    if (!ds || (kind !== 'rg' && kind !== 'scaling')) return
+    if (!ds || (kind !== 'rg' && kind !== 'scaling' && kind !== 'ps')) return
     let live = true
-    setGroupRg({})
-    setGroupScaling({})
+    if (kind === 'ps' && (!psPerCell || !psKey)) return
     for (const g of compare) {
       if (kind === 'rg')
-        fetchRg(ds.id, { chrom, group: g })
-          .then((r) => live && setGroupRg((m) => ({ ...m, [g]: r })))
-          .catch((e: Error) => live && setError(e.message))
-      else
-        fetchScaling(ds.id, { chrom, group: g })
-          .then((r) => live && setGroupScaling((m) => ({ ...m, [g]: r })))
-          .catch((e: Error) => live && setError(e.message))
+        fetchRg(ds.id, { chrom, start, end, group: g })
+          .then((r) => live && setGroupRgState((prev) => ({ key: ovKey, data: { ...(prev.key === ovKey ? prev.data : {}), [g]: r } })))
+          .catch((e: Error) => live && setErrState({ key: ovKey, msg: e.message }))
+      else if (kind === 'scaling')
+        fetchScaling(ds.id, { chrom, start, end, group: g })
+          .then((r) => live && setGroupScalingState((prev) => ({ key: ovKey, data: { ...(prev.key === ovKey ? prev.data : {}), [g]: r } })))
+          .catch((e: Error) => live && setErrState({ key: ovKey, msg: e.message }))
+      else if (psKey)
+        fetchPs(ds.id, { key: psKey, chrom, start, end, group: g })
+          .then((r) => live && setGroupPsState((prev) => ({ key: ovKey, data: { ...(prev.key === ovKey ? prev.data : {}), [g]: r } })))
+          .catch((e: Error) => live && setErrState({ key: ovKey, msg: e.message }))
     }
     return () => {
       live = false
     }
-  }, [ds?.id, kind, chrom, compareKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ds?.id, kind, chrom, start, end, compareKey, psKey, psPerCell, ovKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // scatter geometry for hit-testing
   const scatter = useMemo(() => {
@@ -266,22 +406,26 @@ export function StatsView({ pane }: { pane: Pane }) {
     const unit = ds.xyz_unit ?? ''
     if (kind === 'rg' && rg) {
       const overlays = compare
-        .map((g, i) => ({ info: compareInfos[i], data: groupRg[g] }))
+        .map((gr, i) => ({ info: compareInfos[i], data: groupRg[gr] }))
         .filter((o): o is { info: GroupInfo | null; data: RgStats } => !!o.data)
       const baseLabel = baseGroup ? scopeLabel({ kind: 'group', group: baseGroup }, baseInfo) : 'all cells'
-      const allVals = [...rg.rg, ...overlays.flatMap((o) => o.data.rg)]
-      const lo = Math.min(...allVals.filter((v): v is number => typeof v === 'number'))
-      const hi = Math.max(...allVals.filter((v): v is number => typeof v === 'number'))
+      const valuesOf = (s: RgStats) =>
+        rgUnit === 'cell' ? perCellMedians(s) : s.rg.filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+      const baseVals = valuesOf(rg)
+      const overlayValsList = overlays.map((o) => ({ ...o, vals: valuesOf(o.data) }))
+      const allVals = [...baseVals, ...overlayValsList.flatMap((o) => o.vals)]
+      const lo = Math.min(...allVals)
+      const hi = Math.max(...allVals)
       const range: [number, number] | undefined = Number.isFinite(lo) && Number.isFinite(hi) && hi > lo ? [lo, hi] : undefined
-      const hist = histogram(rg.rg, 40, range)
-      // with groups overlaid, every histogram is a fraction of its traces so sizes compare
+      const hist = histogram(baseVals, 40, range)
+      // with groups overlaid, every histogram is a fraction of its unit so sizes compare
       const frac = overlays.length > 0
       const norm = (h: { counts: number[] }) => {
         const total = h.counts.reduce((a, b) => a + b, 0) || 1
         return frac ? h.counts.map((c) => c / total) : h.counts
       }
       const baseCounts = norm(hist)
-      const overlayHists = overlays.map((o) => ({ ...o, counts: norm(histogram(o.data.rg, 40, range ?? [hist.edges[0], hist.edges[hist.edges.length - 1]])) }))
+      const overlayHists = overlayValsList.map((o) => ({ ...o, counts: norm(histogram(o.vals, 40, range ?? [hist.edges[0], hist.edges[hist.edges.length - 1]])) }))
       const top = Math.max(frac ? 1e-9 : 1, ...baseCounts, ...overlayHists.flatMap((o) => o.counts))
       const sx = linear(hist.edges[0], hist.edges[hist.edges.length - 1], plot.x, plot.x + plot.w)
       const sy = linear(0, top, plot.y + plot.h, plot.y)
@@ -306,23 +450,48 @@ export function StatsView({ pane }: { pane: Pane }) {
         })
         g.stroke()
       }
+      const unitPlural = rgUnit === 'cell' ? 'cells' : 'traces'
       drawAxes(
         g,
         plot,
-        { ticks: niceTicks(hist.edges[0], hist.edges[hist.edges.length - 1]), pos: sx, fmt: fmtAxis, label: `radius of gyration${unit ? ` (${unit})` : ''}` },
-        { ticks: niceTicks(0, top, 4), pos: sy, fmt: fmtAxis, label: frac ? 'fraction of traces' : 'traces' },
+        { ticks: niceTicks(hist.edges[0], hist.edges[hist.edges.length - 1]), pos: sx, fmt: fmtAxis, label: `${rgUnit === 'cell' ? 'cell median Rg' : 'radius of gyration'}${unit ? ` (${unit})` : ''}` },
+        { ticks: niceTicks(0, top, 4), pos: sy, fmt: fmtAxis, label: frac ? `fraction of ${unitPlural}` : unitPlural },
       )
-      // legend: base + each group with n cells / traces and its median
-      const med = (v: (number | null)[]) => {
-        const x = v.filter((y): y is number => typeof y === 'number').sort((a, b) => a - b)
-        return x.length ? x[Math.floor((x.length - 1) / 2)] : NaN
+      // legend: base + each group with counts and median
+      const med = (v: readonly number[]) => {
+        const x = [...v].sort((a, b) => a - b)
+        return x.length ? (x.length % 2 ? x[(x.length - 1) / 2] : (x[x.length / 2 - 1] + x[x.length / 2]) / 2) : NaN
       }
+      const statLine = (label: string, color: string, vals: readonly number[], s: RgStats) => ({
+        color,
+        text:
+          rgUnit === 'cell'
+            ? `${label}: cell median ${fmtAxis(med(vals))}, ${vals.length} cells`
+            : `${label}: median ${fmtAxis(med(vals))}, ${vals.length} traces${s.n_cells ? ` / ${s.n_cells} cells` : ''}`,
+      })
       g.font = CHART.font
       g.textAlign = 'right'
       const legend = [
-        { color: baseGroup && baseInfo ? baseInfo.color : CHART.accent, text: `${baseLabel}: median ${fmtAxis(med(rg.rg))} · ${rg.rg.length} traces${rg.n_cells ? ` / ${rg.n_cells} cells` : ''}` },
-        ...overlays.map((o) => ({ color: o.info?.color ?? pal.strong, text: `${o.info?.name ?? o.data.group}: median ${fmtAxis(med(o.data.rg))} · ${o.data.rg.length} traces${o.data.n_cells ? ` / ${o.data.n_cells} cells` : ''}` })),
+        statLine(baseLabel, baseGroup && baseInfo ? baseInfo.color : CHART.accent, baseVals, rg),
+        ...overlayValsList.map((o) => statLine(o.info?.name ?? o.data.group ?? 'group', o.info?.color ?? pal.strong, o.vals, o.data)),
       ]
+      if (rgUnit === 'cell' && overlayValsList.length === 1) {
+        const overlapping = !baseGroup || hasOverlappingCells(rg.cell_ids, overlayValsList[0].data.cell_ids)
+        if (overlapping) {
+          legend.push({
+            color: CHART.muted,
+            text: !baseGroup ? 'MW skipped: all-cells base overlaps group' : 'MW skipped: overlapping groups',
+          })
+        } else {
+          const mw = mannWhitneyTwoSided(baseVals, overlayValsList[0].vals)
+          legend.push({
+            color: CHART.text,
+            text: mw
+              ? `MW p=${mw.p < 0.001 ? mw.p.toExponential(1) : mw.p.toPrecision(2)}, r=${mw.rankBiserial.toFixed(2)}${mw.exploratory ? ' (n<5 exploratory)' : ''}`
+              : 'MW p=n/a',
+          })
+        }
+      }
       legend.forEach((l, i) => {
         g.fillStyle = l.color
         g.fillText(l.text, plot.x + plot.w, plot.y + 10 + 14 * i)
@@ -330,17 +499,31 @@ export function StatsView({ pane }: { pane: Pane }) {
       if (focus) {
         g.strokeStyle = pal.strong
         g.lineWidth = 2
-        rg.cell_ids.forEach((c, i) => {
-          const v = rg.rg[i]
-          if (c !== focus || typeof v !== 'number') return
-          const x = sx(v)
-          g.beginPath()
-          g.moveTo(x, plot.y)
-          g.lineTo(x, plot.y + plot.h)
-          g.stroke()
-        })
-        g.fillStyle = CHART.text
-        g.fillText(`${pal.name === 'dark' ? 'white' : 'dark'} lines: traces of cell ${focus}`, plot.x + plot.w, plot.y + 10 + 14 * legend.length)
+        const focusVals = rg.cell_ids
+          .map((c, i) => (c === focus ? rg.rg[i] : null))
+          .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+        if (rgUnit === 'cell') {
+          if (focusVals.length) {
+            const fm = med(focusVals)
+            const x = sx(fm)
+            g.beginPath()
+            g.moveTo(x, plot.y)
+            g.lineTo(x, plot.y + plot.h)
+            g.stroke()
+            g.fillStyle = CHART.text
+            g.fillText(`cell ${focus} median: ${fmtAxis(fm)}`, plot.x + plot.w, plot.y + 10 + 14 * legend.length)
+          }
+        } else {
+          for (const v of focusVals) {
+            const x = sx(v)
+            g.beginPath()
+            g.moveTo(x, plot.y)
+            g.lineTo(x, plot.y + plot.h)
+            g.stroke()
+          }
+          g.fillStyle = CHART.text
+          g.fillText(`${pal.name === 'dark' ? 'white' : 'dark'} lines: traces of cell ${focus}`, plot.x + plot.w, plot.y + 10 + 14 * legend.length)
+        }
       }
     } else if (kind === 'scaling' && scaling) {
       const overlays = compare
@@ -392,6 +575,13 @@ export function StatsView({ pane }: { pane: Pane }) {
         g.fillStyle = l.color
         g.fillText(l.text, plot.x + 8, plot.y + 10 + 14 * i)
       })
+    } else if (kind === 'ps' && ps) {
+      const overlays = psPerCell
+        ? compare
+            .map((gr, i) => ({ info: compareInfos[i], data: groupPs[gr] }))
+            .filter((o): o is { info: GroupInfo | null; data: PsStats } => !!o.data && o.data.sep_bp.length > 0)
+        : []
+      drawPsChart(g, plot, ps, overlays, psPerCell ? baseGroup : null, psPerCell ? baseInfo : null, psPerCell ? focus : null, pal.strong)
     } else if (kind === 'hist' && xs && fx) {
       // the base is the pane's group when it has one, else every cell; compared groups are overlaid
       const valuesOf = (ids: readonly string[] | null) => (ids ? ids.map((id) => xs.get(id)) : [...xs.values()])
@@ -504,7 +694,7 @@ export function StatsView({ pane }: { pane: Pane }) {
         { ticks: niceTicks(scatterPx.y0, scatterPx.y1, 4), pos: scatterPx.sy, fmt: fmtAxis, label: fieldLabel(fy) },
       )
     }
-  }, [kind, rg, scaling, xs, fx, fy, scatter, scatterPx, size.w, size.h, focus, cells, fieldColors, view.overviewColor, custom, ds, groupRg, groupScaling, baseInfo, compareInfos, pal, epoch]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [kind, rg, rgUnit, scaling, ps, xs, fx, fy, scatter, scatterPx, size.w, size.h, focus, cells, fieldColors, view.overviewColor, custom, ds, groupRg, groupScaling, groupPs, psPerCell, baseInfo, compareInfos, pal, epoch]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const hit = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!scatter || !scatterPx) return -1
@@ -523,15 +713,30 @@ export function StatsView({ pane }: { pane: Pane }) {
   }
 
   let message: string | null = null
-  if (!kind) message = 'Nothing to chart: this dataset has neither 3-D traces nor numeric cell fields.'
+  if (!kind) message = 'Nothing to chart: this dataset has neither 3-D traces, contact maps, nor numeric cell fields.'
   else if (kind === 'scaling' && scaling && !scaling.pop.sep_bp.length) message = 'No trace pairs to measure.'
+  else if (kind === 'ps' && ps && !ps.pop.sep_bp.length) message = 'No cis contacts in this region.'
+
+  const locBadge = chrom ? (start != null && end != null ? `${chrom}:${fmtBp(start)}-${fmtBp(end)}` : chrom) : null
+  const scopeBadge = kind === 'ps' && !psPerCell ? null : baseGroup ? scopeLabel(scope, baseInfo) : null
+  const activeNotes =
+    kind === 'rg'
+      ? [rg?.note, ...Object.values(groupRg).map((d) => d.note)]
+      : kind === 'scaling'
+        ? [scaling?.pop.note, scaling?.cell?.note, ...Object.values(groupScaling).map((d) => d.note)]
+        : kind === 'ps'
+          ? [ps?.pop.note, ps?.cell?.note, ...Object.values(groupPs).map((d) => d.note)]
+          : []
+  const notes = [...new Set(activeNotes.filter((n): n is string => typeof n === 'string' && n.length > 0))]
+  const badges = [locBadge, scopeBadge, ...notes].filter((x): x is string => Boolean(x))
+
   return (
     <div ref={boxRef} className="genome-view">
       {message && <div className="muted pane-empty">{message}</div>}
       {error && <div className="error pane-error">{error}</div>}
       <canvas ref={canvasRef} onMouseMove={onMove} onMouseLeave={() => setHover(null)} onClick={onClick} style={{ cursor: hover ? 'pointer' : 'default' }} />
-      {(kind === 'rg' || kind === 'scaling') && (chrom || baseGroup) && (
-        <div className="pane-badge small">{[chrom, baseGroup ? scopeLabel(scope, baseInfo) : null].filter(Boolean).join(' · ')}</div>
+      {(kind === 'rg' || kind === 'scaling' || kind === 'ps') && badges.length > 0 && (
+        <div className="pane-badge small">{badges.join(' | ')}</div>
       )}
       {hover && (
         <div className="embedding-tip" style={{ left: Math.min(hover.x + 12, size.w - 200), top: hover.y + 12 }}>

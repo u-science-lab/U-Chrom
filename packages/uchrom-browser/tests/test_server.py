@@ -264,3 +264,41 @@ def test_store_structure(client):
     assert {"tables", "index"} <= names and t["meta"]["format_version"]
     # the rest of the API still answers (a route named like a server variable once shadowed it)
     assert c.get("/api/datasets").status_code == 200
+
+
+def test_stats_routes_window_and_ps(tmp_path):
+    """HTTP error matrix and 200 responses for windowed /stats/rg, /stats/scaling, and /stats/ps."""
+    from chromdata.testing import linked_store
+
+    pytest.importorskip("cooler")
+    _, emb = linked_store(tmp_path)
+    store = DatasetStore()
+    ds = store.load(emb)
+    c = TestClient(create_app(store))
+    base = f"/api/datasets/{ds.id}"
+
+    # Windowed rg & scaling
+    r_rg = c.get(f"{base}/stats/rg", params={"chrom": "chr1", "start": 0, "end": 500})
+    assert r_rg.status_code == 200
+    assert "per_cell_median" in r_rg.json() and "note" in r_rg.json()
+    r_sc = c.get(f"{base}/stats/scaling", params={"chrom": "chr1", "start": 0, "end": 500})
+    assert r_sc.status_code == 200 and "note" in r_sc.json()
+    assert c.get(f"{base}/stats/rg", params={"start": 0, "end": 500}).status_code == 422
+    assert c.get(f"{base}/stats/scaling", params={"chrom": "*", "start": 0, "end": 500}).status_code == 422
+    assert c.get(f"{base}/stats/rg", params={"chrom": "chr1", "start": 500, "end": 100}).status_code == 422
+
+    # Contact P(s) 200 & 404/422 matrix
+    r_ps = c.get(f"{base}/stats/ps", params={"key": "cells", "chrom": "chr1", "group": "field:cell_type=A"})
+    assert r_ps.status_code == 200 and r_ps.json()["slope"] is not None
+    assert c.get(f"{base}/stats/ps", params={"key": "nope"}).status_code == 404
+    assert c.get(f"{base}/stats/ps", params={"key": "cells", "cell_id": "missing"}).status_code == 404
+    assert c.get(f"{base}/stats/ps", params={"key": "cells", "group": "gffffffffffff"}).status_code == 404
+    assert c.get(f"{base}/stats/ps", params={"key": "cells", "group": "field:cell_type=Z"}).status_code == 422
+    assert c.get(f"{base}/stats/ps", params={"key": "bulk", "group": "all"}).status_code == 422
+    assert c.get(f"{base}/stats/ps", params={"key": "cells", "cell_id": "c0", "group": "all"}).status_code == 422
+    assert c.get(f"{base}/stats/ps", params={"key": "cells", "chrom": "chr1", "start": 999_999, "end": 1_000_500}).status_code == 422
+
+    # key=None with no contact maps -> 422
+    spots = pd.DataFrame({"chrom": ["chr1"] * 2, "start": [0, 10], "end": [10, 20], "trace_id": ["t", "t"]})
+    ds_nomap = store.add(ChromData(np.zeros((2, 3)), spots), name="nomap")
+    assert c.get(f"/api/datasets/{ds_nomap.id}/stats/ps").status_code == 422

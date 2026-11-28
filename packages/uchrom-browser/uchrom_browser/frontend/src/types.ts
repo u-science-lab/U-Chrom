@@ -173,6 +173,8 @@ export interface RgStats {
   unit: string | null
   group?: string | null
   n_cells?: number | null
+  per_cell_median?: number | null
+  note?: string | null
 }
 
 export interface ScalingStats {
@@ -184,6 +186,29 @@ export interface ScalingStats {
   unit: string | null
   group?: string | null
   n_cells?: number | null
+  start?: number | null
+  end?: number | null
+  note?: string | null
+}
+
+export interface PsStats {
+  key: string
+  resolution: number
+  chrom: string | null
+  start: number | null
+  end: number | null
+  sep_bp: number[]
+  p: number[]
+  n_pairs: number[]
+  n_contacts: number[]
+  slope: number | null
+  intercept: number | null
+  fit_range_bp: [number, number] | null
+  total_cis_contacts: number
+  group?: string | null
+  cell_id?: string | null
+  n_cells?: number | null
+  note?: string | null
 }
 
 export interface EmbeddingInfo {

@@ -85,7 +85,14 @@ function paneInfo(p: Pane) {
     type: p.type,
     cells: p.scope ?? { kind: 'focus' },
     stats: p.statsKind ?? null,
-    ...(p.type === 'stats' ? { chrom_scope: p.chromScope ?? 'all' } : {}),
+    ...(p.type === 'stats'
+      ? {
+          chrom_scope: p.chromScope ?? 'all',
+          ...(p.rgUnit ? { rg_unit: p.rgUnit } : {}),
+          ...(p.source !== undefined ? { source: p.source } : {}),
+        }
+      : {}),
+    ...(p.type === 'matrix' && p.source !== undefined ? { source: p.source } : {}),
     embedding: p.embeddingKey,
   }
 }
@@ -197,10 +204,17 @@ export const ACTIONS: Record<string, Action> = {
       opts.genomeRows = { [ds.name]: rows }
     }
     if (type === 'stats') {
-      opts.statsKind = (optStr(args.stats) ?? 'rg') as StatsKind
-      if (args.chrom_scope !== undefined && args.chrom_scope !== 'all' && args.chrom_scope !== 'locus')
-        throw new Error(`chrom_scope must be 'all' or 'locus'`)
-      if (args.chrom_scope === 'all' || args.chrom_scope === 'locus') opts.chromScope = args.chrom_scope
+      const sk = optStr(args.stats)
+      if (sk !== undefined && sk !== 'rg' && sk !== 'scaling' && sk !== 'ps' && sk !== 'hist' && sk !== 'scatter')
+        throw new Error(`stats must be 'rg', 'scaling', 'ps', 'hist' or 'scatter'`)
+      if (sk) opts.statsKind = sk as StatsKind
+      if (args.chrom_scope !== undefined && args.chrom_scope !== 'all' && args.chrom_scope !== 'locus' && args.chrom_scope !== 'window')
+        throw new Error(`chrom_scope must be 'all', 'locus' or 'window'`)
+      if (args.chrom_scope === 'all' || args.chrom_scope === 'locus' || args.chrom_scope === 'window') opts.chromScope = args.chrom_scope
+      if (args.rg_unit !== undefined && args.rg_unit !== 'trace' && args.rg_unit !== 'cell')
+        throw new Error(`rg_unit must be 'trace' or 'cell'`)
+      if (args.rg_unit === 'trace' || args.rg_unit === 'cell') opts.rgUnit = args.rg_unit
+      if (optStr(args.source)) opts.source = optStr(args.source)
       if (Array.isArray(args.compare_groups)) opts.compareGroups = args.compare_groups.map(String)
       if (optStr(args.field_x)) opts.fieldX = optStr(args.field_x)
       if (optStr(args.field_y)) opts.fieldY = optStr(args.field_y)

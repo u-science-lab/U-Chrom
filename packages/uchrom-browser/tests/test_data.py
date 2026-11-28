@@ -225,3 +225,115 @@ def test_traces_in_crops_of_their_own_count_as_overlapping():
         xyz[cells == c, 2] += 10.0 * k
     ds = DatasetStore().add(ChromData(xyz, cd.spots), name="crops")
     assert ds.cells_overlap() is True
+
+
+def test_stats_window_and_per_cell_median(tmp_path, monkeypatch):
+    """Windowed stats filter by [start, end), drop 1-spot window fragments in Rg,
+    report per_cell_median, and forward windows through _stats_sample."""
+    import uchrom_browser.data as data_mod
+
+    rows = []
+    coords = []
+    # Cell c0 has 2 traces (Rg in [1000, 3000) is 1.0 and 1.0) + 1 trace clipped to a 1-spot fragment
+    for tid, xs in [("c0_a", [0, 0, 2, 0]), ("c0_b", [0, 0, 2, 0])]:
+        for k, x in enumerate(xs):
+            rows.append({"chrom": "chr1", "start": k * 1000, "end": (k + 1) * 1000, "trace_id": tid, "cell_id": "c0"})
+            coords.append([float(x), 0.0, 0.0])
+    # A trace that only has 1 spot inside [1000, 3000) (spot at [2000, 3000)): degenerate in window
+    rows.extend([
+        {"chrom": "chr1", "start": 0, "end": 1000, "trace_id": "c0_frag", "cell_id": "c0"},
+        {"chrom": "chr1", "start": 2000, "end": 3000, "trace_id": "c0_frag", "cell_id": "c0"},
+    ])
+    coords.extend([[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]])
+    # Cell c1 has 1 trace whose spread in [1000, 3000) is Rg = 10.0 (centroid=10, dists=10)
+    for k, x in enumerate([0.0, 0.0, 20.0, 0.0]):
+        rows.append({"chrom": "chr1", "start": k * 1000, "end": (k + 1) * 1000, "trace_id": "c1_a", "cell_id": "c1"})
+        coords.append([x, 0.0, 0.0])
+
+    cd = ChromData(np.array(coords, float), pd.DataFrame(rows), uns={"xyz_unit": "um"})
+    ds = DatasetStore().add(cd, name="win")
+
+    # Whole-chrom stats_rg keeps all 4 traces (c0_a=sqrt(3)/2, c0_b=sqrt(3)/2, c0_frag=5.0 -> med=sqrt(3)/2; c1_a=sqrt(75) -> ~8.66)
+    full_rg = ds.stats_rg("chr1")
+    assert len(full_rg["rg"]) == 4
+    expected_full = 0.5 * (float(np.sqrt(3) / 2) + float(np.sqrt(75)))
+    assert full_rg["per_cell_median"] == pytest.approx(expected_full)
+
+    # Window [1000, 3000): c0_frag only has 1 spot inside window -> excluded from windowed stats_rg
+    win_rg = ds.stats_rg("chr1", start=1000, end=3000)
+    assert set(win_rg["trace_ids"]) == {"c0_a", "c0_b", "c1_a"}
+    assert win_rg["n_spots"] == [2, 2, 2]
+    assert win_rg["per_cell_median"] == pytest.approx(5.5)
+
+    # Windowed scaling only measures pairs inside [1000, 3000) -> max sep is 1000 bp
+    win_sc = ds.stats_scaling("chr1", start=1000, end=3000, n_bins=4)
+    assert max(win_sc["sep_bp"]) <= 1100.0
+    assert sum(win_sc["n_pairs"]) == 3  # 1 pair each in c0_a, c0_b, c1_a (c0_frag has only 1 spot in window)
+
+    # Validation errors
+    with pytest.raises(ValueError):
+        ds.stats_rg(chrom=None, start=1000, end=3000)
+    with pytest.raises(ValueError):
+        ds.stats_rg(chrom="*", start=1000, end=3000)
+    with pytest.raises(ValueError):
+        ds.stats_scaling(chrom="chr1", start=3000, end=3000)
+
+    # Large backed store (_index_segments() True): must forward start/end & disclose note without reading _segments()
+    path = tmp_path / "large.chromdata.zarr"
+    cd.write(path)
+    monkeypatch.setattr(data_mod, "LARGE_SPOTS", 1)
+    monkeypatch.setattr(data_mod, "STATS_MAX_SPOTS", 1)
+    bds = DatasetStore().load(path)
+    monkeypatch.setattr(bds, "_segments", lambda: (_ for _ in ()).throw(AssertionError("_segments must not run")))
+    sampled_rg = bds.stats_rg("chr1", start=1000, end=3000)
+    assert set(sampled_rg["trace_ids"]) <= {"c0_a", "c0_b", "c1_a"}
+    assert "random sample" in (sampled_rg["note"] or "")
+    sampled_sc = bds.stats_scaling("chr1", start=1000, end=3000, n_bins=4)
+    assert max(sampled_sc["sep_bp"]) <= 1100.0
+    assert "random sample" in (sampled_sc["note"] or "")
+
+
+def test_stats_ps_power_law_and_edge_cases(tmp_path):
+    """Analytical C(k) ~ (n - k) * k^-1 recovers slope -1.0 and handles sparse/degenerate edge cases."""
+    cooler = pytest.importorskip("cooler")
+
+    bs, n = 10_000, 40
+    bins = pd.DataFrame({"chrom": "chr1", "start": np.arange(n) * bs, "end": np.arange(1, n + 1) * bs})
+    i, j = np.triu_indices(n, 0)
+    k = j - i
+    cnt = np.where(k == 0, 50_000, np.round(10_000.0 / np.maximum(k, 1))).astype(int)
+    cooler.create_cooler(str(tmp_path / "decay.cool"), bins, pd.DataFrame({"bin1_id": i, "bin2_id": j, "count": cnt}), ordered=True)
+
+    # Also test a k=0-only cooler and 1-bin chrom cooler
+    bins_1 = pd.DataFrame({"chrom": ["chr1", "chrShort"], "start": [0, 0], "end": [10_000, 10_000]})
+    cooler.create_cooler(str(tmp_path / "k0.cool"), bins_1, pd.DataFrame({"bin1_id": [0], "bin2_id": [0], "count": [42]}), ordered=True)
+
+    spots = pd.DataFrame({c: pd.Series(dtype=t) for c, t in [("chrom", str), ("start", np.int64), ("end", np.int64), ("trace_id", str)]})
+    cd = ChromData(np.zeros((0, 3)), spots)
+    cd.link_cool("decay.cool", key="decay")
+    cd.link_cool("k0.cool", key="k0")
+    cd.write(tmp_path / "ps.chromdata.zarr")
+    ds = DatasetStore().load(tmp_path / "ps.chromdata.zarr")
+
+    # Request n_bins >= n - 1 so early diagonals have |K_b| == 1 (exact single-diagonal identity check)
+    ps = ds.stats_ps(key="decay", chrom="chr1", n_bins=n)
+    assert ps["slope"] == pytest.approx(-1.0, abs=0.02)
+    t_cis = float(cnt.sum())
+    assert ps["total_cis_contacts"] == pytest.approx(t_cis)
+    c1 = float(cnt[k == 1].sum())
+    assert ps["p"][0] == pytest.approx((c1 / (n - 1)) / t_cis)
+
+    # Fit sub-range smin/smax + large n_bins > k_max
+    sub = ds.stats_ps(key="decay", chrom="chr1", n_bins=100, smin=20_000, smax=200_000)
+    assert sub["fit_range_bp"] == [20_000, 200_000]
+    assert sub["slope"] == pytest.approx(-1.0, abs=0.02)
+
+    # k=0 only / < 2 bins -> empty arrays, None slope
+    empty_ps = ds.stats_ps(key="k0", chrom="chr1")
+    assert empty_ps["sep_bp"] == [] and empty_ps["slope"] is None
+    with pytest.raises(LookupError):
+        DatasetStore().add(ChromData(np.zeros((0, 3)), spots), name="nomap").stats_ps()
+    with pytest.raises(ValueError):
+        ds.stats_ps(key="decay", chrom="chr1", smin=50_000, smax=10_000)
+    with pytest.raises(ValueError):
+        ds.stats_ps(key="decay", chrom="chr1", n_bins=0)

@@ -81,7 +81,7 @@ export function paneFilename(pane: Pane, date = new Date(), ext: CaptureFormat =
   const s = useStore.getState()
   const ds = s.datasets.find((d) => d.id === s.activeDatasetId)
   const v = activeView(s)
-  const genomic = pane.type === 'genome' || pane.type === 'matrix'
+  const genomic = pane.type === 'genome' || pane.type === 'matrix' || (pane.type === 'stats' && (pane.chromScope === 'locus' || pane.chromScope === 'window'))
   return captureFilename({
     dataset: ds?.name ?? 'data',
     type: pane.type,
